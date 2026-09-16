@@ -22,10 +22,25 @@ var seedJSON []byte
 //go:embed web/dist
 var webFS embed.FS
 
+func newHTTPHandler(srv *internal.Server, apiOnly bool) (http.Handler, error) {
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	if apiOnly {
+		return mux, nil
+	}
+	dist, err := fs.Sub(webFS, "web/dist")
+	if err != nil {
+		return nil, fmt.Errorf("加载前端资源失败: %w", err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(dist)))
+	return mux, nil
+}
+
 func main() {
 	port := flag.Int("port", 0, "监听端口（0 表示自动选择空闲端口）")
 	dbPath := flag.String("db", "assets.db", "SQLite 数据库文件路径")
 	noBrowser := flag.Bool("no-browser", false, "启动时不自动打开浏览器")
+	apiOnly := flag.Bool("api-only", false, "仅启动 API 服务，不提供前端页面")
 	flag.Parse()
 
 	st, err := store.Open(*dbPath)
@@ -82,16 +97,10 @@ func main() {
 	}
 
 	srv := &internal.Server{Store: st}
-	mux := http.NewServeMux()
-	srv.RegisterRoutes(mux)
-
-	// 前端静态页面
-	dist, err := fs.Sub(webFS, "web/dist")
+	handler, err := newHTTPHandler(srv, *apiOnly)
 	if err != nil {
-		log.Fatalf("加载前端资源失败: %v", err)
+		log.Fatalf("创建 HTTP 服务失败: %v", err)
 	}
-	fileServer := http.FileServer(http.FS(dist))
-	mux.Handle("/", fileServer)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
 	if err != nil {
@@ -104,7 +113,7 @@ func main() {
 	log.Printf("  访问地址: %s", url)
 	log.Printf("=====================================================")
 
-	if !*noBrowser {
+	if !*noBrowser && !*apiOnly {
 		go func() {
 			switch runtime.GOOS {
 			case "windows":
@@ -117,7 +126,7 @@ func main() {
 		}()
 	}
 
-	if err := http.Serve(listener, mux); err != nil {
+	if err := http.Serve(listener, handler); err != nil {
 		log.Fatalf("服务运行退出: %v", err)
 	}
 }

@@ -622,6 +622,9 @@ func (s *Server) handleDownloadTemplate(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
 	mux.HandleFunc("GET /api/meta", s.handleMeta)
 	mux.HandleFunc("GET /api/assets", s.handleListAssets)
 	mux.HandleFunc("GET /api/assets/{id}", s.handleGetAsset)
