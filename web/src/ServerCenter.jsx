@@ -872,7 +872,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
       </div>
 
       <Drawer title="业务系统详情" open={!!appDetail} onClose={() => setAppDetail(null)} width={640}
-        extra={appDetail?.app_name && <Space><Button onClick={() => { setEditingApp(appDetail); appForm.setFieldsValue(appDetail); setAppModalVisible(true) }}>编辑</Button>
+        extra={appDetail?.app_name && <Space><Button onClick={() => { setEditingApp(appDetail); appForm.setFieldsValue(appDetail); loadServerChoices(); setAppModalVisible(true) }}>编辑</Button>
           <Popconfirm title="确认删除此业务系统？" onConfirm={() => handleDeleteApp(appDetail.id)}><Button danger>删除</Button></Popconfirm></Space>}>
         {appDetailError ? <Alert type="error" message={appDetailError} action={<Button onClick={openSearchApp}>重试</Button>} /> : <Descriptions column={1} bordered items={[
           ['名称', appDetail?.app_name], ['类型', appDetail?.app_type], ['状态', appDetail?.status], ['负责人', appDetail?.owner],
@@ -1215,7 +1215,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
         destroyOnClose
       >
         <Form form={appForm} layout="vertical">
-          {!editingApp && !selectedServer && <Form.Item name="server_id" label="承载服务器" rules={[{ required: true, message: '请选择承载服务器' }]}>
+          {!selectedServer && <Form.Item name="server_id" label="承载服务器" rules={[{ required: true, message: '请选择承载服务器' }]}>
             <Select showSearch filterOption={false} onSearch={loadServerChoices} options={serverChoices.map((server) => ({ value: server.id, label: `${server.device_name} ${server.biz_ip || ''}` }))} />
           </Form.Item>}
           <Form.Item
