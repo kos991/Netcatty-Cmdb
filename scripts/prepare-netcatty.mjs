@@ -41,12 +41,31 @@ function replaceOnce(source, search, replacement, fileName) {
   return `${source.slice(0, first)}${replacement}${source.slice(first + search.length)}`;
 }
 
-cpSync(join(integrationRoot, "electron", "cmdbService.cjs"), join(target, "electron", "cmdbService.cjs"));
-cpSync(join(integrationRoot, "electron", "cmdbService.test.cjs"), join(target, "electron", "cmdbService.test.cjs"));
-cpSync(join(integrationRoot, "plugin"), join(target, "examples", "plugins", "cmdb-netcatty"), {
+function assertContainsOnce(relativePath, anchor) {
+  const source = readFileSync(join(target, relativePath), "utf8").replace(/\r\n/g, "\n");
+  const first = source.indexOf(anchor);
+  if (first < 0) throw new Error(`Integration anchor is missing in ${relativePath}`);
+  if (source.indexOf(anchor, first + anchor.length) >= 0) {
+    throw new Error(`Integration anchor is ambiguous in ${relativePath}`);
+  }
+}
+
+[
+  ["components/TopTabs.tsx", "{/* Fixed left tabs: Vaults and SFTP */}"],
+  ["application/app/AppView.tsx", "<AppVaultThemeSurface VaultViewContainer={VaultViewContainer}>"],
+  ["application/app/workTabSurface.ts", "return activeTabId === 'vault' || activeTabId === 'sftp';"],
+  ["electron/preload/api.cjs", "function createPreloadApi"],
+  ["global.d.ts", "interface NetcattyBridge {"],
+].forEach(([file, anchor]) => assertContainsOnce(file, anchor));
+
+cpSync(join(repositoryRoot, "web", "src"), join(target, "components", "cmdb"), {
   recursive: true,
   force: true,
 });
+cpSync(join(integrationRoot, "electron", "cmdbService.cjs"), join(target, "electron", "cmdbService.cjs"));
+cpSync(join(integrationRoot, "electron", "cmdbService.test.cjs"), join(target, "electron", "cmdbService.test.cjs"));
+cpSync(join(integrationRoot, "electron", "cmdbBridge.cjs"), join(target, "electron", "bridges", "cmdbBridge.cjs"));
+cpSync(join(integrationRoot, "electron", "cmdbBridge.test.cjs"), join(target, "electron", "bridges", "cmdbBridge.test.cjs"));
 
 const cmdbMainBlock = `let cmdbService = null;
 
@@ -82,7 +101,7 @@ function resolveCmdbDatabasePath() {
 async function startCmdbForApp() {
   const executablePath = resolveCmdbExecutablePath();
   if (!executablePath) {
-    console.warn("[CMDB] cmdb-server executable not found; CMDB plugin will remain unavailable");
+    console.warn("[CMDB] cmdb-server executable not found; CMDB workspace will remain unavailable");
     return null;
   }
   try {
@@ -111,15 +130,6 @@ update("electron/main.cjs", (source) => {
   );
   output = replaceOnce(
     output,
-    "const effectiveDevServerUrl = isDev ? devServerUrl : undefined;",
-    `const effectiveDevServerUrl = isDev ? devServerUrl : undefined;
-if (!process.env.NETCATTY_PLUGIN_DEV && !process.env.NETCATTY_PLUGIN_HOST) {
-  process.env.NETCATTY_PLUGIN_HOST = "1";
-}`,
-    "electron/main.cjs",
-  );
-  output = replaceOnce(
-    output,
     'const appPath = path.join(__dirname, "..");',
     `const appPath = path.join(__dirname, "..");\n${cmdbMainBlock}`,
     "electron/main.cjs",
@@ -130,13 +140,21 @@ if (!process.env.NETCATTY_PLUGIN_DEV && !process.env.NETCATTY_PLUGIN_HOST) {
     "    registerAppProtocol();\n    await startCmdbForApp();",
     "electron/main.cjs",
   );
+  output = replaceOnce(
+    output,
+    "  getVaultBackupBridge,\n  getAppLockController: () => appLockController,",
+    "  getVaultBackupBridge,\n  getCmdbService: () => cmdbService,\n  getAppLockController: () => appLockController,",
+    "electron/main.cjs",
+  );
   return replaceOnce(
     output,
     '  app.on("will-quit", () => {',
     `  app.on("will-quit", () => {
     try {
-      cmdbService?.stop?.();
-      cmdbService = null;
+      if (cmdbService) {
+        cmdbService.stop();
+        cmdbService = null;
+      }
     } catch (err) {
       console.warn("Error during CMDB cleanup:", err);
     }`,
@@ -147,64 +165,124 @@ if (!process.env.NETCATTY_PLUGIN_DEV && !process.env.NETCATTY_PLUGIN_HOST) {
 update("electron/main/registerBridges.cjs", (source) => {
   let output = replaceOnce(
     source,
-    "    getWindowManager,\n    getVaultBackupBridge,",
-    "    getWindowManager,\n    appPath,\n    getVaultBackupBridge,",
+    'const { registerSystemNotificationHandlers } = require("../bridges/systemNotification.cjs");',
+    'const { registerSystemNotificationHandlers } = require("../bridges/systemNotification.cjs");\nconst { registerCmdbBridge } = require("../bridges/cmdbBridge.cjs");',
     "electron/main/registerBridges.cjs",
   );
   output = replaceOnce(
     output,
-    "        return createPluginHostService({",
-    "        const service = createPluginHostService({",
+    "    getVaultBackupBridge,\n    getAppLockController,",
+    "    getVaultBackupBridge,\n    getCmdbService,\n    getAppLockController,",
     "electron/main/registerBridges.cjs",
   );
-  const serviceTail = `        });
-        const archivePath = process.env.NETCATTY_CMDB_PLUGIN_ARCHIVE
-          || (app.isPackaged
-            ? require("node:path").join(process.resourcesPath, "cmdb", "cmdb-netcatty.ncpkg")
-            : require("node:path").join(appPath || app.getAppPath(), "examples", "plugins", "cmdb-netcatty.ncpkg"));
-        void service.manager.initialize().then(async () => {
-          if (!fs.existsSync(archivePath)) {
-            console.warn(\`[Plugins] Built-in CMDB package not found: \${archivePath}\`);
-            return;
-          }
-          const existing = service.database.getActivePlugin("com.netcatty.cmdb");
-          if (existing) {
-            if (!existing.enabled) await service.manager.setEnabled("com.netcatty.cmdb", true);
-            return;
-          }
-          await service.manager.install(archivePath, { enable: true });
-        }).catch((error) => console.error("[Plugins] Failed to initialize built-in CMDB plugin:", error));
-        return service;
-      },
-      registerShutdown:`;
   return replaceOnce(
     output,
-    "        });\n      },\n      registerShutdown:",
-    serviceTail,
+    "    const { ipcMain } = electronModule;",
+    `    const { ipcMain } = electronModule;
+    registerCmdbBridge({
+      ipcMain,
+      dialog: electronModule.dialog,
+      getService: getCmdbService,
+    });`,
     "electron/main/registerBridges.cjs",
   );
 });
 
-update("electron/plugins/constants.cjs", (source) => {
+update("components/TopTabs.tsx", (source) => {
   let output = replaceOnce(
     source,
-    'const PLUGIN_DEV_ENV = "NETCATTY_PLUGIN_DEV";',
-    'const PLUGIN_DEV_ENV = "NETCATTY_PLUGIN_DEV";\nconst PLUGIN_HOST_ENV = "NETCATTY_PLUGIN_HOST";',
-    "electron/plugins/constants.cjs",
-  );
-  output = replaceOnce(
-    output,
-    '  return env?.[PLUGIN_DEV_ENV] === "1";',
-    '  return env?.[PLUGIN_DEV_ENV] === "1" || env?.[PLUGIN_HOST_ENV] === "1";',
-    "electron/plugins/constants.cjs",
+    "import { Folder, FolderLock, Lock, Menu, MoreHorizontal, Plus, Settings, Sparkles } from 'lucide-react';",
+    "import { Database, Folder, FolderLock, Lock, Menu, MoreHorizontal, Plus, Settings, Sparkles } from 'lucide-react';",
+    "components/TopTabs.tsx",
   );
   return replaceOnce(
     output,
-    "  PLUGIN_DEV_ENV,\n  PLUGIN_LOG_MAX_BYTES,",
-    "  PLUGIN_DEV_ENV,\n  PLUGIN_HOST_ENV,\n  PLUGIN_LOG_MAX_BYTES,",
-    "electron/plugins/constants.cjs",
+    "          {showSftpTab && (",
+    `          <RootTopTab
+            tabId="cmdb"
+            label="CMDB 资产管理"
+            icon={<Database size={14} />}
+            className="rounded-t-md"
+            compact={rootTabsCompact}
+          />
+          {showSftpTab && (`,
+    "components/TopTabs.tsx",
   );
 });
+
+update("application/app/workTabSurface.ts", (source) => replaceOnce(
+  source,
+  "return activeTabId === 'vault' || activeTabId === 'sftp';",
+  "return activeTabId === 'vault' || activeTabId === 'cmdb' || activeTabId === 'sftp';",
+  "application/app/workTabSurface.ts",
+));
+
+update("application/app/AppActiveTabChrome.tsx", (source) => replaceOnce(
+  source,
+  "    if (activeTabId === 'sftp') return 'SFTP';",
+  "    if (activeTabId === 'sftp') return 'SFTP';\n    if (activeTabId === 'cmdb') return 'CMDB 资产管理';",
+  "application/app/AppActiveTabChrome.tsx",
+));
+
+update("application/app/AppView.tsx", (source) => {
+  let output = replaceOnce(
+    source,
+    "import { activeTabStore, toEditorTabId, useIsEditorTabActive } from '../state/activeTabStore';",
+    "import { activeTabStore, toEditorTabId, useIsEditorTabActive, useIsTabActive } from '../state/activeTabStore';",
+    "application/app/AppView.tsx",
+  );
+  output = replaceOnce(
+    output,
+    "import { VaultView } from '../../components/VaultView';",
+    "import { VaultView } from '../../components/VaultView';\nimport CmdbWorkspace from '../../components/cmdb/CmdbWorkspace';",
+    "application/app/AppView.tsx",
+  );
+  output = replaceOnce(
+    output,
+    "\n\n/** Plugin keybinding host with locally derived theme tokens and locale. */",
+    `
+
+const CmdbSurface = React.memo(() => {
+  const active = useIsTabActive('cmdb');
+  return (
+    <section className={active ? 'flex min-h-0 flex-1' : 'hidden'} aria-hidden={!active}>
+      <CmdbWorkspace />
+    </section>
+  );
+});
+
+/** Plugin keybinding host with locally derived theme tokens and locale. */`,
+    "application/app/AppView.tsx",
+  );
+  return replaceOnce(
+    output,
+    "        </AppVaultThemeSurface>\n\n        <SftpViewMount",
+    "        </AppVaultThemeSurface>\n\n        <CmdbSurface />\n\n        <SftpViewMount",
+    "application/app/AppView.tsx",
+  );
+});
+
+update("electron/preload/api.cjs", (source) => replaceOnce(
+  source,
+  '  getPluginRuntimeStatus: () => ipcRenderer.invoke("netcatty:plugins:status"),',
+  `  getPluginRuntimeStatus: () => ipcRenderer.invoke("netcatty:plugins:status"),
+  cmdbStatus: () => ipcRenderer.invoke("netcatty:cmdb:status"),
+  cmdbRequest: (payload) => ipcRenderer.invoke("netcatty:cmdb:request", payload),
+  cmdbImportFile: (payload) => ipcRenderer.invoke("netcatty:cmdb:import-file", payload),
+  cmdbExportFile: (payload) => ipcRenderer.invoke("netcatty:cmdb:export-file", payload),`,
+  "electron/preload/api.cjs",
+));
+
+update("global.d.ts", (source) => replaceOnce(
+  source,
+  "  interface NetcattyBridge {",
+  `  interface NetcattyBridge {
+    cmdbStatus?(): Promise<{ available: boolean; error?: string }>;
+    cmdbRequest?(payload: { path: string; method?: string; headers?: Record<string, string>; body?: unknown }): Promise<unknown>;
+    cmdbImportFile?(payload: { path: string; commit?: boolean; token?: string }): Promise<unknown>;
+    cmdbExportFile?(payload: { path: string; suggestedName?: string }): Promise<{ cancelled: boolean; filePath?: string }>;`,
+  "global.d.ts",
+));
 
 const builderPrelude = `/* global process */
 const fs = require('node:fs');
@@ -223,26 +301,34 @@ update("electron-builder.config.cjs", (source) => {
   output = replaceOnce(
     output,
     "        extraResources: [...moshExtraResources('darwin'), ...etExtraResources('darwin')]",
-    "        extraResources: [...moshExtraResources('darwin'), ...etExtraResources('darwin'), ...cmdbExtraResources('darwin'), { from: 'examples/plugins/cmdb-netcatty.ncpkg', to: 'cmdb/cmdb-netcatty.ncpkg' }]",
+    "        extraResources: [...moshExtraResources('darwin'), ...etExtraResources('darwin'), ...cmdbExtraResources('darwin')]",
     "electron-builder.config.cjs",
   );
   output = replaceOnce(
     output,
     "            ...etExtraResources('win32'),",
-    "            ...etExtraResources('win32'),\n            ...cmdbExtraResources('win32'),\n            { from: 'examples/plugins/cmdb-netcatty.ncpkg', to: 'cmdb/cmdb-netcatty.ncpkg' },",
+    "            ...etExtraResources('win32'),\n            ...cmdbExtraResources('win32'),",
     "electron-builder.config.cjs",
   );
   return replaceOnce(
     output,
     "        extraResources: [...moshExtraResources('linux'), ...etExtraResources('linux')]",
-    "        extraResources: [...moshExtraResources('linux'), ...etExtraResources('linux'), ...cmdbExtraResources('linux'), { from: 'examples/plugins/cmdb-netcatty.ncpkg', to: 'cmdb/cmdb-netcatty.ncpkg' }]",
+    "        extraResources: [...moshExtraResources('linux'), ...etExtraResources('linux'), ...cmdbExtraResources('linux')]",
     "electron-builder.config.cjs",
   );
 });
 
 update("package.json", (source) => {
   const pkg = JSON.parse(source);
-  pkg.scripts["build:plugin-packages"] += " && npm run build --workspace @netcatty/cmdb-plugin";
+  pkg.dependencies = {
+    ...pkg.dependencies,
+    "@ant-design/icons": "^5.5.1",
+    "@ant-design/v5-patch-for-react-19": "^1.0.3",
+    antd: "^5.21.6",
+    dayjs: "^1.11.13",
+  };
+  pkg.scripts["build:plugin-packages"] = pkg.scripts["build:plugin-packages"]
+    .replace(" && npm run build --workspace @netcatty/cmdb-plugin", "");
   return `${JSON.stringify(pkg, null, 2)}\n`;
 });
 
