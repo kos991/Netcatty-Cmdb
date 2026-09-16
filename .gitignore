@@ -41,6 +41,7 @@ chrome-profile-*/
 .system_generated/
 tmp/
 scratch/
+.superpowers/
 
 # OS and IDE files
 .DS_Store
