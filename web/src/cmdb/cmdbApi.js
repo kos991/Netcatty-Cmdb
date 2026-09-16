@@ -1,19 +1,7 @@
-const BASE = ''
+import { exportFile, importFile, requestJson } from '../cmdbTransport'
 
 async function req(url, opts = {}) {
-  const r = await fetch(BASE + url, {
-    headers: { 'Content-Type': 'application/json', ...opts.headers },
-    ...opts,
-  })
-  if (!r.ok) {
-    let msg = `HTTP ${r.status}`
-    try {
-      const j = await r.json()
-      if (j.error) msg = j.error
-    } catch (_) {}
-    throw new Error(msg)
-  }
-  return r.json()
+  return requestJson(url, opts)
 }
 
 function toQuery(params = {}) {
@@ -42,17 +30,11 @@ export const cmdbApi = {
   batchAssets: (ids, action, changes) =>
     post('/api/cmdb/assets/batch', { ids, action, changes }),
   assetFilters: () => req('/api/cmdb/assets/filters'),
-  exportAssetsUrl: (params = {}) => `/api/cmdb/assets/export?${toQuery(params)}`,
+  exportAssets: (params = {}) =>
+    exportFile(`/api/cmdb/assets/export?${toQuery(params)}`, 'cmdb_assets.xlsx'),
   templateUrl: () => '/api/cmdb/assets/template',
-  importAssets: (file, commit = false) => {
-    const form = new FormData()
-    form.append('file', file)
-    return req(`/api/cmdb/assets/import${commit ? '?commit=1' : ''}`, {
-      method: 'POST',
-      body: form,
-      headers: {},
-    })
-  },
+  importAssets: (file, commit = false, token) =>
+    importFile('/api/cmdb/assets/import', { file, commit, token }),
 
   // 人员管理与名下资产穿透
   listPersons: (p = {}) => req(`/api/cmdb/persons?${toQuery(p)}`),

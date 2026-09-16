@@ -124,6 +124,14 @@ export default function IPManager({ meta, focusTarget }) {
     loadEntries(subnet)
   }
 
+  const handleExport = async () => {
+    try {
+      await api.exportIPPool({ subnet, status, keyword })
+    } catch (e) {
+      message.error('导出 IP 规划失败: ' + e.message)
+    }
+  }
+
   // ---- 筛选（矩阵与列表共用同一套条件）----
   const matches = useCallback(
     (e) => {
@@ -481,8 +489,7 @@ export default function IPManager({ meta, focusTarget }) {
           </Button>
           <Button
             icon={<DownloadOutlined />}
-            href={api.exportIPPoolUrl({ subnet, status, keyword })}
-            target="_blank"
+            onClick={handleExport}
           >
             导出
           </Button>

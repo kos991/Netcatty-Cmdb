@@ -117,6 +117,14 @@ export default function AssetCenter({ meta, focusTarget }) {
     setPage(1)
   }
 
+  const handleExport = async () => {
+    try {
+      await api.exportAssets({ keyword, dept, status, security_software: secSoft })
+    } catch (e) {
+      message.error('导出资产失败: ' + e.message)
+    }
+  }
+
   // 打开历史抽屉
   const openHistory = async (record) => {
     setDrawerAsset(record)
@@ -520,7 +528,7 @@ export default function AssetCenter({ meta, focusTarget }) {
               <span>配置项管理 · 资产全生命周期</span>
             </div>
             <Space>
-              <Button icon={<DownloadOutlined />} href={api.exportAssetsUrl({ keyword, dept, status, security_software: secSoft })} target="_blank">批量导出</Button>
+              <Button icon={<DownloadOutlined />} onClick={handleExport}>批量导出</Button>
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增资产</Button>
             </Space>
           </div>

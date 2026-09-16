@@ -91,6 +91,7 @@ export default function ServerCenter({ meta, focusTarget }) {
     setImportLoading(true)
     try {
       const result = await api.importSangfor(file)
+      if (result.cancelled) return false
       setImportPreview(result)
       setImportModalOpen(true)
     } catch (e) {
@@ -105,7 +106,7 @@ export default function ServerCenter({ meta, focusTarget }) {
     if (!importFile) return
     setImportLoading(true)
     try {
-      const result = await api.importSangfor(importFile, true)
+      const result = await api.importSangfor(importFile, true, importPreview?.token)
       message.success(`导入完成：服务器新增 ${result.servers_created}，应用新增 ${result.apps_created}`)
       setImportModalOpen(false)
       setImportFile(null)

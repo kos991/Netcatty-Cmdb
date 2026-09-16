@@ -1,35 +1,22 @@
-const BASE = ''
+import { exportFile, importFile, requestJson } from './cmdbTransport'
 
 async function req(url, opts = {}) {
-  const headers = opts.body instanceof FormData
-    ? { ...opts.headers }
-    : { 'Content-Type': 'application/json', ...opts.headers }
-  const r = await fetch(BASE + url, {
-    headers,
-    ...opts,
+  return requestJson(url, opts)
+}
+
+function toQuery(params = {}) {
+  const sp = new URLSearchParams()
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') sp.set(k, v)
   })
-  if (!r.ok) {
-    let msg = `HTTP ${r.status}`
-    try {
-      const j = await r.json()
-      if (j.error) msg = j.error
-    } catch (_) {}
-    throw new Error(msg)
-  }
-  return r.json()
+  return sp.toString()
 }
 
 export const api = {
   meta: () => req('/api/meta'),
 
   // 终端资产
-  getAssets: (params = {}) => {
-    const sp = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') sp.set(k, v)
-    })
-    return req(`/api/assets?${sp.toString()}`)
-  },
+  getAssets: (params = {}) => req(`/api/assets?${toQuery(params)}`),
   getAsset: (id) => req(`/api/assets/${id}`),
   getAssetRelations: (id) => req(`/api/assets/${id}/relations`),
   createAsset: (data) => req('/api/assets', { method: 'POST', body: JSON.stringify(data) }),
@@ -39,13 +26,7 @@ export const api = {
   maintenance: (id, data) => req(`/api/assets/${id}/maintenance`, { method: 'POST', body: JSON.stringify(data) }),
 
   // 物理服务器
-  getServers: (params = {}) => {
-    const sp = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') sp.set(k, v)
-    })
-    return req(`/api/servers?${sp.toString()}`)
-  },
+  getServers: (params = {}) => req(`/api/servers?${toQuery(params)}`),
   getServer: (id) => req(`/api/servers/${id}`),
   createServer: (data) => req('/api/servers', { method: 'POST', body: JSON.stringify(data) }),
   updateServer: (id, data) => req(`/api/servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -56,31 +37,13 @@ export const api = {
   createServerApp: (serverId, data) => req(`/api/servers/${serverId}/apps`, { method: 'POST', body: JSON.stringify(data) }),
   updateApp: (id, data) => req(`/api/apps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteApp: (id) => req(`/api/apps/${id}`, { method: 'DELETE' }),
-  getAllApps: (params = {}) => {
-    const sp = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') sp.set(k, v)
-    })
-    return req(`/api/apps?${sp.toString()}`)
-  },
+  getAllApps: (params = {}) => req(`/api/apps?${toQuery(params)}`),
 
   // 履历流水
-  getLogs: (params = {}) => {
-    const sp = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') sp.set(k, v)
-    })
-    return req(`/api/logs?${sp.toString()}`)
-  },
+  getLogs: (params = {}) => req(`/api/logs?${toQuery(params)}`),
 
   // IP 规划池
-  getIPPool: (params = {}) => {
-    const sp = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') sp.set(k, v)
-    })
-    return req(`/api/ip_pool?${sp.toString()}`)
-  },
+  getIPPool: (params = {}) => req(`/api/ip_pool?${toQuery(params)}`),
   getIPPoolSummary: () => req('/api/ip_pool/summary'),
 
   // IP 网段管理（子网定义）
@@ -95,27 +58,14 @@ export const api = {
   allocateIP: (id, data) => req(`/api/ip_pool/${id}/allocate`, { method: 'POST', body: JSON.stringify(data) }),
   releaseIP: (id) => req(`/api/ip_pool/${id}/release`, { method: 'POST', body: '{}' }),
   normalizeIPPool: () => req('/api/ip_pool/normalize', { method: 'POST', body: '{}' }),
-  exportIPPoolUrl: (params = {}) => {
-    const sp = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') sp.set(k, v)
-    })
-    return `${BASE}/api/ip_pool/export?${sp.toString()}`
-  },
+  exportIPPool: (params = {}) =>
+    exportFile(`/api/ip_pool/export?${toQuery(params)}`, 'ip_pool.xlsx'),
 
   getStats: () => req('/api/stats'),
-  exportAssetsUrl: (params = {}) => {
-    const sp = new URLSearchParams()
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') sp.set(k, v)
-    })
-    return `${BASE}/api/export/assets?${sp.toString()}`
-  },
-  downloadTemplateUrl: () => `${BASE}/api/template/assets`,
+  exportAssets: (params = {}) =>
+    exportFile(`/api/export/assets?${toQuery(params)}`, 'czfy_assets.xlsx'),
+  downloadTemplateUrl: () => '/api/template/assets',
   search: (q, limit = 20) => req(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-  importSangfor: (file, commit = false) => {
-    const form = new FormData()
-    form.append('file', file)
-    return req(`/api/import/sangfor${commit ? '?commit=1' : ''}`, { method: 'POST', body: form, headers: {} })
-  },
+  importSangfor: (file, commit = false, token) =>
+    importFile('/api/import/sangfor', { file, commit, token }),
 }

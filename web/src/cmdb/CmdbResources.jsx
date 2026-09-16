@@ -536,6 +536,14 @@ export default function CmdbResources({ meta }) {
     return p
   }
 
+  const handleExport = async () => {
+    try {
+      await cmdbApi.exportAssets({ ...exportParams(), format: 'xlsx' })
+    } catch (e) {
+      message.error('导出资产失败：' + e.message)
+    }
+  }
+
   const dimOptions = (list) =>
     [{ value: 0, label: '（未设置）' }].concat((list || []).map((n) => ({ value: n.id, label: n.name })))
 
@@ -546,7 +554,7 @@ export default function CmdbResources({ meta }) {
         <header className="ledger-heading">
           <div><h2>资源总账</h2><span className="ledger-total">{total.toLocaleString()} 项</span></div>
           <Space>
-            <Button icon={<ExportOutlined />} href={cmdbApi.exportAssetsUrl({...exportParams(),format:'xlsx'})}>导出</Button>
+            <Button icon={<ExportOutlined />} onClick={handleExport}>导出</Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增资产</Button>
           </Space>
         </header>
