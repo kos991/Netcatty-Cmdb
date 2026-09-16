@@ -88,16 +88,28 @@ type SearchResult struct {
 }
 
 type TransferReq struct {
-	ToUser     string `json:"to_user"`
-	ToLocation string `json:"to_location"`
-	Operator   string `json:"operator"`
-	Reason     string `json:"reason"`
+	ToUser       string `json:"to_user"`
+	ToDepartment string `json:"to_department"`
+	ToRoom       string `json:"to_room"`
+	NewIP        string `json:"new_ip"`
+	Date         string `json:"date"`
+	Operator     string `json:"operator"`
+	Description  string `json:"description"`
+	ToLocation   string `json:"to_location"`
+	Reason       string `json:"reason"`
 }
 
 type MaintenanceReq struct {
-	Operator    string `json:"operator"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
+	MaintenanceType string `json:"maintenance_type"`
+	PartType        string `json:"part_type"`
+	OldSN           string `json:"old_sn"`
+	NewSN           string `json:"new_sn"`
+	NewStatus       string `json:"new_status"`
+	MarkOldAs       string `json:"mark_old_as"`
+	Date            string `json:"date"`
+	Operator        string `json:"operator"`
+	Description     string `json:"description"`
+	Status          string `json:"status"`
 }
 
 type IPEntry struct {

@@ -1,6 +1,8 @@
 package store
 
 import (
+	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -49,14 +51,27 @@ func (s *Store) AllAssetsFiltered(kw, dept, status, secSoft string) ([]Asset, er
 	return filtered, nil
 }
 
-func (s *Store) QueryAssetsWithArchived(kw, dept, status, secSoft string, page, pageSize int, includeArchived bool) ([]Asset, int, error) {
-	assets, err := s.AllAssets()
-	if err != nil {
-		return nil, 0, err
+func isArchivedAssetStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "已报废", "报废":
+		return true
+	default:
+		return false
 	}
-	var filtered []Asset
+}
+
+func filterAssets(assets []Asset, kw, dept, status, secSoft string, includeArchived bool) []Asset {
+	kw = strings.TrimSpace(kw)
+	dept = strings.TrimSpace(dept)
+	status = strings.TrimSpace(status)
+	secSoft = strings.TrimSpace(secSoft)
+	explicitArchived := isArchivedAssetStatus(status)
+	filtered := make([]Asset, 0, len(assets))
 	for _, a := range assets {
-		if kw != "" && !strings.Contains(a.UserName+a.Department+a.Room+a.IP+a.BoxSN+a.DisplaySN+a.AssetCode, kw) {
+		if !includeArchived && !explicitArchived && isArchivedAssetStatus(a.Status) {
+			continue
+		}
+		if kw != "" && !strings.Contains(a.UserName+a.Department+a.Room+a.IP+a.TerminalIP+a.BoxSN+a.DisplaySN+a.AssetCode, kw) {
 			continue
 		}
 		if dept != "" && a.Department != dept {
@@ -70,6 +85,15 @@ func (s *Store) QueryAssetsWithArchived(kw, dept, status, secSoft string, page, 
 		}
 		filtered = append(filtered, a)
 	}
+	return filtered
+}
+
+func (s *Store) QueryAssetsWithArchived(kw, dept, status, secSoft string, page, pageSize int, includeArchived bool) ([]Asset, int, error) {
+	assets, err := s.AllAssets()
+	if err != nil {
+		return nil, 0, err
+	}
+	filtered := filterAssets(assets, kw, dept, status, secSoft, includeArchived)
 	total := len(filtered)
 	if page < 1 {
 		page = 1
@@ -93,11 +117,10 @@ func (s *Store) AssetStatusSummary(kw, dept, secSoft string, includeArchived boo
 	if err != nil {
 		return nil, err
 	}
-	m := map[string]int{
-		"total": len(assets),
-		"在用":   len(assets),
-		"在库":   0,
-		"报废":   0,
+	filtered := filterAssets(assets, kw, dept, "", secSoft, includeArchived)
+	m := map[string]int{"total": len(filtered)}
+	for _, a := range filtered {
+		m[a.Status]++
 	}
 	return m, nil
 }
@@ -110,11 +133,114 @@ func (s *Store) GetAsset(id int64) (*Asset, []AssetLog, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return &a, []AssetLog{}, nil
+	rows, err := s.db.Query(`SELECT id, asset_id, IFNULL(log_type,''), IFNULL(from_user,''), IFNULL(to_user,''),
+		IFNULL(from_location,''), IFNULL(to_location,''), IFNULL(old_sn,''), IFNULL(new_sn,''),
+		IFNULL(operator,''), IFNULL(description,''), IFNULL(log_time,'')
+		FROM asset_logs WHERE asset_id = ? ORDER BY log_time DESC, id DESC`, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	logs := make([]AssetLog, 0)
+	for rows.Next() {
+		var log AssetLog
+		if err := rows.Scan(&log.ID, &log.AssetID, &log.LogType, &log.FromUser, &log.ToUser,
+			&log.FromLocation, &log.ToLocation, &log.OldSN, &log.NewSN, &log.Operator,
+			&log.Description, &log.LogTime); err != nil {
+			return nil, nil, err
+		}
+		logs = append(logs, log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return &a, logs, nil
 }
 
 func (s *Store) GetAssetRelations(id int64) (map[string]interface{}, error) {
-	return map[string]interface{}{"servers": []interface{}{}, "network": []interface{}{}}, nil
+	asset, _, err := s.GetAsset(id)
+	if err != nil {
+		return nil, err
+	}
+
+	ips := make([]IPEntry, 0)
+	rows, err := s.db.Query(`SELECT id, IFNULL(subnet,''), IFNULL(ip,''), IFNULL(department,''),
+		IFNULL(room,''), IFNULL(account,''), IFNULL(status,''), IFNULL(remark,'')
+		FROM ip_pool
+		WHERE (? <> '' AND ip = ?) OR (? <> '' AND ip = ?)
+		ORDER BY id`, asset.IP, asset.IP, asset.TerminalIP, asset.TerminalIP)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var item IPEntry
+		if err := rows.Scan(&item.ID, &item.Subnet, &item.IP, &item.Department, &item.Room, &item.Account, &item.Status, &item.Remark); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ips = append(ips, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	servers := make([]PhysicalServer, 0)
+	rows, err = s.db.Query(`SELECT id, IFNULL(asset_code,''), IFNULL(device_name,''), IFNULL(brand_model,''),
+		IFNULL(serial_number,''), IFNULL(location,''), IFNULL(rack_unit,''), IFNULL(cpu_info,''),
+		IFNULL(memory_info,''), IFNULL(disk_info,''), IFNULL(mgmt_ip,''), IFNULL(mgmt_url,''),
+		IFNULL(biz_ip,''), IFNULL(os_type,''), IFNULL(admin_user,''), IFNULL(status,''),
+		IFNULL(purchase_date,''), IFNULL(warranty_date,''), IFNULL(remark,''), IFNULL(created_at,''), IFNULL(updated_at,'')
+		FROM servers
+		WHERE (? <> '' AND (mgmt_ip = ? OR biz_ip = ?)) OR (? <> '' AND (mgmt_ip = ? OR biz_ip = ?))
+		ORDER BY id`, asset.IP, asset.IP, asset.IP, asset.TerminalIP, asset.TerminalIP, asset.TerminalIP)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var server PhysicalServer
+		if err := rows.Scan(&server.ID, &server.AssetCode, &server.DeviceName, &server.BrandModel, &server.SerialNumber,
+			&server.Location, &server.RackUnit, &server.CPUInfo, &server.MemoryInfo, &server.DiskInfo, &server.MgmtIP,
+			&server.MgmtURL, &server.BizIP, &server.OSType, &server.AdminUser, &server.Status, &server.PurchaseDate,
+			&server.WarrantyDate, &server.Remark, &server.CreatedAt, &server.UpdatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		servers = append(servers, server)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	apps := make([]ServerApp, 0)
+	rows, err = s.db.Query(`SELECT app.id, app.server_id, IFNULL(app.app_name,''), IFNULL(app.app_type,''),
+		'', '', IFNULL(app.status,''), IFNULL(app.remark,''), IFNULL(app.created_at,''), IFNULL(app.updated_at,'')
+		FROM server_apps app JOIN servers server ON server.id = app.server_id
+		WHERE (? <> '' AND (server.mgmt_ip = ? OR server.biz_ip = ?)) OR (? <> '' AND (server.mgmt_ip = ? OR server.biz_ip = ?))
+		ORDER BY app.id`, asset.IP, asset.IP, asset.IP, asset.TerminalIP, asset.TerminalIP, asset.TerminalIP)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var app ServerApp
+		if err := rows.Scan(&app.ID, &app.ServerID, &app.AppName, &app.AppType, &app.Port, &app.Version,
+			&app.Status, &app.Description, &app.CreatedAt, &app.UpdatedAt); err != nil {
+			return nil, err
+		}
+		apps = append(apps, app)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"ips": ips, "servers": servers, "apps": apps}, nil
 }
 
 func (s *Store) CreateAsset(a *Asset, operator string) (int64, error) {
@@ -131,25 +257,251 @@ func (s *Store) CreateAsset(a *Asset, operator string) (int64, error) {
 
 func (s *Store) UpdateAsset(a *Asset, operator string) error {
 	now := time.Now().Format("2006-01-02 15:04:05")
-	_, err := s.db.Exec(`UPDATE assets SET asset_code=?, box_sn=?, display_sn=?, user_name=?, department=?, room=?, ip=?, terminal_ip=?, security_software=?, status=?, net_type=?, remark=?, updated_at=? WHERE id=?`,
+	res, err := s.db.Exec(`UPDATE assets SET asset_code=?, box_sn=?, display_sn=?, user_name=?, department=?, room=?, ip=?, terminal_ip=?, security_software=?, status=?, net_type=?, remark=?, updated_at=? WHERE id=?`,
 		a.AssetCode, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark, now, a.ID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return requireAffected(res, "资产不存在")
 }
 
 func (s *Store) DeleteAsset(id int64, reason, operator string) error {
-	_, err := s.db.Exec(`DELETE FROM assets WHERE id = ?`, id)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	asset, err := legacyAssetSnapshotInTx(tx, id)
+	if err != nil {
+		return err
+	}
+	if isArchivedAssetStatus(asset.Status) {
+		return fmt.Errorf("资产已归档，不能重复注销")
+	}
+	now := legacyOperationTime("")
+	res, err := tx.Exec(`UPDATE assets SET status='已报废', updated_at=? WHERE id=?`, now, id)
+	if err != nil {
+		return err
+	}
+	if err := requireAffected(res, "资产不存在"); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO asset_logs
+		(asset_id, log_type, from_user, from_location, operator, description, log_time)
+		VALUES (?, '设备回收注销', ?, ?, ?, ?, ?)`,
+		id, asset.UserName, formatAssetLocation(asset.Department, asset.Room), operator, reason, now); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE cmdb_assets SET status='报废', updated_at=? WHERE source_type='legacy_asset' AND source_id=?`, now, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) TransferUser(id int64, req TransferReq) error {
-	now := time.Now().Format("2006-01-02 15:04:05")
-	_, err := s.db.Exec(`UPDATE assets SET user_name = ?, room = ?, updated_at = ? WHERE id = ?`, req.ToUser, req.ToLocation, now, id)
-	return err
+	toUser := strings.TrimSpace(req.ToUser)
+	if toUser == "" {
+		return fmt.Errorf("新使用人姓名不能为空")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	asset, err := legacyAssetSnapshotInTx(tx, id)
+	if err != nil {
+		return err
+	}
+	if isArchivedAssetStatus(asset.Status) {
+		return fmt.Errorf("归档资产不能调换使用人")
+	}
+	department := strings.TrimSpace(req.ToDepartment)
+	if department == "" {
+		department = asset.Department
+	}
+	room := strings.TrimSpace(req.ToRoom)
+	if room == "" {
+		room = strings.TrimSpace(req.ToLocation)
+	}
+	if room == "" {
+		room = asset.Room
+	}
+	ip := strings.TrimSpace(req.NewIP)
+	if ip == "" {
+		ip = asset.IP
+	}
+	description := strings.TrimSpace(req.Description)
+	if description == "" {
+		description = req.Reason
+	}
+	logTime := legacyOperationTime(req.Date)
+	res, err := tx.Exec(`UPDATE assets SET user_name=?, department=?, room=?, ip=?, updated_at=? WHERE id=?`,
+		toUser, department, room, ip, logTime, id)
+	if err != nil {
+		return err
+	}
+	if err := requireAffected(res, "资产不存在"); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO asset_logs
+		(asset_id, log_type, from_user, to_user, from_location, to_location, operator, description, log_time)
+		VALUES (?, '调换使用人', ?, ?, ?, ?, ?, ?, ?)`, id, asset.UserName, toUser,
+		formatAssetLocation(asset.Department, asset.Room), formatAssetLocation(department, room), req.Operator, description, logTime); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE cmdb_assets SET owner=?, department=?, room=?, updated_at=?
+		WHERE source_type='legacy_asset' AND source_id=?`, toUser, department, room, logTime, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) Maintenance(id int64, req MaintenanceReq) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	asset, err := legacyAssetSnapshotInTx(tx, id)
+	if err != nil {
+		return err
+	}
+	if isArchivedAssetStatus(asset.Status) {
+		return fmt.Errorf("归档资产不能登记维修")
+	}
+	logTime := legacyOperationTime(req.Date)
+	status := strings.TrimSpace(req.NewStatus)
+	if status == "" {
+		status = strings.TrimSpace(req.Status)
+	}
+	if status == "" {
+		status = asset.Status
+	}
+	partType := strings.TrimSpace(req.PartType)
+	oldSN := strings.TrimSpace(req.OldSN)
+	if oldSN == "" {
+		switch partType {
+		case "box":
+			oldSN = asset.BoxSN
+		case "display":
+			oldSN = asset.DisplaySN
+		}
+	}
+	newSN := strings.TrimSpace(req.NewSN)
+	var res sql.Result
+	switch partType {
+	case "box":
+		res, err = tx.Exec(`UPDATE assets SET box_sn=?, status=?, updated_at=? WHERE id=?`, newSN, status, logTime, id)
+	case "display":
+		res, err = tx.Exec(`UPDATE assets SET display_sn=?, status=?, updated_at=? WHERE id=?`, newSN, status, logTime, id)
+	default:
+		res, err = tx.Exec(`UPDATE assets SET status=?, updated_at=? WHERE id=?`, status, logTime, id)
+	}
+	if err != nil {
+		return err
+	}
+	if err := requireAffected(res, "资产不存在"); err != nil {
+		return err
+	}
+
+	oldPartStatus := ""
+	switch strings.TrimSpace(req.MarkOldAs) {
+	case "故障待修入库":
+		oldPartStatus = "维修中"
+	case "报废":
+		oldPartStatus = "已报废"
+	}
+	if oldPartStatus != "" && oldSN != "" && (partType == "box" || partType == "display") {
+		boxSN, displaySN := "", ""
+		if partType == "box" {
+			boxSN = oldSN
+		} else {
+			displaySN = oldSN
+		}
+		remark := fmt.Sprintf("原资产 %s（ID:%d）维修换下旧件", asset.AssetCode, id)
+		if _, err := tx.Exec(`INSERT INTO assets
+			(asset_code, box_sn, display_sn, status, remark, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, asset.AssetCode+"-旧件", boxSN, displaySN, oldPartStatus, remark, logTime, logTime); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO asset_logs
+		(asset_id, log_type, old_sn, new_sn, operator, description, log_time)
+		VALUES (?, '设备维修更换', ?, ?, ?, ?, ?)`, id, oldSN, newSN, req.Operator, req.Description, logTime); err != nil {
+		return err
+	}
+	mappedStatus := mapLegacyAssetStatus(status)
+	switch partType {
+	case "box":
+		_, err = tx.Exec(`UPDATE cmdb_assets SET sn=?, box_sn=?, status=?, updated_at=?
+			WHERE source_type='legacy_asset' AND source_id=?`, newSN, newSN, mappedStatus, logTime, id)
+	case "display":
+		_, err = tx.Exec(`UPDATE cmdb_assets SET display_sn=?, status=?, updated_at=?
+			WHERE source_type='legacy_asset' AND source_id=?`, newSN, mappedStatus, logTime, id)
+	default:
+		_, err = tx.Exec(`UPDATE cmdb_assets SET status=?, updated_at=?
+			WHERE source_type='legacy_asset' AND source_id=?`, mappedStatus, logTime, id)
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+type legacyAssetSnapshot struct {
+	AssetCode  string
+	BoxSN      string
+	DisplaySN  string
+	UserName   string
+	Department string
+	Room       string
+	IP         string
+	Status     string
+}
+
+func legacyAssetSnapshotInTx(tx *sql.Tx, id int64) (legacyAssetSnapshot, error) {
+	var asset legacyAssetSnapshot
+	err := tx.QueryRow(`SELECT IFNULL(asset_code,''), IFNULL(box_sn,''), IFNULL(display_sn,''),
+		IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,''), IFNULL(ip,''), IFNULL(status,'')
+		FROM assets WHERE id=?`, id).Scan(&asset.AssetCode, &asset.BoxSN, &asset.DisplaySN,
+		&asset.UserName, &asset.Department, &asset.Room, &asset.IP, &asset.Status)
+	if err == sql.ErrNoRows {
+		return asset, fmt.Errorf("资产不存在")
+	}
+	if err != nil {
+		return asset, err
+	}
+	return asset, nil
+}
+
+func requireAffected(result sql.Result, message string) error {
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("%s", message)
+	}
 	return nil
+}
+
+func legacyOperationTime(value string) string {
+	if value = strings.TrimSpace(value); value != "" {
+		return value
+	}
+	return time.Now().Format("2006-01-02 15:04:05")
+}
+
+func formatAssetLocation(department, room string) string {
+	parts := make([]string, 0, 2)
+	if department = strings.TrimSpace(department); department != "" {
+		parts = append(parts, department)
+	}
+	if room = strings.TrimSpace(room); room != "" {
+		parts = append(parts, room)
+	}
+	return strings.Join(parts, " / ")
 }
 
 func (s *Store) QueryServers(kw, loc, status string, page, pageSize int) ([]PhysicalServer, int, error) {
