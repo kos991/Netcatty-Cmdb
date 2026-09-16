@@ -110,6 +110,7 @@ function importUrl(path, commit) {
   if (!IMPORT_PATHS.has(url.pathname)) {
     throw new Error("CMDB 导入路径不允许");
   }
+  if (url.search) throw new Error("CMDB 导入路径不允许");
   if (commit) url.searchParams.set("commit", "1");
   return `${url.pathname}${url.search}`;
 }
@@ -156,6 +157,7 @@ function registerCmdbBridge({
     const service = requireService(getService);
     let filePath;
     let token = typeof payload.token === "string" ? payload.token : null;
+    if (payload.commit && !token) throw new Error("CMDB 导入确认需要有效令牌");
     if (token) {
       filePath = importFiles.get(token);
       if (!filePath) throw new Error("CMDB 导入文件令牌无效");

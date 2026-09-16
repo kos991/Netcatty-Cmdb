@@ -110,6 +110,40 @@ test("returns cancellation without uploading when import selection is cancelled"
   assert.equal(requests, 0);
 });
 
+test("rejects caller-supplied query parameters on import paths", async () => {
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async () => { throw new Error("不应打开文件选择框"); },
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+  });
+
+  await assert.rejects(
+    handlers.get(CMDB_CHANNELS.importFile)({}, {
+      path: "/api/import/sangfor?commit=1",
+      commit: false,
+    }),
+    /CMDB 导入路径不允许/,
+  );
+});
+
+test("requires an import token before commit and never opens file selection", async () => {
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async () => { throw new Error("不应打开文件选择框"); },
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+  });
+
+  await assert.rejects(
+    handlers.get(CMDB_CHANNELS.importFile)({}, {
+      path: "/api/cmdb/assets/import",
+      commit: true,
+    }),
+    /CMDB 导入确认需要有效令牌/,
+  );
+});
+
 test("keeps a selected import file behind an in-memory token until commit", async () => {
   const requestedUrls = [];
   const handlers = registerTestBridge({
