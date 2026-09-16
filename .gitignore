@@ -42,6 +42,7 @@ chrome-profile-*/
 tmp/
 scratch/
 .superpowers/
+.worktrees/
 
 # OS and IDE files
 .DS_Store
