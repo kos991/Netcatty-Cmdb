@@ -48,7 +48,7 @@ export async function importFile(path, options = {}, deps = {}) {
   }
   if (!options.file) throw new Error('请选择导入文件')
   if (typeof fetchImpl !== 'function') throw new Error('CMDB 请求通道不可用')
-  const form = new FormData()
+  const form = new globalThis.FormData()
   form.append('file', options.file)
   const response = await fetchImpl(`${path}${options.commit ? '?commit=1' : ''}`, {
     method: 'POST',
@@ -66,11 +66,11 @@ export async function exportFile(path, suggestedName, deps = {}) {
   if (typeof fetchImpl !== 'function') throw new Error('CMDB 请求通道不可用')
   const response = await fetchImpl(path)
   if (!response.ok) throw new Error(await readBrowserError(response))
-  const href = URL.createObjectURL(await response.blob())
-  const anchor = document.createElement('a')
+  const href = globalThis.URL.createObjectURL(await response.blob())
+  const anchor = globalThis.document.createElement('a')
   anchor.href = href
   anchor.download = suggestedName
   anchor.click()
-  URL.revokeObjectURL(href)
+  globalThis.URL.revokeObjectURL(href)
   return { cancelled: false }
 }

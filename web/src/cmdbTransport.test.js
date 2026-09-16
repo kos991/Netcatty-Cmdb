@@ -24,7 +24,7 @@ test('native request uses Netcatty bridge', async () => {
 })
 
 test('browser request surfaces response error text', async () => {
-  const fetchImpl = async () => new Response('数据库忙', { status: 500 })
+  const fetchImpl = async () => new globalThis.Response('数据库忙', { status: 500 })
 
   await assert.rejects(
     requestJson('/api/assets', {}, { bridge: null, fetchImpl }),

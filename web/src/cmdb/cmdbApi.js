@@ -5,7 +5,7 @@ async function req(url, opts = {}) {
 }
 
 function toQuery(params = {}) {
-  const sp = new URLSearchParams()
+  const sp = new globalThis.URLSearchParams()
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') sp.set(k, v)
   })
