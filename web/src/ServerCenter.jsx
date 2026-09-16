@@ -38,11 +38,13 @@ import {
   UploadOutlined,
 } from '@ant-design/icons'
 import { api } from './api'
+import { hasNativeCmdbImportBridge } from './cmdbTransport'
 
 const { Option } = Select
 const { Text, Title, Paragraph } = Typography
 
 export default function ServerCenter({ meta, focusTarget }) {
+  const nativeImport = hasNativeCmdbImportBridge()
   const [activeTab, setActiveTab] = useState('servers')
   const [servers, setServers] = useState([])
   const [total, setTotal] = useState(0)
@@ -87,11 +89,11 @@ export default function ServerCenter({ meta, focusTarget }) {
   const [importLoading, setImportLoading] = useState(false)
 
   const previewSangforImport = async (file) => {
-    setImportFile(file)
     setImportLoading(true)
     try {
       const result = await api.importSangfor(file)
       if (result.cancelled) return false
+      setImportFile(file || null)
       setImportPreview(result)
       setImportModalOpen(true)
     } catch (e) {
@@ -103,7 +105,7 @@ export default function ServerCenter({ meta, focusTarget }) {
   }
 
   const commitSangforImport = async () => {
-    if (!importFile) return
+    if (!importFile && !importPreview?.token) return
     setImportLoading(true)
     try {
       const result = await api.importSangfor(importFile, true, importPreview?.token)
@@ -718,9 +720,19 @@ export default function ServerCenter({ meta, focusTarget }) {
                     >
                     录入物理服务器
                   </Button>
-                  <Upload accept=".xlsx" showUploadList={false} beforeUpload={previewSangforImport}>
-                    <Button icon={<UploadOutlined />} loading={importLoading}>导入深信服 Excel</Button>
-                  </Upload>
+                  {nativeImport ? (
+                    <Button
+                      icon={<UploadOutlined />}
+                      loading={importLoading}
+                      onClick={() => previewSangforImport()}
+                    >
+                      导入深信服 Excel
+                    </Button>
+                  ) : (
+                    <Upload accept=".xlsx" showUploadList={false} beforeUpload={previewSangforImport}>
+                      <Button icon={<UploadOutlined />} loading={importLoading}>导入深信服 Excel</Button>
+                    </Upload>
+                  )}
                 </Space>
               </Col>
             </Row>

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { exportFile, importFile, requestJson } from './cmdbTransport.js'
+import {
+  exportFile,
+  hasNativeCmdbImportBridge,
+  importFile,
+  requestJson,
+} from './cmdbTransport.js'
 
 test('native request uses Netcatty bridge', async () => {
   const calls = []
@@ -50,6 +55,23 @@ test('native import reuses the preview token on commit', async () => {
   }])
 })
 
+test('native import bridge selects the direct file dialog flow', () => {
+  assert.equal(hasNativeCmdbImportBridge({ cmdbImportFile: async () => {} }), true)
+  assert.equal(hasNativeCmdbImportBridge({ cmdbRequest: async () => {} }), false)
+  assert.equal(hasNativeCmdbImportBridge(null), false)
+})
+
+test('import reports an unavailable request channel', async () => {
+  await assert.rejects(
+    importFile(
+      '/api/import/sangfor',
+      { file: 'spreadsheet' },
+      { bridge: null, fetchImpl: null },
+    ),
+    /CMDB 请求通道不可用/,
+  )
+})
+
 test('native export keeps the filtered path', async () => {
   const calls = []
   const bridge = {
@@ -70,4 +92,15 @@ test('native export keeps the filtered path', async () => {
     path: '/api/export/assets?dept=信息中心',
     suggestedName: 'czfy_assets.xlsx',
   }])
+})
+
+test('export reports an unavailable request channel', async () => {
+  await assert.rejects(
+    exportFile(
+      '/api/export/assets',
+      'czfy_assets.xlsx',
+      { bridge: null, fetchImpl: null },
+    ),
+    /CMDB 请求通道不可用/,
+  )
 })

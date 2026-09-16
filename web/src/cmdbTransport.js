@@ -21,6 +21,10 @@ export function hasNativeCmdbBridge(bridge = globalThis.window?.netcatty) {
   return typeof bridge?.cmdbRequest === 'function'
 }
 
+export function hasNativeCmdbImportBridge(bridge = globalThis.window?.netcatty) {
+  return typeof bridge?.cmdbImportFile === 'function'
+}
+
 export async function requestJson(path, options = {}, deps = {}) {
   const { bridge, fetchImpl } = resolveDeps(deps)
   const method = options.method || 'GET'
@@ -39,10 +43,11 @@ export async function requestJson(path, options = {}, deps = {}) {
 
 export async function importFile(path, options = {}, deps = {}) {
   const { bridge, fetchImpl } = resolveDeps(deps)
-  if (typeof bridge?.cmdbImportFile === 'function') {
+  if (hasNativeCmdbImportBridge(bridge)) {
     return bridge.cmdbImportFile({ path, commit: !!options.commit, token: options.token })
   }
   if (!options.file) throw new Error('请选择导入文件')
+  if (typeof fetchImpl !== 'function') throw new Error('CMDB 请求通道不可用')
   const form = new FormData()
   form.append('file', options.file)
   const response = await fetchImpl(`${path}${options.commit ? '?commit=1' : ''}`, {
@@ -58,6 +63,7 @@ export async function exportFile(path, suggestedName, deps = {}) {
   if (typeof bridge?.cmdbExportFile === 'function') {
     return bridge.cmdbExportFile({ path, suggestedName })
   }
+  if (typeof fetchImpl !== 'function') throw new Error('CMDB 请求通道不可用')
   const response = await fetchImpl(path)
   if (!response.ok) throw new Error(await readBrowserError(response))
   const href = URL.createObjectURL(await response.blob())
