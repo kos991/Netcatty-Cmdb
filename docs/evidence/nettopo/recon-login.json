@@ -1,0 +1,48 @@
+{
+  "url": "https://nettopo.com/login",
+  "title": "routeTitles.login",
+  "inputs": [
+    {
+      "type": "text",
+      "name": "",
+      "id": "username",
+      "placeholder": "请输入用户名/邮箱",
+      "className": ""
+    },
+    {
+      "type": "password",
+      "name": "",
+      "id": "password",
+      "placeholder": "请输入密码",
+      "className": ""
+    }
+  ],
+  "buttons": [
+    {
+      "text": "",
+      "type": "button",
+      "className": "password-toggle"
+    },
+    {
+      "text": "登录",
+      "type": "submit",
+      "className": "login-btn"
+    },
+    {
+      "text": "客服",
+      "type": "button",
+      "className": "wx-float-btn"
+    }
+  ],
+  "links": [
+    {
+      "text": "忘记密码？",
+      "href": "/forgot-password"
+    },
+    {
+      "text": "立即注册",
+      "href": "#"
+    }
+  ],
+  "text": "🇨🇳\n中文\n▼\nNetTopo.com\n\n请登录您的账户\n\n用户名/邮箱\n密码\n忘记密码？\n登录\n\n还没有账户？ 立即注册\n\n客服"
+}

@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: Build Multi-platform Binaries and Publish Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build Web Frontend
+        run: |
+          cd web
+          npm install
+          npm run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.22'
+
+      - name: Build Binaries (Windows, Linux, macOS)
+        run: |
+          mkdir -p bin
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o bin/cmdb-server-windows-amd64.exe .
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/cmdb-server-linux-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o bin/cmdb-server-darwin-arm64 .
+
+      - name: Package Netcatty Plugin Archive
+        run: |
+          mkdir -p bin/netcatty-cmdb-plugin
+          cp -r netcatty probes cli bin/netcatty-cmdb-plugin/
+          cd bin
+          zip -r netcatty-cmdb-plugin.zip netcatty-cmdb-plugin
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bin/cmdb-server-windows-amd64.exe
+            bin/cmdb-server-linux-amd64
+            bin/cmdb-server-darwin-arm64
+            bin/netcatty-cmdb-plugin.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

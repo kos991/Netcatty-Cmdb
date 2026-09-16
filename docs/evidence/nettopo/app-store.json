@@ -1,0 +1,38 @@
+{
+  "url": "https://nettopo.com/app-store",
+  "title": "应用商店",
+  "sidebar": [],
+  "menuLinks": [],
+  "tabs": [],
+  "buttons": [
+    "客服",
+    "VIP 剩余60天",
+    "F feifei",
+    "VIP订阅服务获取更多高级功能",
+    "设置查看和修改账户资料",
+    "时间记录记录与管理您的工作时间",
+    "团队管理",
+    "查看记录",
+    "日",
+    "周",
+    "月",
+    "年",
+    "导出",
+    "值班表查看值班安排并执行排班管理",
+    "AI助手智能网络分析与配置辅助",
+    "我的分享管理你创建的分享内容",
+    "退出登录安全退出当前账号",
+    "安装"
+  ],
+  "tableHeaders": [],
+  "formLabels": [
+    "搜索",
+    "今日完成",
+    "后续计划"
+  ],
+  "headings": [],
+  "selects": [],
+  "emptyStates": [],
+  "bodyText": "应用商店\n▼\n搜索...\nCtrl\nK\n应用商店\n已安装\n容器\n镜像\n网络/卷\n编排\n设置\n客服\nVIP\n剩余60天\nfeifei的工作空间\nF\nfeifei\n 容器应用商店\nDocker + Compose 托管\n分类\n全部\nWeb 服务\n数据库\n建站/CMS\nAI 应用\n开发工具\nDevOps\n存储/云盘\n监控\n中间件\n运行环境\n多媒体\n安全\n工具\n1Panel\n免费\n现代化 Linux 服务器运维面板\n开源轻量 Linux 运维面板，集成 Docker、网站、数据库、定时任务与文件管理。\nManagement\nDevOps\nv1.10.21\n安装\nAdGuardHome\n免费\n全网络广告与跟踪器 DNS 拦截\n全家用 DNS 级别的广告与跟踪器屏蔽，自定义规则、黑名单、家长控制、DNS-over-HTTPS。\nDNS\nPrivacy\nAdBlock\nv0.107.79\n安装\nAdminer\n免费\n单文件全能数据库管理\n轻量级单文件多数据库管理工具，支持 MySQL/PostgreSQL/SQLite/MongoDB/MSSQL/Oracle。\nDatabase\nWebUI\nv4.8.1\n安装\nAlist\n免费\n多网盘聚合与文件列表\n聚合阿里云盘/OneDrive/百度云等多类网盘，统一 WebDAV 访问与浏览。\nFile\nStorage\nv3.43.0\n安装\nCaddy\n免费\n现代化 Web 服务器与反代\n自动 HTTPS 的现代 Web 服务器，配置极简，适合静态站点与反向代理。\nWebSite\nProxy\nTLS\nv2.8.4\n安装\nChatGPT Next Web\n免费\n跨平台 Chat 应用\n一键拥有跨平台的 ChatGPT/OpenAI 兼容 API 前端，界面清爽，支持密语、分享对话、预设 prompt。\nChat\nUI\nv2.16.4\n安装\nCloudbeaver\n免费\nWeb 版 DBeaver 多数据库管理\nWeb 化 DBeaver，支持几十种数据库的图形化查询与 ER 图浏览。\nDatabase\nWebUI\nDBeaver\nv24.2.0\n安装\nCloudreve\n免费\n国产多存储后端云盘\n国产多后端云盘，支持本地/七牛/阿里 OSS/COS/OneDrive/S3 等多存储策略，WebDAV 与离线下载。\nCloudStorage\nWebDAV\nv4.18.0\n安装\ncode-server\n免费\n浏览器中的 VS Code\n在服务器上运行 VS Code，通过浏览器远程访问，适合云开发与统一环境。\nVSCode\nWebIDE\nv4.133.0\n安装\nddns-go\n免费\n简单易用的动态 DNS\n轻量 DDNS 服务，自动将公网 IP 映射到域名，支持阿里/腾讯/Cloudflare/华为云等多家 DNS。\nDDNS\nDNS\nv6.17.6\n安装\nDrone\n免费\n轻量容器原生 CI/CD\n以容器 Pipeline 为核心的 CI/CD 平台，集成 GitHub/Gitea/GitLab 等代码源。\nCI\nCD\nDocker\nv2.24.0\n安装\nDrupal\n免费\n企业级建站 CMS\n灵活强大的企业级开源 CMS，适合复杂信息架构、多站点与定制化开发。\nCMS\nPHP\nv10.3\n安装\nfrp 客户端\n免费\n内网穿透反向代理客户端\nfrp 客户端（frpc），连接 frps 将本地服务暴露到公网。\nProxy\nTunnel\nNAT\nv0.71.0\n安装\nfrp 服务端\n免费\n内网穿透反向代理服务端\n专注于内网穿透的高性能反向代理应用，frps 负责接收 frpc 连接并对外暴露穿透服务。\nProxy\nTunnel\nNAT\nv0.71.0\n安装\nGhost\n免费\n现代化发布平台\n基于 Node.js 的现代化博客与会员发布平台，编辑器流畅，主题简洁。\nBlog\nCMS\nv5.89.3\n安装\nGitea\n免费\n自托管代码托管\n轻量 GitHub/GitLab 替代，支持代码仓库、Issue、PR、Wiki、Actions、包管理。\nGit\nCode\nDevOps\nv1.22.0\n安装\nGrafana\n免费\n通用可视化仪表盘\n多数据源可视化平台，支持 Prometheus/InfluxDB/MySQL/Loki 等数据源与告警。\nMonitor\nDashboard\nv11.2.3\n安装\nHalo\n免费\n现代开源建站工具\n简单易用的开源建站/博客系统，支持丰富主题与插件。\nCMS\nBlog\nv2.17.0\n安装\nHome Assistant\n免费\n开源家庭自动化平台\n家庭物联网中枢，接入 2000+ 智能家居设备，支持自动化与仪表盘。\nIoT\nSmartHome\nv2026.8.2\n安装\nImmich\n免费\n自托管照片与视频备份\n高人气自托管照片备份平台，移动端自动上传、AI 人脸识别、地图时间线。\nPhoto\nBackup\nAI\nv1.120.2\n安装\nJellyfin\n免费\n自托管影视多媒体库\nEmby 开源分支，自托管的影视/音乐/图片媒体库，适配多平台客户端。\nMedia\nVideo\nMusic\nv10.11.11\n安装\nJenkins\n免费\n老牌自动化 CI/CD 平台\n最流行的开源持续集成/持续交付平台，插件生态庞大，支持多种构建与流水线。\nCI\nCD\nDevOps\nv2.462.1\n安装\nJoomla\n免费\n老牌开源建站 CMS\n仅次于 WordPress 的老牌 CMS，适合企业站点与多语种门户，扩展与模板生态完整。\nCMS\nPHP\nv5.1.4\n安装\nJumpServer\n免费\n开源堡垒机\n飞致云开源的运维安全审计系统（堡垒机），多协议资产接入、会话录屏、权限分级。\nSecurity\nAudit\nBastion\nv4.10.18\n安装\n可道云 KodCloud\n免费\n国产私有云盘/企业文档\n国产轻量企业云盘与在线文档系统，支持多人协作、文件预览、权限细粒度管理。\nCloudStorage\nDocument\nv5.50\n安装\nLobeChat\n免费\n开源现代化 LLM 聊天 UI\n高颜值开源 LLM 前端，支持多模型切换、插件系统、TTS/STT、Markdown 与 Mermaid 图表。\nChat\nUI\nv1.143.3\n安装\nLoki\n免费\nGrafana 日志聚合\nGrafana 官方水平扩展日志聚合系统，常配合 Grafana 统一可视化日志与指标。\nLogs\nGrafana\nv3.2.0\n安装\nMariaDB\n免费\nMySQL 兼容开源数据库\nMySQL 社区分支，完全兼容 MySQL 协议与生态，性能与特性更优。\nDatabase\nSQL\nv11.4.2\n安装\nMaxKB\n免费\n企业级知识库智能体平台\n1Panel 官方出品企业级 RAG 知识库与智能体平台，文档自动分片、支持多模型、可嵌入任意系统。\nRAG\nKnowledgeBase\nAgent\nv2.10.5\n安装\nMemos\n免费\n轻量自托管笔记服务\n极简自托管笔记/备忘录服务，类似 flomo，支持标签、Markdown 与多端 API。\nNote\nKnowledge\nv0.22.4\n安装\nMinIO\n免费\nS3 兼容对象存储\n高性能 S3 兼容对象存储，适合作为应用附件、备份与数据湖存储后端。\nStorage\nS3\nObject\nv2024.10.13\n安装\nmongo-express\n免费\nMongoDB Web 管理\nMongoDB 官方 Web 管理界面，支持数据库浏览、文档增删改查与索引管理。\nMongoDB\nWebUI\nv1.0.2\n安装\nMongoDB\n免费\n文档型 NoSQL 数据库\n高性能文档型数据库，支持灵活 schema、聚合管道与副本集。\nDatabase\nNoSQL\nv7.0.14\n安装\nMT Photos\n免费\n国产自托管照片管理\n国人开发的自托管照片管理，AI 人像/场景/事物识别，iOS/Android/Web 三端同步。\nPhoto\nAI\nv1.9.1\n安装\nMySQL\n免费\n开源关系型数据库\n全球最流行的开源关系型数据库，提供稳定可靠的数据存储能力。\nDatabase\nv8.4.0\n安装\nn8n\n免费\n公平代码工作流自动化平台\n可视化节点编排工作流，支持 400+ 集成，内置 AI 节点、Webhook、调试与执行历史。\nAutomation\nWorkflow\nv2.35.3\n安装\nNavidrome\n免费\n自托管音乐流媒体\n轻量 Subsonic-API 兼容音乐流媒体服务，兼容 Sonixd/DSub/Airsonic 客户端。\nMusic\nStream\nSubsonic\nv0.52.5\n安装\nNetdata\n免费\n实时主机性能监控\n零配置开箱即用的实时性能监控，1s 级采样，数千维度指标与告警内置。\nMetrics\nMonitoring\nv1.47.0\n安装\nNextcloud\n免费\n开源私有云盘\n全功能自托管云盘与协作平台，文件同步、分享、日历、办公套件一体化。\nStorage\nCloud\nCollaboration\nv30.0.2\n安装\nNginx Proxy\n免费\n轻量级反向代理与负载均衡\n基于 Nginx 的轻量级反向代理，支持多域名、TLS 终结与负载均衡。\nWebSite\nProxy\nv1.27.1\n安装\nNginx Proxy Manager\n免费\n可视化反向代理管理面板\n提供 Web UI 管理 Nginx 反代、SSL 证书、域名转发与基础访问控制。\nWebSite\nProxy\nManagement\nv2.11.3\n安装\nNocoDB\n免费\nAirtable 开源替代 - 协作数据库\n将 MySQL/PostgreSQL/SQLite 等数据库转为可视化协作表格，支持表单、视图、自动化。\nAirtable\nSpreadsheet\nDatabase\nv0.257.0\n安装\nOllama\n免费\n本地大模型运行平台\n零门槛本地运行开源大模型，支持 DeepSeek、Qwen、GLM、Kimi、Llama 等，REST API 供应用调用。\nLLM\nAI\nInference\nv0.32.15\n安装\nNew API (One API)\n免费\n新一代多模型统一网关\n整合 OpenAI/Anthropic/DeepSeek/Qwen/Gemini 等十几种 API 为统一 OpenAI 格式，提供额度、分发、令牌池。\nGateway\nLLM\nv0.13.2\n安装\nOpenWebUI\n免费\nOllama/OpenAI 友好 UI\n可离线使用的 AI 对话前端，兼容 Ollama / OpenAI 兼容 API，多模型切换、支持 RAG、Markdown 渲染。\nLLM\nUI\nChat\nv0.11.0\n安装\nOpenResty\n免费\nNginx + Lua 动态 Web 平台\n基于 Nginx 与 LuaJIT 的高性能 Web 平台，可编程扩展反向代理与网关。\nWebSite\nProxy\nLua\nv1.25.3\n安装\npgAdmin4\n免费\nPostgreSQL Web 管理平台\nPostgreSQL 官方推荐 Web 化管理与开发平台，支持 SQL、图表、扩展与备份。\nPostgreSQL\nWebUI\nv9.17\n安装\nPhotoPrism\n免费\n自托管 AI 照片管理\n基于 AI 的自托管照片与视频管理，人脸识别、地理标签、相册分享。\nPhoto\nAI\nv240531\n安装\nphpMyAdmin\n免费\nMySQL/MariaDB Web 管理\n最流行的 MySQL/MariaDB 图形化管理工具，支持 SQL、导入导出、用户权限。\nMySQL\nWebUI\nDatabase\nv5.2.3\n安装\nPostgreSQL\n免费\n开源高级关系型数据库\n高度可扩展的关系型数据库，支持复杂查询、JSONB、扩展模块与流复制。\nDatabase\nSQL\nv16.4\n安装\nPrometheus\n免费\n时序指标采集与告警\n多维度时序数据库与采集系统，支持 PromQL 查询、服务发现与 Alertmanager 告警。\nMonitor\nMetrics\nv2.54.1\n安装\n青龙面板\n免费\n定时任务管理平台\n高人气定时任务管理面板，支持 JS/Python/SHELL 脚本，内置依赖管理与日志查看。\nCron\nScheduler\nScript\nv2.21.0\n安装\nRedis\n免费\n内存键值数据库\n高性能内存键值存储，支持缓存、消息队列与持久化。\nDatabase\nCache\nv7.2.5\n安装\nRustDesk 服务端\n免费\n开源远程桌面自建服务端\nRustDesk 客户端对应自建中继服务（hbbr + hbbs），自建后客户端可连接自建 ID 服务器。\nRemote\nDesktop\nRust\nv1.1.16\n安装\nSeafile\n免费\n国产开源企业网盘\n高性能企业级文件同步与共享，支持团队协作、文件版本与权限管理。\nStorage\nSync\nCollaboration\nv12.0.0\n安装\n思源笔记\n免费\n隐私优先的个人知识管理\n国产开源、数据本地完全可控的个人知识管理系统，支持块级引用、双链、PDF 标注。\nNote\nPKM\nv3.8.1\n安装\nStirling-PDF\n免费\nPDF 全能操作工具\n本地托管的 Web 化 PDF 操作工具：合并、拆分、压缩、转换、OCR、签名等 70+ 功能。\nPDF\nTools\nv2.14.3\n安装\nTraefik\n免费\n云原生反向代理与负载均衡\n容器原生集成动态反代，支持自动服务发现、Let's Encrypt 与中间件链。\nWebSite\nProxy\nCloudNative\nv3.1.6\n安装\nTypecho\n免费\n轻量级开源博客系统\n基于PHP的轻量博客程序，单文件部署，资源占用低，适合个人博客。\nBlog\nCMS\nv1.2.1\n安装\nUptime Kuma\n免费\n轻量级可用性监控面板\n自托管可用性监控，支持 HTTP/TCP/Ping/DNS 多协议，配置简单告警丰富。\nMonitor\nUptime\nv1.23.13\n安装\nVault\n免费\nHashiCorp 密钥管理\nHashiCorp 出品的生产可用密钥与敏感信息管理平台，支持动态密钥、加密即服务、策略与审计。\nSecrets\nSecurity\nv1.17.3\n安装\nVaultwarden\n免费\n轻量 Bitwarden 服务端\nRust 实现的 Bitwarden 兼容密码管理后端，资源占用低，支持全平台客户端同步。\nSecurity\nPassword\nv1.32.0\n安装\nWordPress\n免费\n全球最流行的建站系统\n开源 CMS 与博客平台，海量主题插件生态，可视化后台开箱即用。\nCMS\nBlog\nv6.6.1\n安装",
+  "requestedPath": "/app-store"
+}

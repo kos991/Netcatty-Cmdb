@@ -1,0 +1,535 @@
+package store
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// CmdbAsset 对应 cmdb_assets 表，涵盖全部 48+ 主字段及 custom_fields 字典与 interfaces 数组。
+type CmdbAsset struct {
+	ID               int64                  `json:"id"`
+	AssetCode        string                 `json:"asset_code"`
+	Name             string                 `json:"name"`
+	Status           string                 `json:"status"`
+	AssetClass       string                 `json:"asset_class"`
+	CategoryID       int64                  `json:"category_id"`
+	CategoryName     string                 `json:"category_name"`
+	ModelID          int64                  `json:"model_id"`
+	SN               string                 `json:"sn"`
+	Vendor           string                 `json:"vendor"`
+	Model            string                 `json:"model"`
+	Tags             string                 `json:"tags"`
+	OrgID            int64                  `json:"org_id"`
+	OrgName          string                 `json:"org_name"`
+	GroupID          int64                  `json:"group_id"`
+	GroupName        string                 `json:"group_name"`
+	Department       string                 `json:"department"`
+	Owner            string                 `json:"owner"`
+	DataCenter       string                 `json:"data_center"`
+	Floor            string                 `json:"floor"`
+	CabinetName      string                 `json:"cabinet_name"`
+	CabinetRow       string                 `json:"cabinet_row"`
+	CabinetCol       int64                  `json:"cabinet_col"`
+	StartU           int64                  `json:"start_u"`
+	HeightU          int64                  `json:"height_u"`
+	Province         string                 `json:"province"`
+	City             string                 `json:"city"`
+	District         string                 `json:"district"`
+	Longitude        float64                `json:"longitude"`
+	Latitude         float64                `json:"latitude"`
+	Address          string                 `json:"address"`
+	MgmtIP           string                 `json:"mgmt_ip"`
+	MAC              string                 `json:"mac"`
+	PortCount        int64                  `json:"port_count"`
+	RatedPowerW      int64                  `json:"rated_power_w"`
+	MaxPowerW        int64                  `json:"max_power_w"`
+	PowerType        string                 `json:"power_type"`
+	RedundantPower   int64                  `json:"redundant_power"`
+	WeightKG         float64                `json:"weight_kg"`
+	OSType           string                 `json:"os_type"`
+	OSVersion        string                 `json:"os_version"`
+	InstallDate      string                 `json:"install_date"`
+	WarrantyDate     string                 `json:"warranty_date"`
+	Remark           string                 `json:"remark"`
+	SourceType       string                 `json:"source_type"`
+	SourceID         int64                  `json:"source_id"`
+	CreatedAt        string                 `json:"created_at"`
+	UpdatedAt        string                 `json:"updated_at"`
+
+	// 48+ 扩展字段与规范对齐字段
+	DeviceType       string                 `json:"device_type"`
+	ManageIP         string                 `json:"manage_ip"`
+	MACAddress       string                 `json:"mac_address"`
+	Organization     string                 `json:"organization"`
+	Area             string                 `json:"area"`
+	CabinetPos       string                 `json:"cabinet_pos"`
+	UHeight          int64                  `json:"u_height"`
+	UStart           int64                  `json:"u_start"`
+	PurchaseAt       string                 `json:"purchase_at"`
+	WarrantyAt       string                 `json:"warranty_at"`
+	Description      string                 `json:"description"`
+	Country          string                 `json:"country"`
+	GeoAddress       string                 `json:"geo_address"`
+	Provider         string                 `json:"provider"`
+	Region           string                 `json:"region"`
+	Zone             string                 `json:"zone"`
+	VCPU             int64                  `json:"vcpu"`
+	MemoryMB         int64                  `json:"memory_mb"`
+	InstanceType     string                 `json:"instance_type"`
+	PublicIP         string                 `json:"public_ip"`
+	BoxSN            string                 `json:"box_sn"`
+	DisplaySN        string                 `json:"display_sn"`
+	CPUInfo          string                 `json:"cpu_info"`
+	DiskInfo         string                 `json:"disk_info"`
+	MgmtURL          string                 `json:"mgmt_url"`
+	BizIP            string                 `json:"biz_ip"`
+	RackUnit         string                 `json:"rack_unit"`
+	SecuritySoftware string                 `json:"security_software"`
+	NetType          string                 `json:"net_type"`
+	AdminUser        string                 `json:"admin_user"`
+	Room             string                 `json:"room"`
+	OwnerID          int64                  `json:"owner_id"`
+	CustomFields     map[string]interface{} `json:"custom_fields,omitempty"`
+	CustomFieldsJSON string                 `json:"-"`
+	Interfaces       []CmdbAssetInterface   `json:"interfaces,omitempty"`
+}
+
+// CmdbAssetInterface 对应 cmdb_asset_interfaces 表。
+type CmdbAssetInterface struct {
+	ID          int64  `json:"id"`
+	AssetID     int64  `json:"asset_id"`
+	AssetName   string `json:"asset_name"`
+	Name        string `json:"name"`
+	IfName      string `json:"if_name"`
+	IP          string `json:"ip"`
+	Mask        string `json:"mask"`
+	Gateway     string `json:"gateway"`
+	MAC         string `json:"mac"`
+	NetworkZone string `json:"network_zone"`
+	NetZone     string `json:"net_zone"`
+	IsPrimary   int64  `json:"is_primary"`
+	VlanID      int64  `json:"vlan_id"`
+	Remark      string `json:"remark"`
+}
+
+// CmdbAssetQuery 是资源列表的查询条件。
+type CmdbAssetQuery struct {
+	Keyword    string
+	CategoryID int64
+	OrgID      int64
+	GroupID    int64
+	Department string
+	Owner      string
+	OwnerID    int64
+	Status     string
+	AssetClass string
+	DeviceType string
+	OSType     string
+	OSVersion  string
+	MgmtIP     string
+	SourceType string
+	Page       int
+	PageSize   int
+	SortBy     string
+	SortOrder  string
+}
+
+// 只有白名单内的字段允许出现在 ORDER BY 中，防止 SQL 注入。
+var cmdbSortWhitelist = map[string]string{
+	"asset_code":    "a.asset_code",
+	"name":          "a.name",
+	"status":        "a.status",
+	"category":      "a.category_id",
+	"org":           "a.org_id",
+	"os_type":       "a.os_type",
+	"os_version":    "a.os_version",
+	"mgmt_ip":       "a.mgmt_ip",
+	"install_date":  "a.install_date",
+	"warranty_date": "a.warranty_date",
+	"updated_at":    "a.updated_at",
+}
+
+const cmdbAssetSelect = `
+SELECT a.id, IFNULL(a.asset_code,''), a.name, a.status, a.asset_class,
+       a.category_id, IFNULL(c.name,''), a.model_id, IFNULL(a.sn,''), IFNULL(a.vendor,''),
+       IFNULL(a.model,''), IFNULL(a.tags,''), a.org_id, IFNULL(o.name,''), a.group_id,
+       IFNULL(g.name,''), IFNULL(a.department,''), IFNULL(a.owner,''), IFNULL(a.data_center,''),
+       IFNULL(a.floor,''), IFNULL(a.cabinet_name,''), IFNULL(a.cabinet_row,''), a.cabinet_col,
+       a.start_u, a.height_u, IFNULL(a.province,''), IFNULL(a.city,''), IFNULL(a.district,''),
+       IFNULL(a.longitude,0), IFNULL(a.latitude,0), IFNULL(a.address,''), IFNULL(a.mgmt_ip,''),
+       IFNULL(a.mac,''), a.port_count, a.rated_power_w, a.max_power_w, IFNULL(a.power_type,''),
+       a.redundant_power, IFNULL(a.weight_kg,0), IFNULL(a.os_type,''), IFNULL(a.os_version,''),
+       IFNULL(a.install_date,''), IFNULL(a.warranty_date,''), IFNULL(a.remark,''),
+       a.source_type, a.source_id, IFNULL(a.created_at,''), IFNULL(a.updated_at,''),
+       -- 48+ 扩展字段
+       IFNULL(a.device_type,''), IFNULL(a.manage_ip,''), IFNULL(a.mac_address,''),
+       IFNULL(a.organization,''), IFNULL(a.group_name,''), IFNULL(a.area,''),
+       IFNULL(a.cabinet_pos,''), a.u_height, a.u_start, IFNULL(a.purchase_at,''),
+       IFNULL(a.warranty_at,''), IFNULL(a.description,''), IFNULL(a.country,'中国'),
+       IFNULL(a.geo_address,''), IFNULL(a.provider,''), IFNULL(a.region,''),
+       IFNULL(a.zone,''), a.vcpu, a.memory_mb, IFNULL(a.instance_type,''),
+       IFNULL(a.public_ip,''), IFNULL(a.box_sn,''), IFNULL(a.display_sn,''),
+       IFNULL(a.cpu_info,''), IFNULL(a.disk_info,''), IFNULL(a.mgmt_url,''),
+       IFNULL(a.biz_ip,''), IFNULL(a.rack_unit,''), IFNULL(a.security_software,''),
+       IFNULL(a.net_type,''), IFNULL(a.admin_user,''), IFNULL(a.room,''),
+       a.owner_id, IFNULL(a.custom_fields,'')
+FROM cmdb_assets a
+LEFT JOIN cmdb_orgs o ON o.id = a.org_id
+LEFT JOIN cmdb_groups g ON g.id = a.group_id
+LEFT JOIN cmdb_device_categories c ON c.id = a.category_id`
+
+func scanCmdbAsset(rows interface {
+	Scan(dest ...interface{}) error
+}) (CmdbAsset, error) {
+	var a CmdbAsset
+	err := rows.Scan(
+		&a.ID, &a.AssetCode, &a.Name, &a.Status, &a.AssetClass,
+		&a.CategoryID, &a.CategoryName, &a.ModelID, &a.SN, &a.Vendor,
+		&a.Model, &a.Tags, &a.OrgID, &a.OrgName, &a.GroupID,
+		&a.GroupName, &a.Department, &a.Owner, &a.DataCenter,
+		&a.Floor, &a.CabinetName, &a.CabinetRow, &a.CabinetCol,
+		&a.StartU, &a.HeightU, &a.Province, &a.City, &a.District,
+		&a.Longitude, &a.Latitude, &a.Address, &a.MgmtIP,
+		&a.MAC, &a.PortCount, &a.RatedPowerW, &a.MaxPowerW, &a.PowerType,
+		&a.RedundantPower, &a.WeightKG, &a.OSType, &a.OSVersion,
+		&a.InstallDate, &a.WarrantyDate, &a.Remark,
+		&a.SourceType, &a.SourceID, &a.CreatedAt, &a.UpdatedAt,
+		// 扩展字段
+		&a.DeviceType, &a.ManageIP, &a.MACAddress,
+		&a.Organization, &a.GroupName, &a.Area,
+		&a.CabinetPos, &a.UHeight, &a.UStart, &a.PurchaseAt,
+		&a.WarrantyAt, &a.Description, &a.Country,
+		&a.GeoAddress, &a.Provider, &a.Region,
+		&a.Zone, &a.VCPU, &a.MemoryMB, &a.InstanceType,
+		&a.PublicIP, &a.BoxSN, &a.DisplaySN,
+		&a.CPUInfo, &a.DiskInfo, &a.MgmtURL,
+		&a.BizIP, &a.RackUnit, &a.SecuritySoftware,
+		&a.NetType, &a.AdminUser, &a.Room,
+		&a.OwnerID, &a.CustomFieldsJSON,
+	)
+	if err != nil {
+		return a, err
+	}
+
+	// 动态 JSON 解析
+	if a.CustomFieldsJSON != "" {
+		_ = json.Unmarshal([]byte(a.CustomFieldsJSON), &a.CustomFields)
+	}
+	if a.CustomFields == nil {
+		a.CustomFields = map[string]interface{}{}
+	}
+
+	// 同义字段双向对齐
+	if a.ManageIP == "" && a.MgmtIP != "" {
+		a.ManageIP = a.MgmtIP
+	}
+	if a.MgmtIP == "" && a.ManageIP != "" {
+		a.MgmtIP = a.ManageIP
+	}
+	if a.MACAddress == "" && a.MAC != "" {
+		a.MACAddress = a.MAC
+	}
+	if a.MAC == "" && a.MACAddress != "" {
+		a.MAC = a.MACAddress
+	}
+	if a.Area == "" && a.DataCenter != "" {
+		a.Area = a.DataCenter
+	}
+	if a.DataCenter == "" && a.Area != "" {
+		a.DataCenter = a.Area
+	}
+	if a.Description == "" && a.Remark != "" {
+		a.Description = a.Remark
+	}
+	if a.Remark == "" && a.Description != "" {
+		a.Remark = a.Description
+	}
+	if a.GeoAddress == "" && a.Address != "" {
+		a.GeoAddress = a.Address
+	}
+	if a.Address == "" && a.GeoAddress != "" {
+		a.Address = a.GeoAddress
+	}
+	if a.PurchaseAt == "" && a.InstallDate != "" {
+		a.PurchaseAt = a.InstallDate
+	}
+	if a.InstallDate == "" && a.PurchaseAt != "" {
+		a.InstallDate = a.PurchaseAt
+	}
+	if a.WarrantyAt == "" && a.WarrantyDate != "" {
+		a.WarrantyAt = a.WarrantyDate
+	}
+	if a.WarrantyDate == "" && a.WarrantyAt != "" {
+		a.WarrantyDate = a.WarrantyAt
+	}
+	if a.Organization == "" && a.OrgName != "" {
+		a.Organization = a.OrgName
+	}
+	if a.OrgName == "" && a.Organization != "" {
+		a.OrgName = a.Organization
+	}
+	if a.UHeight == 0 && a.HeightU > 0 {
+		a.UHeight = a.HeightU
+	}
+	if a.HeightU == 0 && a.UHeight > 0 {
+		a.HeightU = a.UHeight
+	}
+	if a.UStart == 0 && a.StartU > 0 {
+		a.UStart = a.StartU
+	}
+	if a.StartU == 0 && a.UStart > 0 {
+		a.StartU = a.UStart
+	}
+	if a.Country == "" {
+		a.Country = "中国"
+	}
+
+	return a, nil
+}
+
+func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
+	var where []string
+	var args []interface{}
+
+	if kw := strings.TrimSpace(q.Keyword); kw != "" {
+		pat := "%" + kw + "%"
+		where = append(where, `(a.name LIKE ? OR a.asset_code LIKE ? OR a.sn LIKE ?
+			OR a.mgmt_ip LIKE ? OR a.manage_ip LIKE ? OR a.model LIKE ? OR a.owner LIKE ? OR a.department LIKE ?)`)
+		args = append(args, pat, pat, pat, pat, pat, pat, pat, pat)
+	}
+	if q.CategoryID > 0 {
+		where = append(where, "a.category_id = ?")
+		args = append(args, q.CategoryID)
+	}
+	if q.OrgID > 0 {
+		where = append(where, "a.org_id = ?")
+		args = append(args, q.OrgID)
+	}
+	if q.GroupID > 0 {
+		where = append(where, "a.group_id = ?")
+		args = append(args, q.GroupID)
+	}
+	if dept := strings.TrimSpace(q.Department); dept != "" && dept != "全部" {
+		where = append(where, "a.department = ?")
+		args = append(args, dept)
+	}
+	if owner := strings.TrimSpace(q.Owner); owner != "" && owner != "全部" {
+		where = append(where, "a.owner = ?")
+		args = append(args, owner)
+	}
+	if q.OwnerID > 0 {
+		where = append(where, "a.owner_id = ?")
+		args = append(args, q.OwnerID)
+	}
+	if st := strings.TrimSpace(q.Status); st != "" && st != "全部" {
+		where = append(where, "a.status = ?")
+		args = append(args, st)
+	}
+	if cls := strings.TrimSpace(q.AssetClass); cls != "" && cls != "全部" {
+		where = append(where, "a.asset_class = ?")
+		args = append(args, cls)
+	}
+	if dt := strings.TrimSpace(q.DeviceType); dt != "" && dt != "全部" {
+		where = append(where, "a.device_type = ?")
+		args = append(args, dt)
+	}
+	if v := strings.TrimSpace(q.OSType); v != "" && v != "全部" {
+		where = append(where, "IFNULL(a.os_type,'') = ?")
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(q.OSVersion); v != "" && v != "全部" {
+		where = append(where, "IFNULL(a.os_version,'') = ?")
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(q.MgmtIP); v != "" && v != "全部" {
+		where = append(where, "(IFNULL(a.mgmt_ip,'') LIKE ? OR IFNULL(a.manage_ip,'') LIKE ?)")
+		args = append(args, "%"+v+"%", "%"+v+"%")
+	}
+	if v := strings.TrimSpace(q.SourceType); v != "" && v != "全部" {
+		where = append(where, "a.source_type = ?")
+		args = append(args, v)
+	}
+
+	clause := ""
+	if len(where) > 0 {
+		clause = " WHERE " + strings.Join(where, " AND ")
+	}
+	return clause, args
+}
+
+// QueryCmdbAssets 按条件分页查询 CMDB 资产，返回当前页数据与满足条件的总数。
+func (s *Store) QueryCmdbAssets(q CmdbAssetQuery) ([]CmdbAsset, int, error) {
+	if q.Page < 1 {
+		q.Page = 1
+	}
+	if q.PageSize < 1 || q.PageSize > 500 {
+		q.PageSize = 10
+	}
+
+	whereClause, args := s.buildCmdbWhere(q)
+
+	var total int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM cmdb_assets a"+whereClause, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	orderCol, ok := cmdbSortWhitelist[q.SortBy]
+	if !ok {
+		orderCol = "a.id"
+	}
+	direction := "ASC"
+	if strings.EqualFold(q.SortOrder, "desc") {
+		direction = "DESC"
+	}
+
+	query := cmdbAssetSelect + whereClause +
+		fmt.Sprintf(" ORDER BY %s %s LIMIT ? OFFSET ?", orderCol, direction)
+	queryArgs := append(append([]interface{}{}, args...), q.PageSize, (q.Page-1)*q.PageSize)
+
+	rows, err := s.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	list := make([]CmdbAsset, 0, q.PageSize)
+	for rows.Next() {
+		item, err := scanCmdbAsset(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		list = append(list, item)
+	}
+	return list, total, rows.Err()
+}
+
+// GetCmdbAsset 读取单个资产及其全部网络接口。
+func (s *Store) GetCmdbAsset(id int64) (*CmdbAsset, []CmdbAssetInterface, error) {
+	row := s.db.QueryRow(cmdbAssetSelect+" WHERE a.id = ?", id)
+	asset, err := scanCmdbAsset(row)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ifaces, err := s.getAssetInterfaces(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	asset.Interfaces = ifaces
+	return &asset, ifaces, nil
+}
+
+// InsertCmdbAsset 写入单条 CMDB 记录（支持全量 48+ 列）。
+func (s *Store) InsertCmdbAsset(a *CmdbAsset) (int64, error) {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	if a.Status == "" {
+		a.Status = "在库"
+	}
+	if a.AssetClass == "" {
+		a.AssetClass = "physical"
+	}
+	if a.SourceType == "" {
+		a.SourceType = "manual"
+	}
+	if a.HeightU == 0 && a.UHeight > 0 {
+		a.HeightU = a.UHeight
+	}
+	if a.HeightU == 0 {
+		a.HeightU = 1
+	}
+	if a.UHeight == 0 {
+		a.UHeight = a.HeightU
+	}
+	if a.UStart == 0 && a.StartU > 0 {
+		a.UStart = a.StartU
+	}
+	if a.Country == "" {
+		a.Country = "中国"
+	}
+	if a.ManageIP == "" && a.MgmtIP != "" {
+		a.ManageIP = a.MgmtIP
+	}
+	if a.MgmtIP == "" && a.ManageIP != "" {
+		a.MgmtIP = a.ManageIP
+	}
+	if a.MACAddress == "" && a.MAC != "" {
+		a.MACAddress = a.MAC
+	}
+	if a.MAC == "" && a.MACAddress != "" {
+		a.MAC = a.MACAddress
+	}
+	if a.Area == "" && a.DataCenter != "" {
+		a.Area = a.DataCenter
+	}
+	if a.DataCenter == "" && a.Area != "" {
+		a.DataCenter = a.Area
+	}
+	if a.Description == "" && a.Remark != "" {
+		a.Description = a.Remark
+	}
+	if a.Remark == "" && a.Description != "" {
+		a.Remark = a.Description
+	}
+	if a.GeoAddress == "" && a.Address != "" {
+		a.GeoAddress = a.Address
+	}
+	if a.Address == "" && a.GeoAddress != "" {
+		a.Address = a.GeoAddress
+	}
+	if a.PurchaseAt == "" && a.InstallDate != "" {
+		a.PurchaseAt = a.InstallDate
+	}
+	if a.InstallDate == "" && a.PurchaseAt != "" {
+		a.InstallDate = a.PurchaseAt
+	}
+	if a.WarrantyAt == "" && a.WarrantyDate != "" {
+		a.WarrantyAt = a.WarrantyDate
+	}
+	if a.WarrantyDate == "" && a.WarrantyAt != "" {
+		a.WarrantyDate = a.WarrantyAt
+	}
+	if a.Organization == "" && a.OrgName != "" {
+		a.Organization = a.OrgName
+	}
+	if a.OrgName == "" && a.Organization != "" {
+		a.OrgName = a.Organization
+	}
+
+	if len(a.CustomFields) > 0 {
+		cfBytes, _ := json.Marshal(a.CustomFields)
+		a.CustomFieldsJSON = string(cfBytes)
+	}
+
+	query := `
+		INSERT INTO cmdb_assets (
+			asset_code, name, status, asset_class, category_id, model_id, sn, vendor, model, tags,
+			org_id, group_id, department, owner, data_center, floor, cabinet_name, cabinet_row,
+			cabinet_col, start_u, height_u, province, city, district, longitude, latitude, address,
+			mgmt_ip, mac, port_count, rated_power_w, max_power_w, power_type, redundant_power,
+			weight_kg, os_type, os_version, install_date, warranty_date, remark, source_type, source_id,
+			device_type, manage_ip, mac_address, organization, group_name, area, cabinet_pos,
+			u_height, u_start, purchase_at, warranty_at, description, country, geo_address, provider,
+			region, zone, vcpu, memory_mb, instance_type, public_ip, box_sn, display_sn, cpu_info,
+			disk_info, mgmt_url, biz_ip, rack_unit, security_software, net_type, admin_user, room,
+			owner_id, custom_fields, created_at, updated_at)
+		VALUES (` + strings.TrimRight(strings.Repeat("?,", 78), ",") + `)`
+
+	res, err := s.db.Exec(query,
+		a.AssetCode, a.Name, a.Status, a.AssetClass, a.CategoryID, a.ModelID, a.SN, a.Vendor, a.Model, a.Tags,
+		a.OrgID, a.GroupID, a.Department, a.Owner, a.DataCenter, a.Floor, a.CabinetName, a.CabinetRow,
+		a.CabinetCol, a.StartU, a.HeightU, a.Province, a.City, a.District, a.Longitude, a.Latitude, a.Address,
+		a.MgmtIP, a.MAC, a.PortCount, a.RatedPowerW, a.MaxPowerW, a.PowerType, a.RedundantPower,
+		a.WeightKG, a.OSType, a.OSVersion, a.InstallDate, a.WarrantyDate, a.Remark, a.SourceType, a.SourceID,
+		a.DeviceType, a.ManageIP, a.MACAddress, a.Organization, a.GroupName, a.Area, a.CabinetPos,
+		a.UHeight, a.UStart, a.PurchaseAt, a.WarrantyAt, a.Description, a.Country, a.GeoAddress, a.Provider,
+		a.Region, a.Zone, a.VCPU, a.MemoryMB, a.InstanceType, a.PublicIP, a.BoxSN, a.DisplaySN, a.CPUInfo,
+		a.DiskInfo, a.MgmtURL, a.BizIP, a.RackUnit, a.SecuritySoftware, a.NetType, a.AdminUser, a.Room,
+		a.OwnerID, a.CustomFieldsJSON, now, now)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+

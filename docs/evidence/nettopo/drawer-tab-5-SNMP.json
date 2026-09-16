@@ -1,0 +1,22 @@
+{
+  "url": "https://nettopo.com/cmdb/resources",
+  "className": "resource-detail-overlay",
+  "labels": [],
+  "buttons": [
+    "关闭",
+    "信息",
+    "资产拓扑",
+    "设备机柜",
+    "业务监控",
+    "SNMP日志",
+    "核心指标",
+    "工单",
+    "LLDP",
+    "控制台审计",
+    "历史记录",
+    "复制",
+    "刷新"
+  ],
+  "inputs": [],
+  "text": "1U交换机-5141 关闭 资产 信息 资产拓扑 设备机柜 监控 业务监控 SNMP日志 核心指标 运维 工单 LLDP 控制台审计 其他 历史记录 SNMP 日志 1U交换机-5141 5s 自动刷新 近 15 分钟 近 30 分钟 近 1 小时 近 24 小时 复制 刷新 📡 该资产未关联SNMP凭证 该资产未关联SNMP凭证，请在CMDB中配置"
+}

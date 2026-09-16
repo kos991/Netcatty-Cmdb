@@ -1,0 +1,16 @@
+[
+  {
+    "id": "cmdb-uos-patch-check",
+    "title": "CMDB - 统信 UOS 补丁与程序盘点",
+    "description": "非侵入式盘点 UOS 已安装包总数并模拟检测安全源待修复 CVE 补丁",
+    "command": "bash -c \"$(curl -fsSL http://127.0.0.1:8080/probes/uos_probe.sh 2>/dev/null || cat <<'EOF'\n$(cat probes/uos_probe.sh 2>/dev/null)\nEOF\n)\"",
+    "group": "CMDB 运维"
+  },
+  {
+    "id": "cmdb-kylin-patch-check",
+    "title": "CMDB - 银河麒麟 补丁与程序盘点",
+    "description": "非侵入式盘点 KylinOS 已安装 RPM 包与 yum/dnf 安全公告更新",
+    "command": "bash -c \"$(curl -fsSL http://127.0.0.1:8080/probes/kylin_probe.sh 2>/dev/null || cat <<'EOF'\n$(cat probes/kylin_probe.sh 2>/dev/null)\nEOF\n)\"",
+    "group": "CMDB 运维"
+  }
+]

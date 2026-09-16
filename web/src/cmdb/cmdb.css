@@ -1,0 +1,701 @@
+/* 新版资源总账覆盖旧版侧栏尺寸，确保组织、分组、类型三项始终完整展示。 */
+.cmdb-content-v2 .cmdb-side-panel {
+  width: 270px;
+  flex: 0 0 270px;
+}
+
+.cmdb-content-v2 .cmdb-side-panel > .ant-tabs .ant-tabs-nav-list {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+
+.cmdb-content-v2 .cmdb-side-panel > .ant-tabs .ant-tabs-tab {
+  justify-content: center;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .cmdb-content-v2 .cmdb-side-panel {
+    width: 100%;
+    flex-basis: auto;
+  }
+}
+
+.cmdb-workspace-v2 {
+  min-height: calc(100vh - 100px);
+}
+
+.cmdb-head-v2 {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) auto;
+  gap: 28px;
+  align-items: end;
+  margin: -18px -24px 18px;
+  padding: 22px max(24px, calc((100vw - 1392px) / 2));
+  border-bottom: 1px solid #d7dfe5;
+  background: #fff;
+}
+
+.cmdb-title-v2 {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.cmdb-title-v2 > span {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #bad1d9;
+  border-radius: 5px;
+  background: #e9f3f5;
+  color: #176b87;
+  font-size: 20px;
+}
+
+.cmdb-title-v2 > div {
+  display: grid;
+  gap: 2px;
+}
+
+.cmdb-title-v2 small {
+  color: #83909d;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.cmdb-title-v2 h1 {
+  margin: 0;
+  color: #172333;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.cmdb-title-v2 p {
+  margin: 0;
+  color: #708091;
+  font-size: 11px;
+}
+
+.cmdb-module-nav-v2 {
+  display: flex;
+  gap: 7px;
+}
+
+.cmdb-module-nav-v2 button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px auto;
+  min-width: 154px;
+  min-height: 54px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  border: 1px solid #dce3e8;
+  border-radius: 5px;
+  background: #fff;
+  color: #657486;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cmdb-module-nav-v2 button > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 4px;
+  background: #f0f3f5;
+  color: #67798a;
+}
+
+.cmdb-module-nav-v2 button > div {
+  display: grid;
+  gap: 3px;
+}
+
+.cmdb-module-nav-v2 strong {
+  color: #344456;
+  font-size: 12px;
+}
+
+.cmdb-module-nav-v2 small {
+  color: #8794a1;
+  font-size: 9px;
+}
+
+.cmdb-module-nav-v2 button:hover {
+  border-color: #a9c3cd;
+}
+
+.cmdb-module-nav-v2 button.active {
+  border-color: #82aebd;
+  background: #edf5f6;
+}
+
+.cmdb-module-nav-v2 button.active > span {
+  background: #176b87;
+  color: #fff;
+}
+
+.cmdb-module-nav-v2 button.active strong {
+  color: #12566d;
+}
+
+.cmdb-module-nav-v2 .active-marker {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  left: -1px;
+  height: 3px;
+  border-radius: 0 0 4px 4px;
+  background: #176b87;
+}
+
+.cmdb-content-v2 {
+  min-width: 0;
+}
+
+.cmdb-content-v2 .cmdb-shell {
+  border-radius: 5px;
+}
+
+.cmdb-resources-wrap {
+  border: 1px solid #dce3e8;
+  border-radius: 5px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.cmdb-resources {
+  gap: 0;
+}
+
+.cmdb-side-panel {
+  width: 270px;
+  flex-basis: 270px;
+  align-self: stretch;
+  padding: 4px 12px 16px;
+  border-right: 1px solid #dfe5e9;
+  background: #f7f9fa;
+}
+
+.cmdb-side-panel > .ant-tabs .ant-tabs-tab {
+  flex: 1 1 0;
+  justify-content: center;
+  padding-block: 12px;
+}
+
+.cmdb-side-panel > .ant-tabs .ant-tabs-nav-list {
+  width: 100%;
+}
+
+.cmdb-main {
+  padding: 16px;
+}
+
+.cmdb-toolbar:first-child {
+  display: grid;
+  grid-template-columns: 160px minmax(260px, 420px) auto auto 1fr;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e7ebee;
+}
+
+.cmdb-toolbar:nth-child(2) {
+  margin-bottom: 14px;
+  padding-top: 2px;
+}
+
+.cmdb-main .ant-table-wrapper {
+  border-color: #dce3e8;
+  border-radius: 4px;
+}
+
+.cmdb-main .ant-table-thead > tr > th {
+  height: 42px;
+  background: #f3f6f7;
+  color: #435467;
+  font-size: 11px;
+}
+
+.cmdb-main .ant-table-tbody > tr > td {
+  height: 48px;
+  color: #2f4052;
+  font-size: 12px;
+}
+
+.cmdb-sync-tip {
+  border-color: #b8d6df;
+  background: #eff7f9;
+}
+
+@media (max-width: 1050px) {
+  .cmdb-head-v2 { grid-template-columns: 1fr; align-items: start; }
+  .cmdb-module-nav-v2 { overflow-x: auto; }
+  .cmdb-module-nav-v2 button { flex: 0 0 150px; }
+}
+
+@media (max-width: 760px) {
+  .cmdb-head-v2 { margin: -12px -10px 12px; padding: 16px 12px; }
+  .cmdb-title-v2 > span { display: none; }
+  .cmdb-title-v2 h1 { font-size: 19px; }
+  .cmdb-resources { display: block; }
+  .cmdb-side-panel { width: 100%; border-right: 0; border-bottom: 1px solid #dfe5e9; }
+  .cmdb-toolbar:first-child { display: flex; }
+}
+
+.cmdb-shell {
+  background: #fff;
+  border: 1px solid #e5eaf0;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 21, 41, 0.03);
+  overflow: hidden;
+}
+
+.cmdb-topnav {
+  padding: 0 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.cmdb-topnav .ant-menu-horizontal {
+  border-bottom: none;
+  line-height: 42px;
+}
+
+.cmdb-body {
+  padding: 14px;
+}
+
+/* 左侧三维度面板 + 右侧列表的两栏骨架 */
+.cmdb-resources {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.cmdb-side-panel {
+  width: 218px;
+  flex: 0 0 218px;
+  min-width: 0;
+  border-right: 1px solid #f0f0f0;
+}
+
+.cmdb-side-panel > .ant-tabs {
+  margin: 0 -1px 12px 0;
+}
+
+.cmdb-side-panel > .ant-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.cmdb-side-panel > .ant-tabs .ant-tabs-tab {
+  padding: 11px 9px;
+  color: #8b96a6;
+  font-size: 12px;
+}
+
+.cmdb-side-panel > .ant-tabs .ant-tabs-tab-active {
+  color: #1677ff;
+}
+
+.cmdb-side-panel > .ant-tabs .ant-tabs-tab .anticon {
+  margin-right: 4px;
+}
+
+.cmdb-side {
+  width: 218px;
+  flex: 0 0 218px;
+  min-width: 0;
+  border-right: 0;
+  padding-right: 12px;
+}
+
+.cmdb-side-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  margin-bottom: 8px;
+  padding: 0 10px 0 2px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.cmdb-side-heading .cmdb-side-title {
+  margin-bottom: 0;
+}
+
+.cmdb-side-add {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: #f0f2f5;
+  color: #536173;
+  cursor: pointer;
+}
+
+.cmdb-side-add:hover {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.cmdb-side-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f4e79;
+}
+
+.cmdb-side-item {
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmdb-side-item:hover {
+  background: #f5f5f5;
+}
+
+.cmdb-side-item.active {
+  background: #e6f0fa;
+  color: #1f4e79;
+  font-weight: 600;
+}
+
+.cmdb-side-empty {
+  font-size: 12px;
+  color: #999;
+  line-height: 1.6;
+  padding: 4px 2px;
+}
+
+.cmdb-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cmdb-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.cmdb-main .ant-input,
+.cmdb-main .ant-select-selector,
+.cmdb-main .ant-btn {
+  border-radius: 4px;
+}
+
+.cmdb-main .ant-btn {
+  box-shadow: none;
+}
+
+.cmdb-main .ant-btn-primary {
+  background: #1f5b8f;
+}
+
+.cmdb-main .ant-btn-primary:hover {
+  background: #174a76 !important;
+}
+
+.cmdb-main .ant-table-wrapper {
+  border: 1px solid #e8edf2;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cmdb-main .ant-table-thead > tr > th {
+  background: #f7f9fb;
+  color: #4b5b70;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cmdb-main .ant-table-tbody > tr > td {
+  color: #334155;
+  font-size: 12px;
+}
+
+.cmdb-main .ant-table-tbody > tr:hover > td {
+  background: #f4f8fc !important;
+}
+
+.cmdb-sync-tip {
+  margin-bottom: 12px;
+}
+
+/* 左侧维度树的节点标题与悬停操作（新增下级 / 重命名 / 删除）
+   antd Tree 的节点内容默认按内容自适应宽度，多层缩进后会把标题压成一两个字宽，
+   汉字被横向裁切成半个字。这里强制撑满整行并允许收缩，使省略号正常生效。 */
+.cmdb-side .ant-tree .ant-tree-treenode {
+  width: 100%;
+  align-items: center;
+}
+
+.cmdb-side .ant-tree .ant-tree-node-content-wrapper {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.cmdb-tree-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.cmdb-tree-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmdb-tree-actions {
+  visibility: hidden;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.cmdb-tree-title:hover .cmdb-tree-actions {
+  visibility: visible;
+}
+
+.cmdb-tree-action {
+  margin-left: 8px;
+  color: #8c8c8c;
+}
+
+.cmdb-tree-action:hover {
+  color: #1f4e79;
+}
+
+.cmdb-tree-action-danger:hover {
+  color: #cf1322;
+}
+
+.cmdb-resources-wrap > .ant-tabs {
+  margin-bottom: 4px;
+}
+
+/* 横向滚动时右侧固定的「操作」列：加明显的左侧阴影与分隔线。
+   否则固定列会盖住前一列（如「管理IP」）的尾部，看起来像内容被截断。 */
+.cmdb-main .ant-table-cell-fix-right {
+  background: #fff;
+  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.35);
+}
+
+.cmdb-main .ant-table-thead .ant-table-cell-fix-right {
+  background: #fafafa;
+}
+
+.cmdb-main .ant-table-cell-fix-left {
+  box-shadow: 8px 0 8px -8px rgba(0, 0, 0, 0.35);
+}
+
+/* 资产新增 / 编辑：左侧分区导航 + 右侧密集表单，字段仍沿用现有接口。 */
+.cmdb-asset-editor-modal .ant-modal-body {
+  padding: 0;
+}
+
+.cmdb-asset-editor {
+  display: flex;
+  min-height: 560px;
+  max-height: 66vh;
+  overflow: hidden;
+  border-top: 1px solid #f0f0f0;
+}
+
+.cmdb-asset-editor-nav {
+  width: 150px;
+  flex: 0 0 150px;
+  padding: 14px 10px;
+  border-right: 1px solid #f0f0f0;
+  background: #fafafa;
+  overflow-y: auto;
+}
+
+.cmdb-asset-editor-nav-caption {
+  padding: 2px 10px 10px;
+  color: #8c8c8c;
+  font-size: 12px;
+}
+
+.cmdb-asset-editor-nav button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  margin: 3px 0;
+  padding: 0 10px;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #536173;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cmdb-asset-editor-nav button:hover {
+  color: #1677ff;
+  background: #e6f4ff;
+}
+
+.cmdb-asset-editor-nav button.active {
+  border-color: #91caff;
+  color: #0958d9;
+  background: #e6f4ff;
+  font-weight: 600;
+}
+
+.cmdb-asset-editor-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 18px 22px 24px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.cmdb-form-section {
+  scroll-margin-top: 14px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.cmdb-form-section:last-child {
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+
+.cmdb-form-section-title {
+  margin-bottom: 14px;
+  color: #1f1f1f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cmdb-form-grid {
+  display: grid;
+  gap: 0 18px;
+}
+
+.cmdb-form-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cmdb-form-grid .ant-form-item {
+  margin-bottom: 14px;
+}
+
+.cmdb-readonly-note {
+  padding: 8px 10px;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #8c8c8c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cmdb-readonly-field {
+  margin-bottom: 24px;
+}
+
+.cmdb-readonly-field-label {
+  margin-bottom: 8px;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+}
+
+.cmdb-readonly-field-value {
+  min-height: 32px;
+  padding: 5px 11px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: #f5f5f5;
+  color: #8c8c8c;
+  line-height: 20px;
+}
+
+.cmdb-info-grid {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cmdb-info-grid span,
+.cmdb-info-grid strong {
+  min-height: 36px;
+  padding: 9px 11px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+
+.cmdb-info-grid span {
+  background: #fafafa;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.cmdb-info-grid strong {
+  color: #262626;
+  font-weight: 400;
+  word-break: break-word;
+}
+
+.cmdb-info-grid > :nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.cmdb-info-grid-muted strong {
+  color: #8c8c8c;
+}
+
+@media (max-width: 720px) {
+  .cmdb-asset-editor {
+    min-height: 480px;
+  }
+
+  .cmdb-asset-editor-nav {
+    width: 116px;
+    flex-basis: 116px;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .cmdb-asset-editor-nav button {
+    padding: 0 7px;
+    font-size: 12px;
+  }
+
+  .cmdb-asset-editor-content {
+    padding: 16px 14px 20px;
+  }
+
+  .cmdb-form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

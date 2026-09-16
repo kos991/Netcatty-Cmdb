@@ -1,0 +1,43 @@
+{
+  "name": "netcatty-cmdb",
+  "displayName": "CMDB 资产与虚拟机补丁管理",
+  "version": "1.0.0",
+  "description": "Netcatty CMDB 资产管理扩展，支持统信 UOS / 银河麒麟虚拟机批量控制、软件源安全补丁与安装包盘点",
+  "author": "kos991",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kos991/Netcatty-Cmdb.git"
+  },
+  "main": "embed_loader.js",
+  "categories": ["Utility", "Productivity", "Terminal"],
+  "contributions": {
+    "views": [
+      {
+        "id": "cmdb-view",
+        "title": "CMDB 资产中心",
+        "icon": "server.svg",
+        "location": "sidebar",
+        "targetUrl": "http://127.0.0.1:8080"
+      }
+    ],
+    "commands": [
+      {
+        "id": "cmdb.openDashboard",
+        "title": "打开 CMDB 资产与补丁仪表盘"
+      },
+      {
+        "id": "cmdb.syncHosts",
+        "title": "将 CMDB 虚拟机同步至 Netcatty 主机列表"
+      },
+      {
+        "id": "cmdb.scanUosPatches",
+        "title": "批量扫描统信 UOS 虚拟机安全补丁"
+      },
+      {
+        "id": "cmdb.scanKylinPatches",
+        "title": "批量扫描银河麒麟虚拟机安全补丁"
+      }
+    ]
+  }
+}

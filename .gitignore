@@ -1,0 +1,50 @@
+# Binaries and executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+build/
+
+# Database files and sqlite WAL
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Excel, Word, and temporary office files
+*.xlsx
+~$*.xlsx
+*.xls
+*.doc
+*.docx
+
+# Screenshots and UI preview dumps
+*.png
+*.jpg
+*.jpeg
+preview-*
+cmdb-*-preview.png
+
+# Web dependencies and build outputs
+web/dist/
+web/node_modules/
+node_modules/
+
+# Temporary directories and Chrome automation
+.chrome-*/
+chrome-profile-*/
+.system_generated/
+tmp/
+scratch/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/

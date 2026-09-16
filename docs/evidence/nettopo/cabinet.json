@@ -1,0 +1,17 @@
+{
+  "url": "https://nettopo.com/cabinet",
+  "title": "机柜布局",
+  "sidebar": [],
+  "menuLinks": [],
+  "tabs": [],
+  "buttons": [
+    "☰"
+  ],
+  "tableHeaders": [],
+  "formLabels": [],
+  "headings": [],
+  "selects": [],
+  "emptyStates": [],
+  "bodyText": "☰",
+  "requestedPath": "/cabinet"
+}
