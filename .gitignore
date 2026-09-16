@@ -7,6 +7,7 @@
 bin/
 dist/
 build/
+release-assets-local/
 
 # Database files and sqlite WAL
 *.db

@@ -2,90 +2,85 @@ name: CI
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [main]
   pull_request:
-    branches: [ master, main ]
+    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  frontend:
-    name: Frontend Build & Test
+  cmdb:
+    name: CMDB build and test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 22
+          cache: npm
           cache-dependency-path: web/package-lock.json
-
-      - name: Install Frontend Dependencies
-        working-directory: ./web
-        run: npm ci || npm install
-
-      - name: Build Web Application
-        working-directory: ./web
-        run: npm run build
-
-      - name: Verify Web Dist Artifacts
-        run: test -f web/dist/index.html
-
-  backend:
-    name: Backend Test & Build
-    runs-on: ubuntu-latest
-    needs: frontend
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js & Build Web Assets
-        uses: actions/setup-node@v4
+      - name: Check version consistency
+        run: node scripts/check-version.mjs
+      - name: Build Ant Design frontend
+        working-directory: web
+        run: npm ci && npm run build
+      - uses: actions/setup-go@v5
         with:
-          node-version: 20
-      - run: |
-          cd web
-          npm install
-          npm run build
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '>=1.22'
+          go-version-file: go.mod
           cache: true
+      - name: Run Go tests
+        run: go test -race -count=1 ./...
+      - name: Build CMDB server
+        run: mkdir -p build && go build -trimpath -o build/cmdb-server .
 
-      - name: Run Backend Unit Tests
-        run: go test -v -race -count=1 ./...
-
-      - name: Build CMDB Server Executable
-        run: go build -v -o cmdb-server .
-
-      - name: Verify Server Executable
-        run: test -f cmdb-server
-
-  probes-and-cli:
-    name: Probes & Netcatty CLI Verification
+  tools:
+    name: Probes and CLI
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
-      - name: Verify Shell Probes Syntax
+          python-version: "3.11"
+      - name: Verify probes and Python entry points
         run: |
           bash -n probes/uos_probe.sh
           bash -n probes/kylin_probe.sh
           bash probes/test_probes.sh
-
-      - name: Verify Python CLI Syntax & Commands
-        run: |
-          python -m py_compile cli/cmdb_cli.py
-          python -m py_compile netcatty/host_sync.py
+          python -m py_compile cli/cmdb_cli.py netcatty/host_sync.py
           python cli/cmdb_cli.py --help
           python netcatty/host_sync.py --help
+
+  netcatty-integration:
+    name: Netcatty integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Checkout pinned Netcatty source
+        run: |
+          repository=$(node -p "require('./integrations/netcatty/upstream.json').repository")
+          commit=$(node -p "require('./integrations/netcatty/upstream.json').commit")
+          git clone --filter=blob:none "$repository" build/netcatty
+          git -C build/netcatty checkout "$commit"
+      - name: Apply CMDB integration
+        run: node scripts/prepare-netcatty.mjs --target build/netcatty
+      - name: Install Netcatty dependencies
+        working-directory: build/netcatty
+        run: npm install --ignore-scripts
+      - name: Verify service lifecycle and plugin host
+        working-directory: build/netcatty
+        run: node --test electron/cmdbService.test.cjs electron/plugins/hostBootstrap.test.cjs
+      - name: Lint integrated source
+        working-directory: build/netcatty
+        run: npm run lint
+      - name: Build integrated Netcatty
+        working-directory: build/netcatty
+        run: npm run build
+      - name: Validate packed CMDB plugin
+        working-directory: build/netcatty
+        run: node packages/plugin-cli/dist/cli.js validate examples/plugins/cmdb-netcatty
