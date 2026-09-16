@@ -221,20 +221,134 @@ func (s *Store) QueryLogs(assetID int64, logType, kw string, page, pageSize int)
 }
 
 func (s *Store) GlobalSearch(q string, limit int) ([]SearchResult, error) {
-	var results []SearchResult
-	rows, err := s.db.Query(`SELECT id, name, IFNULL(manage_ip,''), IFNULL(department,''), status, IFNULL(device_type,'') FROM cmdb_assets WHERE name LIKE ? OR manage_ip LIKE ? OR owner LIKE ? LIMIT ?`, "%"+q+"%", "%"+q+"%", "%"+q+"%", limit)
-	if err == nil {
+	if limit < 1 {
+		limit = 20
+	}
+	pattern := "%" + strings.TrimSpace(q) + "%"
+	results := make([]SearchResult, 0)
+
+	query := func(sql string, args []interface{}, scan func(*SearchResult, interface{ Scan(...interface{}) error }) error) error {
+		rows, err := s.db.Query(sql, args...)
+		if err != nil {
+			return err
+		}
 		defer rows.Close()
 		for rows.Next() {
-			var r SearchResult
-			var dt string
-			_ = rows.Scan(&r.ID, &r.Title, &r.IP, &r.Department, &r.Status, &dt)
-			r.Type = "cmdb_asset"
-			r.Tag = dt
-			results = append(results, r)
+			var item SearchResult
+			if err := scan(&item, rows); err != nil {
+				return err
+			}
+			results = append(results, item)
 		}
+		return rows.Err()
 	}
+
+	if err := query(`SELECT id, IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,''), IFNULL(ip,''), IFNULL(status,''), IFNULL(asset_code,'')
+		FROM assets WHERE user_name LIKE ? OR asset_code LIKE ? OR box_sn LIKE ? OR display_sn LIKE ? OR ip LIKE ? OR terminal_ip LIKE ? OR department LIKE ? OR room LIKE ? LIMIT ?`,
+		[]interface{}{pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, limit}, func(item *SearchResult, row interface{ Scan(...interface{}) error }) error {
+			var room, assetCode string
+			if err := row.Scan(&item.ID, &item.Title, &item.Department, &room, &item.IP, &item.Status, &assetCode); err != nil {
+				return err
+			}
+			item.Type, item.Group, item.TableKey = "terminal", searchGroups["terminal"].Group, searchGroups["terminal"].TableKey
+			item.Subtitle, item.Tag, item.Extra = room, "云桌面终端", assetCode
+			item.Data = map[string]interface{}{"资产编号": assetCode, "房间": room}
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	if err := query(`SELECT a.id, a.name, COALESCE(NULLIF(a.manage_ip,''), a.mgmt_ip, ''), IFNULL(a.department,''), IFNULL(a.status,''), IFNULL(c.name,''), IFNULL(a.asset_code,'')
+		FROM cmdb_assets a LEFT JOIN cmdb_device_categories c ON c.id = a.category_id
+		WHERE (a.name LIKE ? OR a.asset_code LIKE ? OR a.sn LIKE ? OR a.mgmt_ip LIKE ? OR a.manage_ip LIKE ? OR a.owner LIKE ? OR a.department LIKE ?)
+		AND (a.source_type = 'legacy_server'
+			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage')
+			OR EXISTS (SELECT 1 FROM cmdb_device_categories scope_category WHERE scope_category.id = a.category_id
+				AND (scope_category.name LIKE '%服务器%' OR scope_category.name LIKE '%虚拟机%' OR scope_category.name LIKE '%交换机%' OR scope_category.name LIKE '%路由器%' OR scope_category.name LIKE '%安全设备%' OR scope_category.name LIKE '%存储设备%')))
+		LIMIT ?`,
+		[]interface{}{pattern, pattern, pattern, pattern, pattern, pattern, pattern, limit}, func(item *SearchResult, row interface{ Scan(...interface{}) error }) error {
+			var category, assetCode string
+			if err := row.Scan(&item.ID, &item.Title, &item.IP, &item.Department, &item.Status, &category, &assetCode); err != nil {
+				return err
+			}
+			item.Type, item.Group, item.TableKey = "infrastructure", searchGroups["infrastructure"].Group, searchGroups["infrastructure"].TableKey
+			item.Subtitle, item.Tag, item.Extra = category, category, assetCode
+			item.Data = map[string]interface{}{"资产编号": assetCode, "设备分类": category}
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	if err := query(`SELECT id, IFNULL(app_name,''), IFNULL(app_type,''), IFNULL(access_url,''), IFNULL(status,''), IFNULL(remark,'')
+		FROM server_apps WHERE app_name LIKE ? OR app_type LIKE ? OR access_url LIKE ? OR remark LIKE ? LIMIT ?`,
+		[]interface{}{pattern, pattern, pattern, pattern, limit}, func(item *SearchResult, row interface{ Scan(...interface{}) error }) error {
+			if err := row.Scan(&item.ID, &item.Title, &item.Tag, &item.IP, &item.Status, &item.Extra); err != nil {
+				return err
+			}
+			item.Type, item.Group, item.TableKey = "system", searchGroups["system"].Group, searchGroups["system"].TableKey
+			item.Subtitle = item.Tag
+			item.Data = map[string]interface{}{"访问地址": item.IP, "备注": item.Extra}
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	if err := query(`SELECT id, name, IFNULL(person_code,''), IFNULL(department,''), IFNULL(status,''), IFNULL(title,''), IFNULL(phone,'')
+		FROM cmdb_persons WHERE name LIKE ? OR person_code LIKE ? OR phone LIKE ? OR email LIKE ? OR department LIKE ? LIMIT ?`,
+		[]interface{}{pattern, pattern, pattern, pattern, pattern, limit}, func(item *SearchResult, row interface{ Scan(...interface{}) error }) error {
+			var personCode, title, phone string
+			if err := row.Scan(&item.ID, &item.Title, &personCode, &item.Department, &item.Status, &title, &phone); err != nil {
+				return err
+			}
+			item.Type, item.Group, item.TableKey = "person", searchGroups["person"].Group, searchGroups["person"].TableKey
+			item.Subtitle, item.Tag, item.Extra = title, "人员", personCode
+			item.Data = map[string]interface{}{"人员编号": personCode, "联系电话": phone}
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	if err := query(`SELECT id, IFNULL(log_type,''), IFNULL(description,''), IFNULL(operator,''), IFNULL(log_time,''), asset_id
+		FROM asset_logs WHERE log_type LIKE ? OR description LIKE ? OR operator LIKE ? OR from_user LIKE ? OR to_user LIKE ? LIMIT ?`,
+		[]interface{}{pattern, pattern, pattern, pattern, pattern, limit}, func(item *SearchResult, row interface{ Scan(...interface{}) error }) error {
+			var operator, logTime string
+			var assetID int64
+			if err := row.Scan(&item.ID, &item.Title, &item.Subtitle, &operator, &logTime, &assetID); err != nil {
+				return err
+			}
+			item.Type, item.Group, item.TableKey = "audit", searchGroups["audit"].Group, searchGroups["audit"].TableKey
+			item.Tag, item.Extra = "运维履历", logTime
+			item.Data = map[string]interface{}{"资产ID": assetID, "操作人": operator, "发生时间": logTime}
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	if err := query(`SELECT id, IFNULL(ip,''), IFNULL(subnet,''), IFNULL(department,''), IFNULL(status,''), IFNULL(account,''), IFNULL(room,''), IFNULL(remark,'')
+		FROM ip_pool WHERE ip LIKE ? OR subnet LIKE ? OR department LIKE ? OR room LIKE ? OR account LIKE ? OR remark LIKE ? LIMIT ?`,
+		[]interface{}{pattern, pattern, pattern, pattern, pattern, pattern, limit}, func(item *SearchResult, row interface{ Scan(...interface{}) error }) error {
+			var subnet, account, room string
+			if err := row.Scan(&item.ID, &item.Title, &subnet, &item.Department, &item.Status, &account, &room, &item.Extra); err != nil {
+				return err
+			}
+			item.Type, item.Group, item.TableKey = "ip", searchGroups["ip"].Group, searchGroups["ip"].TableKey
+			item.IP, item.Subtitle, item.Tag = item.Title, subnet, "IP"
+			item.Data = map[string]interface{}{"账号": account, "房间": room, "备注": item.Extra}
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
 	return results, nil
+}
+
+var searchGroups = map[string]struct{ Group, TableKey string }{
+	"terminal":       {"终端资产", "assets"},
+	"infrastructure": {"基础设施资源", "cmdb_assets"},
+	"system":         {"业务系统", "server_apps"},
+	"person":         {"组织与人员", "persons"},
+	"audit":          {"运维履历", "asset_logs"},
+	"ip":             {"IP 规划池", "ip_pool"},
 }
 
 func (s *Store) GetStats() (map[string]interface{}, error) {

@@ -130,6 +130,7 @@ type CmdbAssetQuery struct {
 	OSVersion  string
 	MgmtIP     string
 	SourceType string
+	ResourceScope string
 	Page       int
 	PageSize   int
 	SortBy     string
@@ -351,6 +352,20 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		where = append(where, "a.source_type = ?")
 		args = append(args, v)
 	}
+	if strings.EqualFold(strings.TrimSpace(q.ResourceScope), "infrastructure") {
+		where = append(where, `(a.source_type = 'legacy_server'
+			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage')
+			OR EXISTS (
+				SELECT 1 FROM cmdb_device_categories scope_category
+				WHERE scope_category.id = a.category_id
+				AND (scope_category.name LIKE '%服务器%'
+					OR scope_category.name LIKE '%虚拟机%'
+					OR scope_category.name LIKE '%交换机%'
+					OR scope_category.name LIKE '%路由器%'
+					OR scope_category.name LIKE '%安全设备%'
+					OR scope_category.name LIKE '%存储设备%')
+			))`)
+	}
 
 	clause := ""
 	if len(where) > 0 {
@@ -532,4 +547,3 @@ func (s *Store) InsertCmdbAsset(a *CmdbAsset) (int64, error) {
 	}
 	return res.LastInsertId()
 }
-

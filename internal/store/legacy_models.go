@@ -73,15 +73,18 @@ type AssetLog struct {
 }
 
 type SearchResult struct {
-	Type       string `json:"type"`
-	ID         int64  `json:"id"`
-	Title      string `json:"title"`
-	Subtitle   string `json:"subtitle"`
-	Tag        string `json:"tag"`
-	Status     string `json:"status"`
-	Extra      string `json:"extra"`
-	IP         string `json:"ip"`
-	Department string `json:"department"`
+	Type       string                 `json:"type"`
+	Group      string                 `json:"group"`
+	TableKey   string                 `json:"tableKey"`
+	ID         int64                  `json:"id"`
+	Title      string                 `json:"title"`
+	Subtitle   string                 `json:"subtitle"`
+	Tag        string                 `json:"tag"`
+	Status     string                 `json:"status"`
+	Extra      string                 `json:"extra"`
+	IP         string                 `json:"ip"`
+	Department string                 `json:"department"`
+	Data       map[string]interface{} `json:"data,omitempty"`
 }
 
 type TransferReq struct {

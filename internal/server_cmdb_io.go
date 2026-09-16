@@ -29,6 +29,7 @@ func cmdbQueryFromRequest(r *http.Request, page, pageSize int) store.CmdbAssetQu
 		OSVersion:  q.Get("os_version"),
 		MgmtIP:     q.Get("mgmt_ip"),
 		SourceType: q.Get("source_type"),
+		ResourceScope: q.Get("scope"),
 		Page:       page,
 		PageSize:   pageSize,
 		SortBy:     q.Get("sort_by"),
