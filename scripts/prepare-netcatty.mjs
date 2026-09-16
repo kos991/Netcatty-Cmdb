@@ -68,6 +68,13 @@ cpSync(join(integrationRoot, "electron", "cmdbBridge.cjs"), join(target, "electr
 cpSync(join(integrationRoot, "electron", "cmdbBridge.test.cjs"), join(target, "electron", "bridges", "cmdbBridge.test.cjs"));
 
 const cmdbMainBlock = `let cmdbService = null;
+let cmdbStartupError = null;
+
+function normalizeCmdbStartupError(error) {
+  if (error instanceof Error) return error.message.trim() || "CMDB 服务启动失败";
+  if (typeof error === "string" && error.trim()) return error.trim();
+  return "CMDB 服务启动失败";
+}
 
 function resolveCmdbExecutablePath() {
   const executableName = process.platform === "win32" ? "cmdb-server.exe" : "cmdb-server";
@@ -101,7 +108,8 @@ function resolveCmdbDatabasePath() {
 async function startCmdbForApp() {
   const executablePath = resolveCmdbExecutablePath();
   if (!executablePath) {
-    console.warn("[CMDB] cmdb-server executable not found; CMDB workspace will remain unavailable");
+    cmdbStartupError = "未找到 CMDB 服务可执行文件";
+    console.warn(\`[CMDB] \${cmdbStartupError}\`);
     return null;
   }
   try {
@@ -111,9 +119,11 @@ async function startCmdbForApp() {
       port: 18080,
       cwd: path.dirname(executablePath),
     });
+    cmdbStartupError = null;
     console.info(\`[CMDB] Service ready at \${cmdbService.baseUrl}\`);
     return cmdbService;
   } catch (error) {
+    cmdbStartupError = normalizeCmdbStartupError(error);
     console.error("[CMDB] Failed to start service:", error);
     cmdbService = null;
     return null;
@@ -143,7 +153,7 @@ update("electron/main.cjs", (source) => {
   output = replaceOnce(
     output,
     "  getVaultBackupBridge,\n  getAppLockController: () => appLockController,",
-    "  getVaultBackupBridge,\n  getCmdbService: () => cmdbService,\n  getAppLockController: () => appLockController,",
+    "  getVaultBackupBridge,\n  getCmdbService: () => cmdbService,\n  getCmdbStartupError: () => cmdbStartupError,\n  getAppLockController: () => appLockController,",
     "electron/main.cjs",
   );
   return replaceOnce(
@@ -172,7 +182,7 @@ update("electron/main/registerBridges.cjs", (source) => {
   output = replaceOnce(
     output,
     "    getVaultBackupBridge,\n    getAppLockController,",
-    "    getVaultBackupBridge,\n    getCmdbService,\n    getAppLockController,",
+    "    getVaultBackupBridge,\n    getCmdbService,\n    getCmdbStartupError,\n    getAppLockController,",
     "electron/main/registerBridges.cjs",
   );
   return replaceOnce(
@@ -183,6 +193,7 @@ update("electron/main/registerBridges.cjs", (source) => {
       ipcMain,
       dialog: electronModule.dialog,
       getService: getCmdbService,
+      getStartupError: getCmdbStartupError,
     });`,
     "electron/main/registerBridges.cjs",
   );

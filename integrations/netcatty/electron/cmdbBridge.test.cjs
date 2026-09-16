@@ -19,6 +19,7 @@ function registerTestBridge(options = {}) {
       showSaveDialog: async () => ({ canceled: true }),
     },
     getService: options.getService ?? (() => ({ baseUrl: "http://127.0.0.1:18080" })),
+    getStartupError: options.getStartupError,
     fetchImpl: options.fetchImpl ?? (async () => new Response("{}", { status: 200 })),
     readFile: options.readFile ?? (async () => Buffer.from("spreadsheet")),
     writeFile: options.writeFile ?? (async () => {}),
@@ -75,6 +76,20 @@ test("rejects requests when the service is not running", async () => {
     handlers.get(CMDB_CHANNELS.request)({}, { path: "/api/assets" }),
     /CMDB 服务未启动/,
   );
+});
+
+test("returns the CMDB startup failure through the status response", async () => {
+  const handlers = registerTestBridge({
+    getService: () => null,
+    getStartupError: () => "未找到 cmdb-server 可执行文件",
+  });
+
+  const result = await handlers.get(CMDB_CHANNELS.status)();
+
+  assert.deepEqual(result, {
+    available: false,
+    error: "未找到 cmdb-server 可执行文件",
+  });
 });
 
 test("reports a request timeout", async () => {

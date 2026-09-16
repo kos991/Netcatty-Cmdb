@@ -104,6 +104,12 @@ function requireService(getService) {
   return service;
 }
 
+function normalizeStartupError(error) {
+  if (error instanceof Error) return error.message.trim() || "CMDB 服务启动失败";
+  if (typeof error === "string" && error.trim()) return error.trim();
+  return null;
+}
+
 function importUrl(path, commit) {
   const normalizedPath = normalizeApiPath(path);
   const url = new URL(normalizedPath, API_ORIGIN);
@@ -125,6 +131,7 @@ function registerCmdbBridge({
   ipcMain,
   dialog,
   getService,
+  getStartupError,
   fetchImpl = globalThis.fetch,
   readFile: readFileImpl = readFile,
   writeFile: writeFileImpl = writeFile,
@@ -140,7 +147,11 @@ function registerCmdbBridge({
 
   ipcMain.handle(CMDB_CHANNELS.status, async () => {
     const service = getService();
-    return service ? { available: true } : { available: false, error: "CMDB 服务未启动" };
+    if (service) return { available: true };
+    return {
+      available: false,
+      error: normalizeStartupError(getStartupError?.()) || "CMDB 服务未启动",
+    };
   });
 
   ipcMain.handle(CMDB_CHANNELS.request, async (_event, payload = {}) => requestCmdb({
