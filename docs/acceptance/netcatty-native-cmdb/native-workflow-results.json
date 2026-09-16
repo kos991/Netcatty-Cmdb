@@ -1,0 +1,13 @@
+{
+  "checks": [
+    "原生人员新增",
+    "终端资产新增、编辑、调换、维修、详情履历和导出",
+    "组织人员名下资产穿透和原生资产交接",
+    "六类全局查询均返回真实记录并可进入",
+    "IP 补录、分配和释放",
+    "终端资产注销归档且资料与履历保留"
+  ],
+  "pageErrors": [],
+  "databasePath": "C:\\Users\\Administrator\\AppData\\Local\\Temp\\codex-netcatty-cmdb-task7\\native-write-acceptance-20260916175850201.db",
+  "completedAt": "2026-09-16T17:59:09.236Z"
+}

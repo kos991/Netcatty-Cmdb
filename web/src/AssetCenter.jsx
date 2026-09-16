@@ -504,12 +504,13 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
       title: '操作',
       key: 'cmdb_actions',
       fixed: 'right',
-      width: 220,
+      width: 260,
       render: (_, r) => (
         <Space size={2}>
           <Button type="link" size="small" onClick={() => openHistory(r)}>详情</Button>
           <Button type="link" size="small" onClick={() => openEdit(r)}>编辑</Button>
           <Button type="link" size="small" onClick={() => openTransfer(r)}>调换</Button>
+          <Button type="link" size="small" onClick={() => openMaintenance(r)}>维修</Button>
           <Popconfirm title="确认注销此资产？" onConfirm={() => doDelete(r.id)} okText="注销" cancelText="取消">
             <Button type="link" size="small" danger>注销</Button>
           </Popconfirm>
