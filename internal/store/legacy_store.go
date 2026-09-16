@@ -27,28 +27,12 @@ func (s *Store) AllAssets() ([]Asset, error) {
 	return list, nil
 }
 
-func (s *Store) AllAssetsFiltered(kw, dept, status, secSoft string) ([]Asset, error) {
+func (s *Store) AllAssetsFiltered(kw, dept, status, secSoft string, includeArchived bool) ([]Asset, error) {
 	assets, err := s.AllAssets()
 	if err != nil {
 		return nil, err
 	}
-	var filtered []Asset
-	for _, a := range assets {
-		if kw != "" && !strings.Contains(a.UserName+a.Department+a.Room+a.IP+a.BoxSN+a.DisplaySN+a.AssetCode, kw) {
-			continue
-		}
-		if dept != "" && a.Department != dept {
-			continue
-		}
-		if status != "" && a.Status != status {
-			continue
-		}
-		if secSoft != "" && a.SecuritySoftware != secSoft {
-			continue
-		}
-		filtered = append(filtered, a)
-	}
-	return filtered, nil
+	return filterAssets(assets, kw, dept, status, secSoft, includeArchived), nil
 }
 
 func isArchivedAssetStatus(status string) bool {
@@ -379,16 +363,21 @@ func (s *Store) Maintenance(id int64, req MaintenanceReq) error {
 		status = asset.Status
 	}
 	partType := strings.TrimSpace(req.PartType)
-	oldSN := strings.TrimSpace(req.OldSN)
-	if oldSN == "" {
-		switch partType {
-		case "box":
-			oldSN = asset.BoxSN
-		case "display":
-			oldSN = asset.DisplaySN
-		}
+	oldSN := ""
+	switch partType {
+	case "box":
+		oldSN = strings.TrimSpace(asset.BoxSN)
+	case "display":
+		oldSN = strings.TrimSpace(asset.DisplaySN)
+	}
+	payloadOldSN := strings.TrimSpace(req.OldSN)
+	if (partType == "box" || partType == "display") && payloadOldSN != "" && payloadOldSN != oldSN {
+		return fmt.Errorf("资产旧SN已变化，当前为 %s，请刷新后重试", oldSN)
 	}
 	newSN := strings.TrimSpace(req.NewSN)
+	if (partType == "box" || partType == "display") && newSN == oldSN {
+		return fmt.Errorf("新SN与当前SN一致，不能重复登记维修")
+	}
 	var res sql.Result
 	switch partType {
 	case "box":
@@ -412,24 +401,34 @@ func (s *Store) Maintenance(id int64, req MaintenanceReq) error {
 	case "报废":
 		oldPartStatus = "已报废"
 	}
+	logResult, err := tx.Exec(`INSERT INTO asset_logs
+		(asset_id, log_type, old_sn, new_sn, operator, description, log_time)
+		VALUES (?, '设备维修更换', ?, ?, ?, ?, ?)`, id, oldSN, newSN, req.Operator, req.Description, logTime)
+	if err != nil {
+		return err
+	}
 	if oldPartStatus != "" && oldSN != "" && (partType == "box" || partType == "display") {
+		logID, err := logResult.LastInsertId()
+		if err != nil {
+			return err
+		}
 		boxSN, displaySN := "", ""
 		if partType == "box" {
 			boxSN = oldSN
 		} else {
 			displaySN = oldSN
 		}
-		remark := fmt.Sprintf("原资产 %s（ID:%d）维修换下旧件", asset.AssetCode, id)
+		sourceCode := strings.TrimSpace(asset.AssetCode)
+		if sourceCode == "" {
+			sourceCode = fmt.Sprintf("ASSET-%d", id)
+		}
+		oldPartCode := fmt.Sprintf("%s-旧件-%s-%d", sourceCode, partType, logID)
+		remark := fmt.Sprintf("原资产 %s（ID:%d）维修换下旧件，履历ID:%d", sourceCode, id, logID)
 		if _, err := tx.Exec(`INSERT INTO assets
 			(asset_code, box_sn, display_sn, status, remark, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`, asset.AssetCode+"-旧件", boxSN, displaySN, oldPartStatus, remark, logTime, logTime); err != nil {
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, oldPartCode, boxSN, displaySN, oldPartStatus, remark, logTime, logTime); err != nil {
 			return err
 		}
-	}
-	if _, err := tx.Exec(`INSERT INTO asset_logs
-		(asset_id, log_type, old_sn, new_sn, operator, description, log_time)
-		VALUES (?, '设备维修更换', ?, ?, ?, ?, ?)`, id, oldSN, newSN, req.Operator, req.Description, logTime); err != nil {
-		return err
 	}
 	mappedStatus := mapLegacyAssetStatus(status)
 	switch partType {

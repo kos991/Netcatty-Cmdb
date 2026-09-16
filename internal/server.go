@@ -2,7 +2,9 @@ package internal
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -24,6 +26,14 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 
 func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
+}
+
+func writeAssetLookupError(w http.ResponseWriter, err error) {
+	if errors.Is(err, sql.ErrNoRows) {
+		writeErr(w, http.StatusNotFound, "资产不存在")
+		return
+	}
+	writeErr(w, http.StatusInternalServerError, err.Error())
 }
 
 // ---- 元数据字典（下拉选单） ----
@@ -133,7 +143,7 @@ func (s *Server) handleGetAsset(w http.ResponseWriter, r *http.Request) {
 
 	asset, logs, err := s.Store.GetAsset(id)
 	if err != nil {
-		writeErr(w, 404, "资产不存在")
+		writeAssetLookupError(w, err)
 		return
 	}
 
@@ -151,7 +161,7 @@ func (s *Server) handleAssetRelations(w http.ResponseWriter, r *http.Request) {
 	}
 	relations, err := s.Store.GetAssetRelations(id)
 	if err != nil {
-		writeErr(w, 404, "资产不存在")
+		writeAssetLookupError(w, err)
 		return
 	}
 	writeJSON(w, 200, relations)
@@ -224,7 +234,10 @@ func (s *Server) handleDeleteAsset(w http.ResponseWriter, r *http.Request) {
 		Reason   string `json:"reason"`
 		Operator string `json:"operator"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体解析失败")
+		return
+	}
 	if err := s.Store.DeleteAsset(id, body.Reason, body.Operator); err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -558,11 +571,13 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 // ---- 导出终端资产 Excel ----
 func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
+	includeArchived := r.URL.Query().Get("include_archived") == "1" || r.URL.Query().Get("include_archived") == "true"
 	assets, err := s.Store.AllAssetsFiltered(
 		r.URL.Query().Get("keyword"),
 		r.URL.Query().Get("dept"),
 		r.URL.Query().Get("status"),
 		r.URL.Query().Get("security_software"),
+		includeArchived,
 	)
 	if err != nil {
 		writeErr(w, 500, err.Error())

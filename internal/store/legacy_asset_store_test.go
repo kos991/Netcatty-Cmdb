@@ -82,6 +82,34 @@ func TestLegacyAssetQueryAndSummaryUseSameArchiveAndFilterRules(t *testing.T) {
 	}
 }
 
+func TestLegacyAssetExportFilterUsesListArchiveAndKeywordRules(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	createLegacyAsset(t, s, Asset{AssetCode: "EXPORT-ACTIVE", TerminalIP: "10.20.30.41", Status: "在用"})
+	createLegacyAsset(t, s, Asset{AssetCode: "EXPORT-ARCHIVED", TerminalIP: "10.20.30.42", Status: "已报废"})
+
+	active, err := s.AllAssetsFiltered("10.20.30", "", "", "", false)
+	if err != nil {
+		t.Fatalf("默认导出筛选失败: %v", err)
+	}
+	if len(active) != 1 || active[0].AssetCode != "EXPORT-ACTIVE" {
+		t.Fatalf("默认导出必须支持 terminal_ip 关键词并排除归档，实际 %+v", active)
+	}
+	archived, err := s.AllAssetsFiltered("10.20.30", "", "已报废", "", false)
+	if err != nil {
+		t.Fatalf("显式归档导出筛选失败: %v", err)
+	}
+	if len(archived) != 1 || archived[0].AssetCode != "EXPORT-ARCHIVED" {
+		t.Fatalf("显式归档状态必须可导出，实际 %+v", archived)
+	}
+	all, err := s.AllAssetsFiltered("10.20.30", "", "", "", true)
+	if err != nil {
+		t.Fatalf("包含归档导出筛选失败: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("includeArchived=true 应导出全部匹配记录，实际 %+v", all)
+	}
+}
+
 func TestLegacyAssetGetReturnsRealLogsInReverseOrder(t *testing.T) {
 	s := newLegacyAssetTestStore(t)
 	id := createLegacyAsset(t, s, Asset{AssetCode: "DETAIL-1", UserName: "张三", Status: "在用"})
@@ -308,6 +336,79 @@ func TestLegacyAssetMaintenanceUpdatesPartsInventoryLogAndMappedRecord(t *testin
 		}
 		if err := s.Maintenance(id+999, MaintenanceReq{PartType: "box", NewSN: "X"}); err == nil {
 			t.Fatal("不存在资产不得伪成功")
+		}
+	})
+}
+
+func TestLegacyAssetMaintenanceRejectsStaleAndDuplicatePartRequests(t *testing.T) {
+	t.Run("陈旧旧SN不写主表旧件或履历", func(t *testing.T) {
+		s := newLegacyAssetTestStore(t)
+		id := createLegacyAsset(t, s, Asset{AssetCode: "STALE-BOX", BoxSN: "BOX-CURRENT", Status: "在用"})
+		err := s.Maintenance(id, MaintenanceReq{
+			PartType: "box", OldSN: "BOX-STALE", NewSN: "BOX-NEW",
+			NewStatus: "维修中", MarkOldAs: "故障待修入库", Description: "陈旧页面提交",
+		})
+		if err == nil || !strings.Contains(err.Error(), "旧SN") {
+			t.Fatalf("陈旧 old_sn 必须返回明确错误，实际 %v", err)
+		}
+		asset, logs, getErr := s.GetAsset(id)
+		if getErr != nil {
+			t.Fatalf("读取拒绝后的资产失败: %v", getErr)
+		}
+		if asset.BoxSN != "BOX-CURRENT" || asset.Status != "在用" || len(logs) != 0 {
+			t.Fatalf("陈旧请求不得写入任何资产或履历变化: asset=%+v logs=%+v", asset, logs)
+		}
+		assets, err := s.AllAssets()
+		if err != nil || len(assets) != 1 {
+			t.Fatalf("陈旧请求不得生成旧件，assets=%+v err=%v", assets, err)
+		}
+	})
+
+	t.Run("重复提交不生成重复旧件或履历且后续维修编码唯一", func(t *testing.T) {
+		s := newLegacyAssetTestStore(t)
+		id := createLegacyAsset(t, s, Asset{AssetCode: "REPAIR-BOX", BoxSN: "BOX-001", Status: "在用"})
+		first := MaintenanceReq{
+			PartType: "box", OldSN: "BOX-001", NewSN: "BOX-002",
+			NewStatus: "在用", MarkOldAs: "故障待修入库", Date: "2026-09-16 12:00:00",
+		}
+		if err := s.Maintenance(id, first); err != nil {
+			t.Fatalf("首次维修失败: %v", err)
+		}
+		if err := s.Maintenance(id, first); err == nil {
+			t.Fatal("重复提交必须拒绝")
+		}
+		asset, logs, err := s.GetAsset(id)
+		if err != nil {
+			t.Fatalf("读取首次维修结果失败: %v", err)
+		}
+		assets, err := s.AllAssets()
+		if err != nil || asset.BoxSN != "BOX-002" || len(logs) != 1 || len(assets) != 2 {
+			t.Fatalf("重复提交不得增加旧件或履历: asset=%+v logs=%+v assets=%+v err=%v", asset, logs, assets, err)
+		}
+
+		second := MaintenanceReq{
+			PartType: "box", OldSN: "BOX-002", NewSN: "BOX-003",
+			NewStatus: "在用", MarkOldAs: "故障待修入库", Date: "2026-09-16 13:00:00",
+		}
+		if err := s.Maintenance(id, second); err != nil {
+			t.Fatalf("同一资产第二次真实维修失败: %v", err)
+		}
+		assets, err = s.AllAssets()
+		if err != nil || len(assets) != 3 {
+			t.Fatalf("第二次维修应增加一个旧件，assets=%+v err=%v", assets, err)
+		}
+		codes := map[string]bool{}
+		for _, item := range assets {
+			if item.ID == id {
+				continue
+			}
+			if item.AssetCode == "" || codes[item.AssetCode] {
+				t.Fatalf("旧件 asset_code 必须稳定且不重复，实际 %+v", assets)
+			}
+			codes[item.AssetCode] = true
+		}
+		if len(codes) != 2 {
+			t.Fatalf("两次维修应得到两个可追溯旧件编码，实际 %+v", codes)
 		}
 	})
 }
