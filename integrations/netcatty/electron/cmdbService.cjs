@@ -3,7 +3,7 @@
 const { spawn: defaultSpawn } = require("node:child_process");
 
 const DEFAULT_PORT = 18080;
-const DEFAULT_HEALTH_PATH = "/api/cmdb/dashboard";
+const DEFAULT_HEALTH_PATH = "/api/health";
 const DEFAULT_START_TIMEOUT_MS = 15_000;
 const DEFAULT_POLL_INTERVAL_MS = 200;
 
@@ -94,7 +94,7 @@ async function startCmdbService(options = {}) {
   const databasePath = typeof options.databasePath === "string" && options.databasePath.trim()
     ? options.databasePath.trim()
     : null;
-  const args = ["-port", String(port), ...(databasePath ? ["-db", databasePath] : []), "-no-browser"];
+  const args = ["-port", String(port), ...(databasePath ? ["-db", databasePath] : []), "-api-only"];
   const spawnImpl = options.spawn ?? defaultSpawn;
   const fetchImpl = options.fetch ?? globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new TypeError("CMDB health check requires fetch");

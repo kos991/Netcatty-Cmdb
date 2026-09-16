@@ -23,6 +23,7 @@ function fakeChild() {
 test("starts CMDB with fixed port and waits for health", async () => {
   const calls = [];
   let healthChecks = 0;
+  let healthUrl;
   const service = await startCmdbService({
     executablePath: "C:/cmdb-server.exe",
     databasePath: "C:/assets.db",
@@ -33,12 +34,14 @@ test("starts CMDB with fixed port and waits for health", async () => {
     },
     fetch: async (url) => {
       healthChecks += 1;
+      healthUrl = url;
       return { ok: true, status: 200, url };
     },
   });
 
   assert.equal(service.baseUrl, "http://127.0.0.1:18080");
-  assert.deepEqual(calls[0].args, ["-port", "18080", "-db", "C:/assets.db", "-no-browser"]);
+  assert.deepEqual(calls[0].args, ["-port", "18080", "-db", "C:/assets.db", "-api-only"]);
+  assert.equal(healthUrl, "http://127.0.0.1:18080/api/health");
   assert.equal(healthChecks, 1);
   service.stop();
 });
@@ -61,4 +64,25 @@ test("stops the child when health check fails", async () => {
     /CMDB 服务启动超时/,
   );
   assert.equal(child.signalCode, "SIGTERM");
+});
+
+test("reports and stops when CMDB exits before becoming healthy", async () => {
+  let child;
+  await assert.rejects(
+    startCmdbService({
+      executablePath: "cmdb-server.exe",
+      port: 18080,
+      timeoutMs: 100,
+      pollIntervalMs: 1,
+      spawn() {
+        child = fakeChild();
+        child.exitCode = 1;
+        return child;
+      },
+      fetch: async () => ({ ok: true, status: 200 }),
+      kill: (process) => process.kill(),
+    }),
+    /CMDB 服务提前退出/,
+  );
+  assert.equal(child.exitCode, 1);
 });
