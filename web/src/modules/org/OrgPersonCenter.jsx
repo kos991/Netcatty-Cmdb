@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import {
   Card,
+  Alert,
   Table,
   Button,
   Input,
@@ -34,36 +35,70 @@ import './org-person.css'
 
 const { Text } = Typography
 
-export default function OrgPersonCenter() {
+export default function OrgPersonCenter({ focusTarget, onNavigate }) {
   const [loading, setLoading] = useState(false)
   const [persons, setPersons] = useState([])
   const [selectedDept, setSelectedDept] = useState(null)
   const [keyword, setKeyword] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [total, setTotal] = useState(0)
+  const [directory, setDirectory] = useState([])
+  const [error, setError] = useState('')
+  const [directoryError, setDirectoryError] = useState('')
+  const requestVersion = useRef(0)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingPerson, setEditingPerson] = useState(null)
   const [drawerPerson, setDrawerPerson] = useState(null)
   const [form] = Form.useForm()
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    const version = ++requestVersion.current
     setLoading(true)
     try {
-      const res = await cmdbApi.listPersons()
+      const selection = selectedDept ? JSON.parse(selectedDept) : {}
+      const res = await cmdbApi.listPersons({ keyword, ...selection, page, page_size: pageSize })
+      if (version !== requestVersion.current) return
       setPersons(res.list || [])
+      setTotal(res.total || 0)
+      setError('')
     } catch (err) {
-      message.error(`获取人员档案失败: ${err.message}`)
+      if (version === requestVersion.current) setError(err.message)
     } finally {
-      setLoading(false)
+      if (version === requestVersion.current) setLoading(false)
     }
-  }
+  }, [keyword, selectedDept, page, pageSize])
 
+  const loadDirectory = async () => {
+    try {
+      const entries = []
+      let current = 1
+      let count
+      do {
+        const res = await cmdbApi.listPersons({ page: current++, page_size: 500 })
+        entries.push(...(res.list || []))
+        count = res.total || 0
+        if (!res.list?.length && entries.length < count) throw new Error('人员目录返回不完整，请重试')
+      } while (entries.length < count)
+      setDirectory(entries)
+      setDirectoryError('')
+    } catch (err) { setDirectoryError(err.message) }
+  }
+  const refresh = () => { loadData(); loadDirectory() }
+  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { loadDirectory() }, [])
   useEffect(() => {
-    loadData()
-  }, [])
+    if (focusTarget?.tableKey !== 'persons') return
+    cmdbApi.getPersonAssets(focusTarget.id).then((res) => {
+      setDrawerPerson(res.person)
+      setError('')
+    }).catch((err) => setError(err.message))
+  }, [focusTarget])
 
   // 聚合部门与组织树
   const treeData = useMemo(() => {
     const deptMap = {}
-    persons.forEach((p) => {
+    directory.forEach((p) => {
       const org = p.org_name || '总机构'
       const dept = p.department || '未分配部门'
       if (!deptMap[org]) deptMap[org] = {}
@@ -72,7 +107,7 @@ export default function OrgPersonCenter() {
 
     const nodes = [
       {
-        title: `全部人员 (${persons.length})`,
+        title: `全部人员 (${directory.length})`,
         key: 'all',
         icon: <ApartmentOutlined />,
       },
@@ -82,51 +117,26 @@ export default function OrgPersonCenter() {
       const totalInOrg = Object.values(depts).reduce((a, b) => a + b, 0)
       nodes.push({
         title: `${org} (${totalInOrg})`,
-        key: `org:${org}`,
+        key: JSON.stringify({ org_name: org }),
         icon: <TeamOutlined />,
         children: Object.entries(depts).map(([dept, count]) => ({
           title: `${dept} (${count})`,
-          key: `dept:${dept}`,
+          key: JSON.stringify({ org_name: org, department: dept === '未分配部门' ? '' : dept }),
           icon: <ApartmentOutlined />,
         })),
       })
     })
 
     return nodes
-  }, [persons])
-
-  // 过滤后的人员列表
-  const filteredPersons = useMemo(() => {
-    return persons.filter((p) => {
-      if (selectedDept) {
-        if (selectedDept.startsWith('dept:')) {
-          const d = selectedDept.replace('dept:', '')
-          if (p.department !== d) return false
-        } else if (selectedDept.startsWith('org:')) {
-          const o = selectedDept.replace('org:', '')
-          if ((p.org_name || '总机构') !== o) return false
-        }
-      }
-      if (keyword) {
-        const kw = keyword.toLowerCase()
-        return (
-          (p.name && p.name.toLowerCase().includes(kw)) ||
-          (p.person_code && p.person_code.toLowerCase().includes(kw)) ||
-          (p.department && p.department.toLowerCase().includes(kw)) ||
-          (p.phone && p.phone.includes(kw))
-        )
-      }
-      return true
-    })
-  }, [persons, selectedDept, keyword])
+  }, [directory])
 
   // 统计数据
   const stats = useMemo(() => {
-    const total = persons.length
-    const active = persons.filter((p) => p.status === '在职').length
-    const totalAssets = persons.reduce((acc, p) => acc + (p.asset_count || 0), 0)
+    const total = directory.length
+    const active = directory.filter((p) => p.status === '在职').length
+    const totalAssets = directory.reduce((acc, p) => acc + (p.asset_count || 0), 0)
     return { total, active, totalAssets }
-  }, [persons])
+  }, [directory])
 
   const handleOpenModal = (record = null) => {
     setEditingPerson(record)
@@ -154,7 +164,7 @@ export default function OrgPersonCenter() {
         message.success('新增人员成功')
       }
       setModalVisible(false)
-      loadData()
+      refresh()
     } catch (err) {
       if (err.errorFields) return
       message.error(`保存失败: ${err.message}`)
@@ -165,7 +175,7 @@ export default function OrgPersonCenter() {
     try {
       await cmdbApi.deletePerson(id)
       message.success('已删除人员档案')
-      loadData()
+      refresh()
     } catch (err) {
       message.error(`删除失败: ${err.message}`)
     }
@@ -274,8 +284,11 @@ export default function OrgPersonCenter() {
 
   return (
     <div className="org-person-page">
+      <div className="cmdb-page-heading"><h2>组织与人员</h2></div>
+      {error && <Alert type="error" showIcon message="人员查询失败" description={error} action={<Button onClick={loadData}>重试</Button>} />}
+      {directoryError && <Alert type="error" showIcon message="组织目录加载失败" description={directoryError} action={<Button onClick={loadDirectory}>重试</Button>} />}
       {/* 顶部指标 */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
+      <Row gutter={16} style={{ marginBottom: 16 }} hidden={!!directoryError && !directory.length}>
         <Col span={8}>
           <Card size="small" bordered={false} className="org-stat-card">
             <Statistic title="人员总规模" value={stats.total} suffix="人" />
@@ -315,6 +328,7 @@ export default function OrgPersonCenter() {
             defaultExpandAll
             treeData={treeData}
             onSelect={(keys) => {
+              setPage(1)
               if (keys.length === 0 || keys[0] === 'all') {
                 setSelectedDept(null)
               } else {
@@ -328,14 +342,14 @@ export default function OrgPersonCenter() {
           <div className="org-toolbar">
             <Space>
               <Input
-                placeholder="搜索姓名、工号、部门、电话"
+                placeholder="搜索姓名、工号、电话"
                 prefix={<SearchOutlined />}
                 allowClear
                 value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
+                onChange={(e) => { setKeyword(e.target.value); setPage(1) }}
                 style={{ width: 280 }}
               />
-              <Button icon={<ReloadOutlined />} onClick={loadData}>
+              <Button icon={<ReloadOutlined />} onClick={refresh}>
                 刷新
               </Button>
             </Space>
@@ -351,9 +365,10 @@ export default function OrgPersonCenter() {
           <Table
             rowKey="id"
             loading={loading}
-            dataSource={filteredPersons}
+            dataSource={persons}
             columns={columns}
-            pagination={{ pageSize: 12, showTotal: (t) => `共 ${t} 名员工` }}
+            scroll={{ x: 1100 }}
+            pagination={{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t) => `共 ${t} 名人员`, onChange: (p, size) => { setPage(p); setPageSize(size) } }}
             size="middle"
           />
         </div>
@@ -446,9 +461,10 @@ export default function OrgPersonCenter() {
       <PersonAssetDrawer
         visible={!!drawerPerson}
         person={drawerPerson}
-        allPersons={persons}
+        allPersons={directory}
+        onNavigate={onNavigate}
         onClose={() => setDrawerPerson(null)}
-        onTransferred={loadData}
+        onTransferred={refresh}
       />
     </div>
   )

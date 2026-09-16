@@ -39,9 +39,10 @@ import { cmdbApi } from './cmdbApi'
 import { buildCmdbColumns, CMDB_SORT_FIELD_MAP, CMDB_COLUMNS } from './columns'
 import CmdbTaxonomy from './CmdbTaxonomy'
 import DynamicFieldForm from './DynamicFieldForm'
+import CustomFieldCenter from '../modules/customfields/CustomFieldCenter'
 
 const PAGE_SIZE_OPTIONS = ['10', '50', '100', '300']
-const DEFAULT_COLUMNS = ['name', 'status', 'mgmt_ip', 'department', 'owner', 'source_type']
+const DEFAULT_COLUMNS = ['name', 'status', 'manage_ip', 'department', 'owner', 'source_type']
 const SEARCH_PLACEHOLDER = '搜索资产 (名称, SN, IP...)'
 
 const DIMENSIONS = [
@@ -67,7 +68,7 @@ const ASSET_FORM_SECTIONS = [
 const VIEWS = [
   { value: '', label: '全部资产' },
   { value: 'legacy_asset', label: '云桌面终端' },
-  { value: 'legacy_server', label: '物理服务器' },
+  { value: 'legacy_server', label: '服务器' },
   { value: 'manual', label: '手工登记' },
 ]
 
@@ -81,7 +82,7 @@ function compactChanges(values) {
   return out
 }
 
-export default function CmdbResources({ meta }) {
+export default function CmdbResources({ meta, scope, title = '资源总账', focusTarget }) {
   const [mode, setMode] = useState('orgs')
   const [cmdbMeta, setCmdbMeta] = useState({ statuses: [] })
   const [filterOptions, setFilterOptions] = useState({})
@@ -104,14 +105,16 @@ export default function CmdbResources({ meta }) {
   const [syncing, setSyncing] = useState(false)
   const [customFields, setCustomFields] = useState([])
   const [persons, setPersons] = useState([])
+  const [fieldsOpen, setFieldsOpen] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
     cmdbApi.listCustomFields().then((res) => {
       if (res && res.list) setCustomFields(res.list)
-    }).catch(() => {})
+    }).catch((e) => message.error('加载扩展字段失败：' + e.message))
     cmdbApi.listPersons({ page: 1, page_size: 500 }).then((res) => {
       if (res && res.list) setPersons(res.list)
-    }).catch(() => {})
+    }).catch((e) => message.error('加载人员选项失败：' + e.message))
   }, [])
   const [selectedRowKeys, setSelectedRowKeys] = useState([])
 
@@ -157,7 +160,6 @@ export default function CmdbResources({ meta }) {
         setTaxonomy(res.list || [])
       } catch (e) {
         message.error('加载分类失败：' + e.message)
-        setTaxonomy([])
       }
     },
     [mode],
@@ -175,8 +177,8 @@ export default function CmdbResources({ meta }) {
         groups: groups.list || [],
         categories: categories.list || [],
       })
-    } catch (_) {
-      /* 下拉为空不影响主流程 */
+    } catch (e) {
+      message.error('加载分类选项失败：' + e.message)
     }
   }, [])
 
@@ -192,7 +194,7 @@ export default function CmdbResources({ meta }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = { page, page_size: pageSize }
+      const params = { page, page_size: pageSize, scope }
       if (keyword) params.keyword = keyword
       if (view) params.source_type = view
       const dim = DIMENSIONS.find((d) => d.key === mode)
@@ -208,12 +210,13 @@ export default function CmdbResources({ meta }) {
       const res = await cmdbApi.listAssets(params)
       setRows(res.list || [])
       setTotal(res.total || 0)
+      setLoadError('')
     } catch (e) {
-      message.error('加载 CMDB 资源失败：' + e.message)
+      setLoadError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, keyword, view, colFilters, mode, selectedId, sortBy, sortOrder])
+  }, [page, pageSize, keyword, view, colFilters, mode, selectedId, sortBy, sortOrder, scope])
 
   useEffect(() => {
     load()
@@ -236,13 +239,17 @@ export default function CmdbResources({ meta }) {
     }
   }
 
+  useEffect(() => {
+    if (focusTarget?.tableKey === 'cmdb_assets') openDetail({ id: focusTarget.id })
+  }, [focusTarget])
+
   // ---- 单条新增 / 编辑 / 删除 / 归档 / 克隆 ----
   const openCreate = () => {
     setAssetFormMode('create')
     setEditingAsset(null)
     setAssetFormSection('basic')
     assetForm.resetFields()
-    assetForm.setFieldsValue({ status: '在库' })
+    assetForm.setFieldsValue({ status: '在库', device_type: scope === 'infrastructure' ? 'server' : undefined })
     setAssetFormOpen(true)
   }
 
@@ -259,6 +266,7 @@ export default function CmdbResources({ meta }) {
     }
     assetForm.setFieldsValue({
       name: record.name,
+      device_type: record.device_type,
       status: record.status,
       department: record.department,
       owner: record.owner,
@@ -286,15 +294,13 @@ export default function CmdbResources({ meta }) {
     try {
       const v = await assetForm.validateFields()
       setSaving(true)
-      let customFieldsStr = ''
-      if (v.custom_fields && Object.keys(v.custom_fields).length > 0) {
-        customFieldsStr = JSON.stringify(v.custom_fields)
-      }
+      const customFieldValues = v.custom_fields || {}
       if (assetFormMode === 'create') {
         await cmdbApi.createAsset({
           name: v.name,
           status: v.status || '在库',
           asset_class: 'physical',
+          device_type: v.device_type || '',
           category_id: v.category_id || 0,
           org_id: v.org_id || 0,
           group_id: v.group_id || 0,
@@ -304,12 +310,13 @@ export default function CmdbResources({ meta }) {
           floor: v.floor || '',
           cabinet_name: v.cabinet_name || '',
           remark: v.remark || '',
-          custom_fields: customFieldsStr,
+          custom_fields: customFieldValues,
           owner_id: v.owner_id || 0,
         })
         message.success('已新增资产')
       } else {
         await cmdbApi.updateAsset(editingAsset.id, {
+          device_type: v.device_type ?? editingAsset.device_type,
           status: v.status,
           department: v.department ?? '',
           owner: v.owner ?? '',
@@ -320,7 +327,7 @@ export default function CmdbResources({ meta }) {
           floor: v.floor ?? '',
           cabinet_name: v.cabinet_name ?? '',
           remark: v.remark ?? '',
-          custom_fields: customFieldsStr,
+          custom_fields: customFieldValues,
           owner_id: v.owner_id || 0,
         })
         message.success(editingAsset.source_id > 0 ? '已保存，并同步写回源台账' : '已保存')
@@ -471,7 +478,7 @@ export default function CmdbResources({ meta }) {
         render: (_, rec) => <div className="ledger-identity"><span className={`ledger-device ${rec.source_type === 'legacy_server' ? 'server' : ''}`}>{rec.source_type === 'legacy_server' ? <HddOutlined /> : <DesktopOutlined />}</span><div><button type="button" onClick={() => openDetail(rec)}>{rec.name}</button><small>{rec.asset_code || '未编号'}</small></div></div> }
       if (col.dataIndex === 'status') return { ...col, width: 100, filteredValue: colFilters.status ? [colFilters.status] : null,
         render: (value) => <span className={`ledger-status ${value === '在线' ? 'online' : value === '报废' || value === '故障' ? 'fault' : 'other'}`}><i />{value || '未设置'}</span> }
-      if (col.dataIndex === 'mgmt_ip') return { ...col, title: '管理 IP', width: 145, render: (v) => <span className="ledger-ip">{v || '-'}</span> }
+      if (col.dataIndex === 'manage_ip') return { ...col, title: '管理 IP', width: 145, render: (v, record) => <span className="ledger-ip">{v || record.mgmt_ip || '-'}</span> }
       if (col.key !== 'action') return col
       return {
         ...col,
@@ -520,7 +527,7 @@ export default function CmdbResources({ meta }) {
   }
 
   const exportParams = () => {
-    const p = {}
+    const p = { scope }
     if (keyword) p.keyword = keyword
     if (view) p.source_type = view
     const dim = DIMENSIONS.find((d) => d.key === mode)
@@ -550,9 +557,9 @@ export default function CmdbResources({ meta }) {
   return (
     <div className="resource-ledger">
       <section className="ledger-main">
-        <div className="ledger-breadcrumb">CMDB<span>/</span>资源总账</div>
+        {loadError && <Alert type="error" showIcon message="基础设施查询失败" description={loadError} action={<Button onClick={load}>重试</Button>} />}
         <header className="ledger-heading">
-          <div><h2>资源总账</h2><span className="ledger-total">{total.toLocaleString()} 项</span></div>
+          <div><h2>{title}</h2><span className="ledger-total">{total.toLocaleString()} 项</span></div>
           <Space>
             <Button icon={<ExportOutlined />} onClick={handleExport}>导出</Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增资产</Button>
@@ -582,7 +589,7 @@ export default function CmdbResources({ meta }) {
             ]} />}>
               <Tooltip title="显示字段"><Button aria-label="显示字段" icon={<SettingOutlined />} /></Tooltip>
             </Popover>
-            <Dropdown menu={{items:[{key:'sync',label:'同步已有台账'}],onClick:handleSync}}>
+            <Dropdown menu={{items:[{key:'sync',label:'同步已有台账'}, {key:'fields',label:'管理扩展字段'}],onClick:({key}) => key === 'fields' ? setFieldsOpen(true) : handleSync()}}>
               <Button aria-label="台账工具" icon={<MoreOutlined />} loading={syncing} />
             </Dropdown>
           </div>
@@ -705,7 +712,7 @@ export default function CmdbResources({ meta }) {
                 {detail.asset.source_type === 'legacy_asset' ? (
                   <Tag color="blue">云桌面终端台账（映射）</Tag>
                 ) : detail.asset.source_type === 'legacy_server' ? (
-                  <Tag color="purple">物理服务器与应用（映射）</Tag>
+                  <Tag color="purple">服务器台账（映射）</Tag>
                 ) : (
                   <Tag color="green">CMDB 手工登记</Tag>
                 )}
@@ -757,6 +764,11 @@ export default function CmdbResources({ meta }) {
                   <Form.Item name="status" label="状态">
                     <Select options={(cmdbMeta.statuses || []).map((s) => ({ value: s, label: s }))} />
                   </Form.Item>
+                  {scope === 'infrastructure' && <Form.Item name="device_type" label="资源类型" rules={[{ required: assetFormMode === 'create', message: '请选择资源类型' }]}>
+                    <Select disabled={assetFormMode === 'edit'} options={[
+                      ['server', '服务器'], ['virtual_machine', '虚拟机'], ['switch', '交换机'], ['router', '路由器'], ['security_device', '安全设备'], ['storage', '存储设备'],
+                    ].map(([value, label]) => ({ value, label }))} />
+                  </Form.Item>}
                   <Form.Item name="category_id" label="设备分类">
                     <Select showSearch optionFilterProp="label" options={dimOptions(taxonomyList.categories)} />
                   </Form.Item>
@@ -878,7 +890,7 @@ export default function CmdbResources({ meta }) {
                 </Form.Item>
                 {assetFormMode === 'edit' ? (
                   <div className="cmdb-info-grid cmdb-info-grid-muted">
-                    <span>数据来源</span><strong>{editingAsset?.source_type === 'legacy_asset' ? '云桌面终端台账（映射）' : editingAsset?.source_type === 'legacy_server' ? '物理服务器与应用（映射）' : 'CMDB 手工登记'}</strong>
+                    <span>数据来源</span><strong>{editingAsset?.source_type === 'legacy_asset' ? '云桌面终端台账（映射）' : editingAsset?.source_type === 'legacy_server' ? '服务器台账（映射）' : 'CMDB 手工登记'}</strong>
                     <span>更新时间</span><strong>{editingAsset?.updated_at || '-'}</strong>
                   </div>
                 ) : null}
@@ -958,6 +970,10 @@ export default function CmdbResources({ meta }) {
         }}
         onChanged={reloadAll}
       />
+      <Drawer title="扩展字段管理" width={1000} open={fieldsOpen} onClose={() => {
+        setFieldsOpen(false)
+        cmdbApi.listCustomFields().then((res) => setCustomFields(res.list || [])).catch((e) => message.error(e.message))
+      }}><CustomFieldCenter /></Drawer>
     </div>
   )
 }

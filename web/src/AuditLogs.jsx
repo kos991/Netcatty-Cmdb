@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Table, Card, Input, Select, Button, Tag, Space, Typography, message } from 'antd'
+import { Alert, Descriptions, Drawer, Table, Input, Select, Button, Tag, Space, Typography } from 'antd'
 import {
   SearchOutlined,
   ReloadOutlined,
@@ -17,7 +17,7 @@ const TYPE_STYLE = {
   设备回收注销: { color: 'red', icon: <HistoryOutlined /> },
 }
 
-export default function AuditLogs({ meta }) {
+export default function AuditLogs({ meta, focusTarget }) {
   const [logs, setLogs] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -25,21 +25,24 @@ export default function AuditLogs({ meta }) {
   const [pageSize, setPageSize] = useState(20)
   const [logType, setLogType] = useState('全部')
   const [keyword, setKeyword] = useState('')
+  const [error, setError] = useState('')
+  const [detail, setDetail] = useState(null)
+  const [detailError, setDetailError] = useState('')
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const res = await api.getLogs({
-        log_type: logType,
+        log_type: logType === '全部' ? '' : logType,
         keyword,
         page,
         page_size: pageSize,
       })
       setLogs(res.list || [])
       setTotal(res.total || 0)
+      setError('')
     } catch (e) {
-      message.error('加载履历失败：' + e.message)
-      setLogs([])
+      setError(e.message)
     } finally {
       setLoading(false)
     }
@@ -48,6 +51,19 @@ export default function AuditLogs({ meta }) {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const openTarget = async () => {
+    if (focusTarget?.tableKey !== 'asset_logs') return
+    setDetail({ id: focusTarget.id })
+    setDetailError('')
+    try {
+      const response = await api.getAsset(focusTarget.data?.['资产ID'])
+      const log = response.logs?.find((item) => item.id === focusTarget.id)
+      if (!log) throw new Error('未找到该履历记录')
+      setDetail(log)
+    } catch (e) { setDetailError(e.message) }
+  }
+  useEffect(() => { openTarget() }, [focusTarget])
 
   const typeOptions = ['全部', ...(meta?.log_types || [])]
 
@@ -111,7 +127,9 @@ export default function AuditLogs({ meta }) {
 
   return (
     <div>
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <div className="cmdb-page-heading"><h2>运维履历</h2></div>
+      {error && <Alert type="error" showIcon message="加载履历失败" description={error} action={<Button onClick={loadData}>重试</Button>} />}
+      <div className="cmdb-query-toolbar" style={{ marginBottom: 16 }}>
         <Space wrap size={12}>
           <Input.Search
             allowClear
@@ -140,7 +158,7 @@ export default function AuditLogs({ meta }) {
             共 <b>{total}</b> 条履历日志
           </Typography.Text>
         </Space>
-      </Card>
+      </div>
 
       <Table
         rowKey="id"
@@ -148,6 +166,7 @@ export default function AuditLogs({ meta }) {
         loading={loading}
         columns={columns}
         dataSource={logs}
+        onRow={(record) => ({ onClick: () => { setDetailError(''); setDetail(record) } })}
         scroll={{ x: 'max-content' }}
         locale={{ emptyText: '暂无履历记录' }}
         pagination={{
@@ -163,6 +182,13 @@ export default function AuditLogs({ meta }) {
           },
         }}
       />
+      <Drawer title="运维履历详情" width={600} open={!!detail} onClose={() => setDetail(null)}>
+        {detailError ? <Alert type="error" message={detailError} action={<Button onClick={openTarget}>重试</Button>} /> : <Descriptions column={1} bordered items={[
+          ['发生时间', detail?.log_time], ['操作类型', detail?.log_type], ['关联资产', detail?.asset_id],
+          ['原使用人', detail?.from_user], ['新使用人', detail?.to_user], ['原位置', detail?.from_location], ['新位置', detail?.to_location],
+          ['原序列号', detail?.old_sn], ['新序列号', detail?.new_sn], ['说明', detail?.description], ['经办人', detail?.operator],
+        ].map(([label, value]) => ({ key: label, label, children: value || '-' }))} />}
+      </Drawer>
     </div>
   )
 }

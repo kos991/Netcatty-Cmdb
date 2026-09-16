@@ -42,7 +42,7 @@ import { api } from './api'
 
 const { Text } = Typography
 
-export default function AssetCenter({ meta, focusTarget }) {
+export default function AssetCenter({ meta, focusTarget, onNavigate }) {
   const [data, setData] = useState([])
   const [total, setTotal] = useState(0)
   const [summary, setSummary] = useState({})
@@ -79,16 +79,17 @@ export default function AssetCenter({ meta, focusTarget }) {
   const [editTarget, setEditTarget] = useState(null)
   const [editForm] = Form.useForm()
 
-  const loadData = async () => {
+  const loadData = async (overrides = {}) => {
     setLoading(true)
     try {
       const res = await api.getAssets({
         keyword,
-        dept,
-        status,
-        security_software: secSoft,
+        dept: dept === '全部' ? '' : dept,
+        status: status === '全部' ? '' : status,
+        security_software: secSoft === '全部' ? '' : secSoft,
         page,
         page_size: pageSize,
+        ...overrides,
       })
       setData(res.list || [])
       setTotal(res.total || 0)
@@ -106,7 +107,7 @@ export default function AssetCenter({ meta, focusTarget }) {
 
   const handleSearch = () => {
     setPage(1)
-    loadData()
+    loadData({ page: 1 })
   }
 
   const handleReset = () => {
@@ -115,11 +116,12 @@ export default function AssetCenter({ meta, focusTarget }) {
     setStatus('全部')
     setSecSoft('全部')
     setPage(1)
+    loadData({ keyword: '', dept: '', status: '', security_software: '', page: 1 })
   }
 
   const handleExport = async () => {
     try {
-      await api.exportAssets({ keyword, dept, status, security_software: secSoft })
+      await api.exportAssets({ keyword, dept: dept === '全部' ? '' : dept, status: status === '全部' ? '' : status, security_software: secSoft === '全部' ? '' : secSoft })
     } catch (e) {
       message.error('导出资产失败: ' + e.message)
     }
@@ -144,10 +146,9 @@ export default function AssetCenter({ meta, focusTarget }) {
 
   useEffect(() => {
     if (focusTarget?.tableKey === 'assets') {
-      const record = data.find((item) => item.id === focusTarget.id)
-      if (record) openHistory(record)
+      openHistory({ id: focusTarget.id })
     }
-  }, [focusTarget, data])
+  }, [focusTarget])
 
   // 打开调换人员
   const openTransfer = (record) => {
@@ -524,8 +525,7 @@ export default function AssetCenter({ meta, focusTarget }) {
         <main className="cmdb-assets-main">
           <div className="cmdb-page-heading">
             <div>
-              <h2>云桌面终端资产</h2>
-              <span>配置项管理 · 资产全生命周期</span>
+              <h2>终端资产</h2>
             </div>
             <Space>
               <Button icon={<DownloadOutlined />} onClick={handleExport}>批量导出</Button>
@@ -539,17 +539,17 @@ export default function AssetCenter({ meta, focusTarget }) {
                 <strong>资产占用总览</strong>
                 <span>当前关键词、部门和安元软件筛选下的全量统计</span>
               </div>
-              <span className="cmdb-occupancy-total">共 {Object.values(summary).reduce((sum, value) => sum + Number(value || 0), 0)} 个</span>
+              <span className="cmdb-occupancy-total">共 {summary.total ?? total} 项</span>
             </div>
             <div className="cmdb-occupancy-grid">
               {[
-                { key: '全部', label: '全部配置项', count: Object.values(summary).reduce((sum, value) => sum + Number(value || 0), 0), color: 'blue' },
+                { key: '全部', label: '全部资产', count: summary.total ?? total, color: 'blue' },
                 { key: '在用', label: '在用', count: summary['在用'] || 0, color: 'green' },
                 { key: '闲置', label: '闲置', count: summary['闲置'] || 0, color: 'orange' },
                 { key: '维修中', label: '维修中', count: summary['维修中'] || 0, color: 'red' },
                 { key: '仓库备用', label: '仓库 / 备用', count: summary['仓库备用'] || 0, color: 'purple' },
               ].map((item) => {
-                const all = Object.values(summary).reduce((sum, value) => sum + Number(value || 0), 0)
+                const all = summary.total ?? total
                 const percent = all ? Math.round((item.count / all) * 100) : 0
                 return (
                   <button
@@ -633,7 +633,7 @@ export default function AssetCenter({ meta, focusTarget }) {
           </Button>
 
           <Text type="secondary" style={{ marginLeft: 8 }}>
-            共 <strong style={{ color: '#1677ff' }}>{total}</strong> 个配置项
+            共 <strong style={{ color: '#1677ff' }}>{total}</strong> 项资产
           </Text>
             </Space>
           </Card>
@@ -641,7 +641,7 @@ export default function AssetCenter({ meta, focusTarget }) {
           {viewMode === 'cards' ? (
             <div className="cmdb-card-panel">
               <div className="cmdb-card-summary">
-                <span>当前筛选结果</span><strong>{total}</strong><span>个配置项</span>
+                <span>当前筛选结果</span><strong>{total}</strong><span>项资产</span>
               </div>
               {loading ? (
                 <div className="cmdb-card-loading">加载资产中...</div>
@@ -687,7 +687,7 @@ export default function AssetCenter({ meta, focusTarget }) {
                   total={total}
                   showSizeChanger
                   pageSizeOptions={[20, 50, 100]}
-                  showTotal={(t) => `共 ${t} 个配置项`}
+                  showTotal={(t) => `共 ${t} 项资产`}
                   onChange={(p, ps) => { setPage(p); setPageSize(ps) }}
                 />
               </div>
@@ -791,13 +791,13 @@ export default function AssetCenter({ meta, focusTarget }) {
             <Card size="small" title="关联信息" style={{ marginBottom: 16 }}>
               <Descriptions size="small" column={1}>
                 <Descriptions.Item label="关联 IP">
-                  {relations.ips?.length ? relations.ips.map((item) => `${item.ip}（${item.status || '未标记'}）`).join('、') : '未关联 IP 池记录'}
+                  {relations.ips?.length ? relations.ips.map((item) => <Button type="link" key={item.id} onClick={() => onNavigate?.({ tableKey: 'ip_pool', id: item.id, title: item.ip, subtitle: item.subnet })}>{item.ip}（{item.status || '未标记'}）</Button>) : '未关联 IP 池记录'}
                 </Descriptions.Item>
                 <Descriptions.Item label="关联服务器">
-                  {relations.servers?.length ? relations.servers.map((item) => `${item.device_name}（${item.biz_ip || item.mgmt_ip || '无地址'}）`).join('、') : '未关联物理服务器'}
+                  {relations.servers?.length ? relations.servers.map((item) => <Button type="link" key={item.id} onClick={() => onNavigate?.({ tableKey: 'servers', id: item.id })}>{item.device_name}（{item.biz_ip || item.mgmt_ip || '无地址'}）</Button>) : '未关联服务器'}
                 </Descriptions.Item>
                 <Descriptions.Item label="关联应用">
-                  {relations.apps?.length ? relations.apps.map((item) => `${item.app_name}${item.port ? `:${item.port}` : ''}`).join('、') : '未关联系统应用'}
+                  {relations.apps?.length ? relations.apps.map((item) => <Button type="link" key={item.id} onClick={() => onNavigate?.({ tableKey: 'server_apps', id: item.id, title: item.app_name })}>{item.app_name}{item.port ? `:${item.port}` : ''}</Button>) : '未关联业务系统'}
                 </Descriptions.Item>
               </Descriptions>
             </Card>
@@ -1150,4 +1150,3 @@ export default function AssetCenter({ meta, focusTarget }) {
     </div>
   )
 }
-

@@ -16,6 +16,7 @@ import {
   Popconfirm,
   Drawer,
   Tabs,
+  Alert,
   Badge,
   Descriptions,
   Divider,
@@ -43,9 +44,13 @@ import { hasNativeCmdbImportBridge } from './cmdbTransport'
 const { Option } = Select
 const { Text, Title, Paragraph } = Typography
 
-export default function ServerCenter({ meta, focusTarget }) {
+export default function ServerCenter({ meta, focusTarget, section }) {
   const nativeImport = hasNativeCmdbImportBridge()
-  const [activeTab, setActiveTab] = useState('servers')
+  const [activeTab, setActiveTab] = useState(section || 'servers')
+  const [appDetail, setAppDetail] = useState(null)
+  const [appDetailError, setAppDetailError] = useState('')
+  const [appError, setAppError] = useState('')
+  const [serverChoices, setServerChoices] = useState([])
   const [servers, setServers] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -136,13 +141,13 @@ export default function ServerCenter({ meta, focusTarget }) {
       setPage(p)
       setPageSize(ps)
     } catch (e) {
-      message.error('加载物理服务器失败: ' + e.message)
+      message.error('加载服务器失败: ' + e.message)
     } finally {
       setLoading(false)
     }
   }
 
-  const loadAllApps = async (p = appPage, ps = appPageSize) => {
+  const loadAllApps = async (p = appPage, ps = appPageSize, filters = {}) => {
     setAppsLoading(true)
     try {
       const data = await api.getAllApps({
@@ -150,13 +155,15 @@ export default function ServerCenter({ meta, focusTarget }) {
         app_type: appTypeFilter === '全部' ? '' : appTypeFilter,
         page: p,
         page_size: ps,
+        ...filters,
       })
       setAllApps(data.list || [])
       setAppTotal(data.total || 0)
       setAppPage(p)
       setAppPageSize(ps)
+      setAppError('')
     } catch (e) {
-      message.error('加载应用清单失败: ' + e.message)
+      setAppError(e.message)
     } finally {
       setAppsLoading(false)
     }
@@ -176,21 +183,39 @@ export default function ServerCenter({ meta, focusTarget }) {
       loadServers(1, pageSize)
       loadLocationOptions()
     } else {
-      loadAllApps()
+      loadAllApps(1, appPageSize)
     }
   }, [activeTab, statusFilter, locationFilter, appTypeFilter])
 
+  const openSearchApp = async () => {
+    if (focusTarget?.tableKey !== 'server_apps') return
+    setAppDetail({ id: focusTarget.id })
+    setAppDetailError('')
+    try {
+      let current = 1
+      let response
+      do {
+        response = await api.getAllApps({ keyword: focusTarget.title || '', page: current, page_size: 500 })
+        const match = response.list?.find((item) => item.id === focusTarget.id)
+        if (match) { setAppDetail(match); return }
+      } while (response.list?.length && current++ * 500 < response.total)
+      throw new Error('未找到该业务系统')
+    } catch (e) { setAppDetailError(e.message) }
+  }
   useEffect(() => {
-    if (focusTarget?.tableKey === 'servers') {
-      const record = servers.find((item) => item.id === focusTarget.id)
-      if (record) openAppDrawer(record)
-    }
-    if (focusTarget?.tableKey === 'server_apps') {
-      setActiveTab('apps')
-      setAppKeyword(focusTarget.title || '')
-      loadAllApps(1, appPageSize)
-    }
-  }, [focusTarget, servers])
+    if (focusTarget?.tableKey === 'servers') openLinkedServer(focusTarget.id)
+    else openSearchApp()
+  }, [focusTarget])
+
+  const loadServerChoices = async (query = '') => {
+    try { const res = await api.getServers({ keyword: query, page: 1, page_size: 500 }); setServerChoices(res.list || []) }
+    catch (e) { message.error('加载承载服务器失败：' + e.message) }
+  }
+
+  const openLinkedServer = async (id) => {
+    try { const response = await api.getServer(id); await openAppDrawer(response.server || response) }
+    catch (e) { message.error('加载承载服务器失败：' + e.message) }
+  }
 
   // 打开服务器抽屉
   const openAppDrawer = async (srv) => {
@@ -216,16 +241,16 @@ export default function ServerCenter({ meta, focusTarget }) {
     )
   }
 
-  // 保存物理服务器
+  // 保存服务器
   const handleSaveServer = async () => {
     try {
       const values = await serverForm.validateFields()
       if (editingServer) {
         await api.updateServer(editingServer.id, values)
-        message.success('物理服务器更新成功')
+        message.success('服务器更新成功')
       } else {
         await api.createServer(values)
-        message.success('物理服务器建档入库成功')
+        message.success('服务器建档入库成功')
       }
       setServerModalVisible(false)
       loadServers()
@@ -234,7 +259,7 @@ export default function ServerCenter({ meta, focusTarget }) {
     }
   }
 
-  // 删除物理服务器
+  // 删除服务器
   const handleDeleteServer = async (id) => {
     try {
       await api.deleteServer(id)
@@ -245,19 +270,19 @@ export default function ServerCenter({ meta, focusTarget }) {
     }
   }
 
-  // 保存系统应用
+  // 保存业务系统
   const handleSaveApp = async () => {
     try {
       const values = await appForm.validateFields()
       if (editingApp) {
         await api.updateApp(editingApp.id, values)
-        message.success('系统应用更新成功')
+        message.success('业务系统更新成功')
       } else {
-        if (!selectedServer) return
-        await api.createServerApp(selectedServer.id, values)
+        await api.createServerApp(values.server_id || selectedServer?.id, values)
         message.success('应用添加成功')
       }
       setAppModalVisible(false)
+      if (editingApp && appDetail?.id === editingApp.id) setAppDetail((previous) => ({ ...previous, ...values }))
       if (selectedServer) {
         const apps = await api.getServerApps(selectedServer.id)
         setServerApps(apps || [])
@@ -271,11 +296,12 @@ export default function ServerCenter({ meta, focusTarget }) {
     }
   }
 
-  // 删除系统应用
+  // 删除业务系统
   const handleDeleteApp = async (id) => {
     try {
       await api.deleteApp(id)
       message.success('应用已删除')
+      if (appDetail?.id === id) setAppDetail(null)
       if (selectedServer) {
         const apps = await api.getServerApps(selectedServer.id)
         setServerApps(apps || [])
@@ -391,7 +417,7 @@ export default function ServerCenter({ meta, focusTarget }) {
       ),
     },
     {
-      title: '承载系统应用 / 中间件',
+      title: '承载业务系统 / 中间件',
       key: 'apps',
       width: 260,
       render: (_, r) => {
@@ -489,7 +515,7 @@ export default function ServerCenter({ meta, focusTarget }) {
           </Tooltip>
           <Popconfirm
             title="确认删除该服务器？"
-            description="删除后，其名下关联的系统应用也将一并移除。"
+            description="删除后，其名下关联的业务系统也将一并移除。"
             onConfirm={() => handleDeleteServer(r.id)}
             okText="删除"
             cancelText="取消"
@@ -510,7 +536,7 @@ export default function ServerCenter({ meta, focusTarget }) {
       width: 220,
       render: (v, r) => (
         <div>
-          <div style={{ fontWeight: 600 }}>{v}</div>
+          <Button type="link" style={{ padding: 0 }} onClick={() => { setAppDetailError(''); setAppDetail(r) }}>{v}</Button>
           <div style={{ fontSize: 12, color: '#888' }}>
             {r.middleware && <span>技术栈: {r.middleware}</span>}
           </div>
@@ -531,14 +557,14 @@ export default function ServerCenter({ meta, focusTarget }) {
       },
     },
     {
-      title: '所在物理服务器',
+      title: '承载服务器',
       key: 'server_info',
       width: 200,
       render: (_, r) => (
         <div>
-          <div style={{ fontWeight: 500, color: '#1677ff' }}>
+          <Button type="link" style={{ padding: 0 }} onClick={() => openLinkedServer(r.server_id)}>
             {r.server_name || `服务器 #${r.server_id}`}
-          </div>
+          </Button>
           <div style={{ fontSize: 12, color: '#666', fontFamily: 'monospace' }}>
             {r.server_biz_ip}
           </div>
@@ -610,8 +636,11 @@ export default function ServerCenter({ meta, focusTarget }) {
 
   return (
     <div>
-      <Card bodyStyle={{ padding: '16px 24px' }} style={{ marginBottom: 16 }}>
-        <Tabs
+      <div className="cmdb-server-content">
+        {section === 'apps' && <div className="cmdb-page-heading"><h2>业务系统</h2><Space><Text type="secondary">{appTotal} 项</Text><Button type="primary" icon={<PlusOutlined />} onClick={() => {
+          setSelectedServer(null); setEditingApp(null); appForm.resetFields(); appForm.setFieldsValue({ app_type: '业务应用', status: '正常运行' }); loadServerChoices(); setAppModalVisible(true)
+        }}>新增系统</Button></Space></div>}
+        {!section && <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
           items={[
@@ -619,7 +648,7 @@ export default function ServerCenter({ meta, focusTarget }) {
               key: 'servers',
               label: (
                 <span>
-                  <DesktopOutlined /> 物理服务器台账
+                  <DesktopOutlined /> 服务器台账
                 </span>
               ),
             },
@@ -627,12 +656,12 @@ export default function ServerCenter({ meta, focusTarget }) {
               key: 'apps',
               label: (
                 <span>
-                  <AppstoreOutlined /> 全院系统应用总览
+                  <AppstoreOutlined /> 全院业务系统总览
                 </span>
               ),
             },
           ]}
-        />
+        />}
 
         {activeTab === 'servers' ? (
           <div className="server-ledger-layout">
@@ -647,11 +676,11 @@ export default function ServerCenter({ meta, focusTarget }) {
                   <span title={location}>{location}</span><b>{servers.filter((item) => item.location === location).length}</b>
                 </button>
               ))}
-              <div className="server-ledger-sidebar-note">数据来自物理服务器台账<br />点击节点可联动筛选</div>
+              <div className="server-ledger-sidebar-note">数据来自服务器台账<br />点击节点可联动筛选</div>
             </aside>
             <section className="server-ledger-main">
               <div className="server-ledger-heading">
-                <div><Title level={4} style={{ margin: 0 }}>物理服务器台账</Title><Text type="secondary">机房 / 机柜 / 带外管理 / 承载应用</Text></div>
+                <div><Title level={4} style={{ margin: 0 }}>服务器台账</Title><Text type="secondary">机房 / 机柜 / 带外管理 / 承载应用</Text></div>
                 <Space>
                   <Button type={serverView === 'list' ? 'primary' : 'default'} size="small" onClick={() => setServerView('list')}>清单</Button>
                   <Button type={serverView === 'rack' ? 'primary' : 'default'} size="small" onClick={() => setServerView('rack')}>机架概览</Button>
@@ -718,7 +747,7 @@ export default function ServerCenter({ meta, focusTarget }) {
                       setServerModalVisible(true)
                     }}
                     >
-                    录入物理服务器
+                    录入服务器
                   </Button>
                   {nativeImport ? (
                     <Button
@@ -758,7 +787,7 @@ export default function ServerCenter({ meta, focusTarget }) {
                 total: total,
                 showSizeChanger: true,
                 showQuickJumper: true,
-                showTotal: (t) => `共 ${t} 台物理服务器`,
+                showTotal: (t) => `共 ${t} 台服务器`,
                 onChange: (p, ps) => loadServers(p, ps),
               }}
                   />
@@ -771,12 +800,13 @@ export default function ServerCenter({ meta, focusTarget }) {
               loading={loading}
               size="small"
               scroll={{ x: 1300 }}
-              pagination={{ current: page, pageSize, total, showSizeChanger: true, showQuickJumper: true, showTotal: (t) => `共 ${t} 台物理服务器`, onChange: (p, ps) => loadServers(p, ps) }}
+              pagination={{ current: page, pageSize, total, showSizeChanger: true, showQuickJumper: true, showTotal: (t) => `共 ${t} 台服务器`, onChange: (p, ps) => loadServers(p, ps) }}
             /></div>}
             </section>
           </div>
         ) : (
           <div>
+            {appError && <Alert type="error" showIcon message="业务系统查询失败" description={appError} action={<Button onClick={() => loadAllApps()}>重试</Button>} />}
             <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
               <Col xs={24} sm={8} md={6}>
                 <Input
@@ -784,7 +814,7 @@ export default function ServerCenter({ meta, focusTarget }) {
                   prefix={<SearchOutlined />}
                   value={appKeyword}
                   onChange={(e) => setAppKeyword(e.target.value)}
-                  onPressEnter={loadAllApps}
+                  onPressEnter={() => loadAllApps(1, appPageSize)}
                   allowClear
                 />
               </Col>
@@ -803,7 +833,7 @@ export default function ServerCenter({ meta, focusTarget }) {
               </Col>
               <Col xs={24} sm={10} md={8}>
                 <Space>
-                  <Button type="primary" icon={<SearchOutlined />} onClick={loadAllApps}>
+                  <Button type="primary" icon={<SearchOutlined />} onClick={() => loadAllApps(1, appPageSize)}>
                     查询
                   </Button>
                   <Button
@@ -811,7 +841,7 @@ export default function ServerCenter({ meta, focusTarget }) {
                     onClick={() => {
                       setAppKeyword('')
                       setAppTypeFilter('全部')
-                      loadAllApps()
+                      loadAllApps(1, appPageSize, { keyword: '', app_type: '' })
                     }}
                   >
                     重置
@@ -827,6 +857,7 @@ export default function ServerCenter({ meta, focusTarget }) {
               rowKey="id"
               loading={appsLoading}
               size="small"
+              scroll={{ x: 1300 }}
               pagination={{
                 current: appPage,
                 pageSize: appPageSize,
@@ -838,9 +869,19 @@ export default function ServerCenter({ meta, focusTarget }) {
             </div>
           </div>
         )}
-      </Card>
+      </div>
 
-      {/* 物理服务器录入 / 编辑 Modal */}
+      <Drawer title="业务系统详情" open={!!appDetail} onClose={() => setAppDetail(null)} width={640}
+        extra={appDetail?.app_name && <Space><Button onClick={() => { setEditingApp(appDetail); appForm.setFieldsValue(appDetail); setAppModalVisible(true) }}>编辑</Button>
+          <Popconfirm title="确认删除此业务系统？" onConfirm={() => handleDeleteApp(appDetail.id)}><Button danger>删除</Button></Popconfirm></Space>}>
+        {appDetailError ? <Alert type="error" message={appDetailError} action={<Button onClick={openSearchApp}>重试</Button>} /> : <Descriptions column={1} bordered items={[
+          ['名称', appDetail?.app_name], ['类型', appDetail?.app_type], ['状态', appDetail?.status], ['负责人', appDetail?.owner],
+          ['访问地址', appDetail?.access_url], ['端口', appDetail?.port], ['中间件', appDetail?.middleware], ['数据库', appDetail?.database_info], ['备注', appDetail?.remark],
+          ['承载资源', appDetail?.server_id ? <Button type="link" onClick={() => openLinkedServer(appDetail.server_id)}>{appDetail.server_name || `服务器 #${appDetail.server_id}`}</Button> : '未关联'],
+        ].map(([label, value]) => ({ key: label, label, children: value || '-' }))} />}
+      </Drawer>
+
+      {/* 服务器录入 / 编辑 Modal */}
       <Modal
         title="深信服设备信息导入预览"
         open={importModalOpen}
@@ -876,7 +917,7 @@ export default function ServerCenter({ meta, focusTarget }) {
       </Modal>
 
       <Modal
-        title={editingServer ? `编辑物理服务器: ${editingServer.device_name}` : '录入新物理服务器档案'}
+        title={editingServer ? `编辑服务器: ${editingServer.device_name}` : '录入新服务器档案'}
         open={serverModalVisible}
         onOk={handleSaveServer}
         onCancel={() => setServerModalVisible(false)}
@@ -1005,13 +1046,13 @@ export default function ServerCenter({ meta, focusTarget }) {
         title={
           selectedServer ? (
             <div>
-              <span>🖥️ {selectedServer.device_name} - 承载系统应用清单</span>
+              <span>🖥️ {selectedServer.device_name} - 承载业务系统清单</span>
               <span style={{ fontSize: 12, color: '#888', marginLeft: 12 }}>
                 业务IP: {selectedServer.biz_ip || '-'}
               </span>
             </div>
           ) : (
-            '系统应用清单'
+            '业务系统清单'
           )
         }
         width={680}
@@ -1166,7 +1207,7 @@ export default function ServerCenter({ meta, focusTarget }) {
 
       {/* 应用录入 / 编辑 Modal */}
       <Modal
-        title={editingApp ? `编辑应用: ${editingApp.app_name}` : '添加系统应用 / 中间件'}
+        title={editingApp ? `编辑应用: ${editingApp.app_name}` : '添加业务系统 / 中间件'}
         open={appModalVisible}
         onOk={handleSaveApp}
         onCancel={() => setAppModalVisible(false)}
@@ -1174,6 +1215,9 @@ export default function ServerCenter({ meta, focusTarget }) {
         destroyOnClose
       >
         <Form form={appForm} layout="vertical">
+          {!editingApp && !selectedServer && <Form.Item name="server_id" label="承载服务器" rules={[{ required: true, message: '请选择承载服务器' }]}>
+            <Select showSearch filterOption={false} onSearch={loadServerChoices} options={serverChoices.map((server) => ({ value: server.id, label: `${server.device_name} ${server.biz_ip || ''}` }))} />
+          </Form.Item>}
           <Form.Item
             name="app_name"
             label="应用系统名称"

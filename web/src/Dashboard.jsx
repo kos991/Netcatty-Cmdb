@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Col, Row, Progress, Statistic, Table, Typography, Spin, message } from 'antd'
+import { Alert, Button, Card, Col, Row, Progress, Statistic, Table, Typography, Skeleton } from 'antd'
 import {
   DesktopOutlined,
   DatabaseOutlined,
@@ -60,24 +60,19 @@ function RingCard({ title, percent, label, accent, rows }) {
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    api
-      .getStats()
-      .then(setStats)
-      .catch((e) => {
-        message.error('加载统计失败：' + e.message)
-        setStats({})
-      })
-  }, [])
-
-  if (!stats) {
-    return (
-      <div style={{ textAlign: 'center', paddingTop: 60 }}>
-        <Spin size="large" />
-      </div>
-    )
+  const loadStats = async () => {
+    setLoading(true)
+    try { setStats(await api.getStats()); setError('') }
+    catch (e) { setError(e.message) }
+    finally { setLoading(false) }
   }
+  useEffect(() => { loadStats() }, [])
+
+  const errorView = error && <Alert type="error" showIcon message="加载统计失败" description={error} action={<Button onClick={loadStats} loading={loading}>重试</Button>} />
+  if (!stats) return errorView || <Skeleton active paragraph={{ rows: 8 }} />
 
   const total = stats.total_assets || 1
   const zaiyongRate = Math.round(((stats.status_zaiyong || 0) / total) * 100)
@@ -90,6 +85,8 @@ export default function Dashboard() {
 
   return (
     <div>
+      <div className="cmdb-page-heading"><h2>统计概览</h2><Button onClick={loadStats} loading={loading}>刷新</Button></div>
+      {errorView}
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={6}>
           <StatCard
@@ -103,7 +100,7 @@ export default function Dashboard() {
         </Col>
         <Col xs={24} sm={12} md={6}>
           <StatCard
-            title="物理服务器与底座"
+            title="服务器台账"
             value={stats.server_total ?? 0}
             suffix="台"
             icon={<DatabaseOutlined />}
@@ -113,7 +110,7 @@ export default function Dashboard() {
         </Col>
         <Col xs={24} sm={12} md={6}>
           <StatCard
-            title="部署系统与中间件"
+            title="业务系统"
             value={stats.app_total ?? 0}
             suffix="个"
             icon={<AppstoreOutlined />}

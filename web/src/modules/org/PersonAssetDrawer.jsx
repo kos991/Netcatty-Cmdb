@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
   Drawer,
+  Alert,
   Table,
   Tag,
   Button,
@@ -24,9 +25,10 @@ import { cmdbApi } from '../../cmdb/cmdbApi'
 
 const { Text } = Typography
 
-export default function PersonAssetDrawer({ visible, person, onClose, allPersons = [], onTransferred }) {
+export default function PersonAssetDrawer({ visible, person, onClose, allPersons = [], onTransferred, onNavigate }) {
   const [loading, setLoading] = useState(false)
   const [assets, setAssets] = useState([])
+  const [error, setError] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
   const [transferModal, setTransferModal] = useState(false)
   const [targetPersonId, setTargetPersonId] = useState(null)
@@ -38,8 +40,9 @@ export default function PersonAssetDrawer({ visible, person, onClose, allPersons
     try {
       const res = await cmdbApi.getPersonAssets(person.id)
       setAssets(res.assets || [])
+      setError('')
     } catch (err) {
-      message.error(`加载名下资产失败: ${err.message}`)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -47,7 +50,11 @@ export default function PersonAssetDrawer({ visible, person, onClose, allPersons
 
   useEffect(() => {
     if (visible && person?.id) {
+      setAssets([])
+      setError('')
       loadAssets()
+      setTargetPersonId(null)
+      setTransferModal(false)
       setSelectedIds([])
     }
   }, [visible, person?.id])
@@ -88,7 +95,7 @@ export default function PersonAssetDrawer({ visible, person, onClose, allPersons
       key: 'name',
       render: (text, r) => (
         <div>
-          <Space>
+          <Space onClick={() => onNavigate?.({ tableKey: r.source_type === 'legacy_asset' ? 'assets' : 'cmdb_assets', id: r.source_type === 'legacy_asset' ? r.source_id : r.id })} style={{ cursor: 'pointer' }}>
             {r.asset_class === 'physical' ? (
               <CloudServerOutlined style={{ color: '#1677ff' }} />
             ) : r.asset_class === 'desktop' ? (
@@ -168,7 +175,7 @@ export default function PersonAssetDrawer({ visible, person, onClose, allPersons
             type="primary"
             icon={<SwapOutlined />}
             onClick={() => setTransferModal(true)}
-            disabled={assets.length === 0}
+            disabled={loading || !!error || assets.length === 0}
           >
             {selectedIds.length > 0 ? `交接已选 (${selectedIds.length})` : '一键全部交接'}
           </Button>
@@ -193,6 +200,7 @@ export default function PersonAssetDrawer({ visible, person, onClose, allPersons
         </Text>
       </div>
 
+      {error && <Alert type="error" showIcon message="加载名下资产失败" description={error} action={<Button onClick={loadAssets}>重试</Button>} />}
       <Table
         rowKey="id"
         loading={loading}

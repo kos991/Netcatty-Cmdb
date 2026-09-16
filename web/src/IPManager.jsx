@@ -51,7 +51,7 @@ const STATUS_ALL = '全部'
 // 网段类别配色（专网 / 外网 / 内网，也可自定义）
 const CATEGORY_COLOR = { 专网: 'blue', 外网: 'orange', 内网: 'green' }
 
-export default function IPManager({ meta, focusTarget }) {
+export default function IPManager({ meta, focusTarget, onNavigate }) {
   const [summary, setSummary] = useState(null)
   const [subnet, setSubnet] = useState('')
   const [entries, setEntries] = useState([])
@@ -96,7 +96,6 @@ export default function IPManager({ meta, focusTarget }) {
       setEntries(res.list || [])
     } catch (e) {
       message.error('加载 IP 列表失败：' + e.message)
-      setEntries([])
     } finally {
       setLoading(false)
     }
@@ -107,7 +106,7 @@ export default function IPManager({ meta, focusTarget }) {
   }, [subnet, loadEntries])
 
   useEffect(() => {
-    const targetSubnet = focusTarget?.data?.网段 || focusTarget?.data?.subnet
+    const targetSubnet = focusTarget?.data?.网段 || focusTarget?.data?.subnet || focusTarget?.subtitle
     if (targetSubnet && summary?.subnets?.some((item) => item.subnet === targetSubnet)) setSubnet(targetSubnet)
   }, [focusTarget, summary])
 
@@ -656,7 +655,14 @@ export default function IPManager({ meta, focusTarget }) {
             <Descriptions.Item label="归属部门">{drawer.entry.department || '-'}</Descriptions.Item>
             <Descriptions.Item label="房间">{drawer.entry.room || '-'}</Descriptions.Item>
             <Descriptions.Item label="占用资产">
-              {drawer.entry.asset_code || '未匹配到资产'}
+              {drawer.entry.asset_code ? <Button type="link" onClick={async () => {
+                try {
+                  const response = await api.getAssets({ keyword: drawer.entry.asset_code, page: 1, page_size: 500 })
+                  const asset = response.list?.find((item) => item.asset_code === drawer.entry.asset_code)
+                  if (!asset) throw new Error('未找到关联终端资产')
+                  onNavigate?.({ tableKey: 'assets', id: asset.id })
+                } catch (e) { message.error('加载关联资产失败：' + e.message) }
+              }}>{drawer.entry.asset_code}</Button> : '未关联资产'}
             </Descriptions.Item>
             <Descriptions.Item label="备注">{drawer.entry.remark || '-'}</Descriptions.Item>
           </Descriptions>
