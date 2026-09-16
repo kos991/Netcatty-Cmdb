@@ -30,13 +30,15 @@ export function panelKeyFor(module, baseTab, operationsTab) {
   return module === 'base' ? `base:${baseTab}` : module === 'operations' ? `operations:${operationsTab}` : module
 }
 
-export function resolveIPFocus(target, consumedTarget, subnets, entries) {
-  if (!target || target === consumedTarget) return null
+export function resolveIPFocus(target, consumedTarget, subnets, entries, entryLoad) {
+  if (!target || target === consumedTarget || !subnets) return null
   const subnet = target.data?.网段 || target.data?.subnet || target.subtitle
-  if (!subnets.some((item) => item.subnet === subnet)) return null
+  if (!subnets.some((item) => item.subnet === subnet)) return { subnet: null, entry: null, consumed: true }
+  if (entryLoad?.subnet !== subnet || !['ready', 'error'].includes(entryLoad.status)) return { subnet, entry: null, consumed: false }
+  if (entryLoad.status === 'error') return { subnet, entry: null, consumed: true }
   const ip = target.title || target.data?.IP || target.data?.ip
   const entry = entries.find((item) => item.subnet === subnet && ((target.id && item.id === target.id) || (ip && item.ip === ip))) || null
-  return { subnet, entry }
+  return { subnet, entry, consumed: true }
 }
 
 export function buildPersonTree(persons) {

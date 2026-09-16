@@ -29,10 +29,28 @@ test('IP 导航成功消费后，汇总和地址刷新不再次打开旧目标',
   const target = { tableKey: 'ip_pool', id: 7, subtitle: '一段' }
   const subnets = [{ subnet: '一段' }, { subnet: '二段' }]
   const entry = { id: 7, subnet: '一段', ip: '10.0.1.7' }
-  assert.deepEqual(resolveIPFocus(target, null, subnets, []), { subnet: '一段', entry: null })
-  assert.deepEqual(resolveIPFocus(target, null, subnets, [entry]), { subnet: '一段', entry })
+  assert.deepEqual(resolveIPFocus(target, null, subnets, [], { subnet: '一段', status: 'loading' }), { subnet: '一段', entry: null, consumed: false })
+  assert.deepEqual(resolveIPFocus(target, null, subnets, [entry], { subnet: '一段', status: 'ready' }), { subnet: '一段', entry, consumed: true })
   assert.equal(resolveIPFocus(target, target, [...subnets], [{ ...entry }]), null)
-  assert.deepEqual(resolveIPFocus({ ...target }, target, subnets, [entry]), { subnet: '一段', entry })
+  assert.deepEqual(resolveIPFocus({ ...target }, target, subnets, [entry], { subnet: '一段', status: 'ready' }), { subnet: '一段', entry, consumed: true })
+})
+
+test('IP 未命中也消费导航，切网段刷新不回退，同内容新事件可再尝试', () => {
+  const target = { id: 7, subtitle: '一段' }
+  const subnets = [{ subnet: '一段' }, { subnet: '二段' }]
+  const result = resolveIPFocus(target, null, subnets, [], { subnet: '一段', status: 'ready' })
+  assert.deepEqual(result, { subnet: '一段', entry: null, consumed: true })
+  const consumed = result.consumed ? target : null
+  assert.equal(resolveIPFocus(target, consumed, subnets, [], { subnet: '二段', status: 'ready' }), null)
+  assert.deepEqual(resolveIPFocus({ ...target }, consumed, subnets, [], { subnet: '二段', status: 'ready' }), { subnet: '一段', entry: null, consumed: false })
+})
+
+test('IP 请求失败消费导航且不使用旧数据，等待目标网段加载时不提前查找', () => {
+  const target = { id: 7, subtitle: '一段' }
+  const subnets = [{ subnet: '一段' }]
+  const oldEntries = [{ id: 7, subnet: '一段' }]
+  assert.deepEqual(resolveIPFocus(target, null, subnets, oldEntries, { subnet: '一段', status: 'error' }), { subnet: '一段', entry: null, consumed: true })
+  assert.deepEqual(resolveIPFocus(target, null, subnets, oldEntries, { subnet: '二段', status: 'ready' }), { subnet: '一段', entry: null, consumed: false })
 })
 
 test('组织根节点包含空组织人员，精确节点只使用非空原始组织和部门', () => {

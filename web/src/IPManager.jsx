@@ -21,6 +21,7 @@ import {
   Empty,
   Spin,
   AutoComplete,
+  Alert,
 } from 'antd'
 import {
   ReloadOutlined,
@@ -57,6 +58,7 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
   const [subnet, setSubnet] = useState('')
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(false)
+  const [entryLoad, setEntryLoad] = useState({ subnet: '', status: 'idle', error: '' })
 
   const [status, setStatus] = useState(STATUS_ALL)
   const [keywordInput, setKeywordInput] = useState('')
@@ -74,6 +76,7 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
   const [form] = Form.useForm()
   const [modal, modalHolder] = Modal.useModal()
   const consumedFocus = useRef(null)
+  const startedFocus = useRef(null)
 
   // ---- 网段汇总 ----
   const loadSummary = useCallback(async () => {
@@ -94,11 +97,13 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
   const loadEntries = useCallback(async (sn) => {
     if (!sn) return
     setLoading(true)
+    setEntryLoad({ subnet: sn, status: 'loading', error: '' })
     try {
       const res = await api.getIPPool({ subnet: sn, page: 1, page_size: 500 })
       setEntries(res.list || [])
+      setEntryLoad({ subnet: sn, status: 'ready', error: '' })
     } catch (e) {
-      message.error('加载 IP 列表失败：' + e.message)
+      setEntryLoad({ subnet: sn, status: 'error', error: e.message })
     } finally {
       setLoading(false)
     }
@@ -108,16 +113,21 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
     loadEntries(subnet)
   }, [subnet, loadEntries])
 
-  // 成功打开详情即消费本次导航；同一记录再次点击会收到新的目标对象。
+  // 等待目标网段请求结束后只查找一次，未命中或请求失败也消费本次导航。
   useEffect(() => {
-    const next = resolveIPFocus(focusTarget, consumedFocus.current, summary?.subnets || [], entries)
+    const next = resolveIPFocus(focusTarget, consumedFocus.current, summary?.subnets, entries, entryLoad)
     if (!next) return
-    setSubnet(next.subnet)
-    if (next.entry) {
-      consumedFocus.current = focusTarget
-      openDrawer(next.entry)
+    if (startedFocus.current !== focusTarget) {
+      startedFocus.current = focusTarget
+      if (next.subnet) setSubnet(next.subnet)
+      if (next.subnet && entryLoad.subnet === next.subnet && entryLoad.status === 'error') {
+        loadEntries(next.subnet)
+        return
+      }
     }
-  }, [focusTarget, summary, entries])
+    if (next.consumed) consumedFocus.current = focusTarget
+    if (next.entry) openDrawer(next.entry)
+  }, [focusTarget, summary, entries, entryLoad, loadEntries])
 
   const refreshAll = () => {
     loadSummary()
@@ -393,6 +403,7 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
   return (
     <div className="ip-page-v2">
       {modalHolder}
+      {entryLoad.status === 'error' && <Alert type="error" showIcon message="加载 IP 列表失败" description={entryLoad.error} action={<Button onClick={() => loadEntries(subnet)}>重试</Button>} />}
       {/* ===== 网段总览 ===== */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         {(summary?.subnets || []).map((s) => {
