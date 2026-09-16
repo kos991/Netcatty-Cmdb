@@ -245,7 +245,7 @@ update("application/app/AppView.tsx", (source) => {
 const CmdbSurface = React.memo(() => {
   const active = useIsTabActive('cmdb');
   return (
-    <section className={active ? 'flex min-h-0 flex-1' : 'hidden'} aria-hidden={!active}>
+    <section className={active ? 'absolute inset-0 z-20 flex min-h-0' : 'hidden'} aria-hidden={!active}>
       <CmdbWorkspace />
     </section>
   );
