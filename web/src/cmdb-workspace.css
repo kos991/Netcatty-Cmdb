@@ -30,6 +30,8 @@
 .cmdb-workspace .cmdb-submodule-tabs button { min-height: 38px; padding-inline: 16px; }
 .cmdb-workspace .cmdb-workspace-content { position: relative; flex: 1; min-height: 0; overflow: auto; min-width: 0; padding: 20px 24px 28px; }
 .cmdb-workspace .ant-drawer { position: absolute; }
+.cmdb-workspace .cmdb-module-panel .ant-modal-mask,
+.cmdb-workspace .cmdb-module-panel .ant-modal-wrap { position: absolute; }
 .cmdb-workspace .cmdb-module-panel { min-width: 0; }
 .cmdb-workspace .cmdb-module-panel[hidden] { display: none !important; }
 .cmdb-workspace .ant-alert { margin-bottom: 12px; }

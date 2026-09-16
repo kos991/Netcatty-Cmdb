@@ -130,6 +130,7 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
   const [editingAsset, setEditingAsset] = useState(null)
   const [saving, setSaving] = useState(false)
   const [assetForm] = Form.useForm()
+  const [modal, modalHolder] = Modal.useModal()
   const [assetFormSection, setAssetFormSection] = useState('basic')
   const assetSectionRefs = useRef({})
 
@@ -343,7 +344,8 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
   }
 
   const doArchive = (record) => {
-    Modal.confirm({
+    modal.confirm({
+      getContainer: false,
       title: `确认注销归档「${record.name}」？`,
       content:
         '注销归档会保留资产资料和履历，并将状态置为「报废」；来自旧台账的记录会同步更新源台账状态。',
@@ -403,7 +405,8 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
   // 注销归档保留资产资料与履历，不执行物理删除。
   const doBatchDelete = () => {
     if (!requireSelection()) return
-    Modal.confirm({
+    modal.confirm({
+      getContainer: false,
       title: `确认删除所选的 ${selectedRowKeys.length} 条资产？`,
       width: 520,
       content:
@@ -448,7 +451,8 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
   }
 
   const handleTreeDelete = (node) => {
-    Modal.confirm({
+    modal.confirm({
+      getContainer: false,
       title: `确认删除「${node.name}」？`,
       content: '若有子节点或已被资产引用，系统会拒绝删除并说明原因。',
       okText: '删除',
@@ -556,6 +560,7 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
 
   return (
     <div className="resource-ledger">
+      {modalHolder}
       <section className="ledger-main">
         {loadError && <Alert type="error" showIcon message="基础设施查询失败" description={loadError} action={<Button onClick={load}>重试</Button>} />}
         <header className="ledger-heading">

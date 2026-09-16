@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Card,
   Row,
@@ -32,6 +32,7 @@ import {
 } from '@ant-design/icons'
 import { api } from './api'
 import IPSubnetManager from './IPSubnetManager'
+import { resolveIPFocus } from './cmdbWorkspaceState'
 
 const { Text } = Typography
 
@@ -71,6 +72,8 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
   const [formOpen, setFormOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form] = Form.useForm()
+  const [modal, modalHolder] = Modal.useModal()
+  const consumedFocus = useRef(null)
 
   // ---- 网段汇总 ----
   const loadSummary = useCallback(async () => {
@@ -105,18 +108,16 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
     loadEntries(subnet)
   }, [subnet, loadEntries])
 
+  // 成功打开详情即消费本次导航；同一记录再次点击会收到新的目标对象。
   useEffect(() => {
-    const targetSubnet = focusTarget?.data?.网段 || focusTarget?.data?.subnet || focusTarget?.subtitle
-    if (targetSubnet && summary?.subnets?.some((item) => item.subnet === targetSubnet)) setSubnet(targetSubnet)
-  }, [focusTarget, summary])
-
-  // 全局查询命中 IP 后，切换到对应网段并打开该地址详情。
-  useEffect(() => {
-    if (!focusTarget || !entries.length) return
-    const targetIp = focusTarget.title || focusTarget.data?.IP || focusTarget.data?.ip
-    const hit = entries.find((entry) => (focusTarget.id && entry.id === focusTarget.id) || (targetIp && entry.ip === targetIp))
-    if (hit) openDrawer(hit)
-  }, [focusTarget, entries])
+    const next = resolveIPFocus(focusTarget, consumedFocus.current, summary?.subnets || [], entries)
+    if (!next) return
+    setSubnet(next.subnet)
+    if (next.entry) {
+      consumedFocus.current = focusTarget
+      openDrawer(next.entry)
+    }
+  }, [focusTarget, summary, entries])
 
   const refreshAll = () => {
     loadSummary()
@@ -254,7 +255,8 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
   }
 
   const doRelease = (entry) => {
-    Modal.confirm({
+    modal.confirm({
+      getContainer: false,
       title: `确认释放 ${entry.ip}？`,
       content: entry.asset_code ? (
         <div>
@@ -297,7 +299,8 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
         refreshAll()
       } catch (e) {
         if (!force && e.message.includes('正被资产')) {
-          Modal.confirm({
+          modal.confirm({
+            getContainer: false,
             title: '该 IP 正被资产占用',
             width: 520,
             content: (
@@ -320,7 +323,8 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
       }
     }
 
-    Modal.confirm({
+    modal.confirm({
+      getContainer: false,
       title: `确认删除 ${entry.ip}？`,
       content: '删除会把该条目从 IP 规划池中移除，与「释放」不同。',
       okText: '删除',
@@ -388,6 +392,7 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
 
   return (
     <div className="ip-page-v2">
+      {modalHolder}
       {/* ===== 网段总览 ===== */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         {(summary?.subnets || []).map((s) => {

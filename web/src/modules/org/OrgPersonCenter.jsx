@@ -31,6 +31,7 @@ import {
 } from '@ant-design/icons'
 import { cmdbApi } from '../../cmdb/cmdbApi'
 import PersonAssetDrawer from './PersonAssetDrawer'
+import { buildPersonTree } from '../../cmdbWorkspaceState'
 import './org-person.css'
 
 const { Text } = Typography
@@ -96,39 +97,11 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
   }, [focusTarget])
 
   // 聚合部门与组织树
-  const treeData = useMemo(() => {
-    const deptMap = {}
-    directory.forEach((p) => {
-      const org = p.org_name || '总机构'
-      const dept = p.department || '未分配部门'
-      if (!deptMap[org]) deptMap[org] = {}
-      deptMap[org][dept] = (deptMap[org][dept] || 0) + 1
-    })
-
-    const nodes = [
-      {
-        title: `全部人员 (${directory.length})`,
-        key: 'all',
-        icon: <ApartmentOutlined />,
-      },
-    ]
-
-    Object.entries(deptMap).forEach(([org, depts]) => {
-      const totalInOrg = Object.values(depts).reduce((a, b) => a + b, 0)
-      nodes.push({
-        title: `${org} (${totalInOrg})`,
-        key: JSON.stringify({ org_name: org }),
-        icon: <TeamOutlined />,
-        children: Object.entries(depts).map(([dept, count]) => ({
-          title: `${dept} (${count})`,
-          key: JSON.stringify({ org_name: org, department: dept === '未分配部门' ? '' : dept }),
-          icon: <ApartmentOutlined />,
-        })),
-      })
-    })
-
-    return nodes
-  }, [directory])
+  const treeData = useMemo(() => buildPersonTree(directory).map((node) => ({
+    ...node,
+    icon: node.key === 'all' ? <ApartmentOutlined /> : <TeamOutlined />,
+    children: node.children?.map((child) => ({ ...child, icon: <ApartmentOutlined /> })),
+  })), [directory])
 
   // 统计数据
   const stats = useMemo(() => {

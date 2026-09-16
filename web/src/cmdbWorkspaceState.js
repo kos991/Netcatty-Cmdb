@@ -29,3 +29,33 @@ export function resolveSearchTarget(result) {
 export function panelKeyFor(module, baseTab, operationsTab) {
   return module === 'base' ? `base:${baseTab}` : module === 'operations' ? `operations:${operationsTab}` : module
 }
+
+export function resolveIPFocus(target, consumedTarget, subnets, entries) {
+  if (!target || target === consumedTarget) return null
+  const subnet = target.data?.网段 || target.data?.subnet || target.subtitle
+  if (!subnets.some((item) => item.subnet === subnet)) return null
+  const ip = target.title || target.data?.IP || target.data?.ip
+  const entry = entries.find((item) => item.subnet === subnet && ((target.id && item.id === target.id) || (ip && item.ip === ip))) || null
+  return { subnet, entry }
+}
+
+export function buildPersonTree(persons) {
+  const organizations = new Map()
+  for (const person of persons) {
+    const org = person.org_name
+    if (!org) continue
+    if (!organizations.has(org)) organizations.set(org, { count: 0, departments: new Map() })
+    const node = organizations.get(org)
+    node.count++
+    if (person.department) node.departments.set(person.department, (node.departments.get(person.department) || 0) + 1)
+  }
+  return [
+    { key: 'all', title: `全部人员 (${persons.length})` },
+    ...Array.from(organizations, ([org, node]) => ({
+      key: JSON.stringify({ org_name: org }), title: `${org} (${node.count})`,
+      children: Array.from(node.departments, ([department, count]) => ({
+        key: JSON.stringify({ org_name: org, department }), title: `${department} (${count})`,
+      })),
+    })),
+  ]
+}
