@@ -162,3 +162,71 @@ func TestLegacyAssetExportUsesListFiltersAndIncludeArchived(t *testing.T) {
 		})
 	}
 }
+
+func TestLegacyOperationsListHandlersReturnNormalizedPagination(t *testing.T) {
+	for _, path := range []string{"/api/servers", "/api/logs", "/api/servers?page=0&page_size=501", "/api/logs?page=-1&page_size=999"} {
+		t.Run(path, func(t *testing.T) {
+			_, _, mux := newLegacyHandlerTestServer(t)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("列表请求失败，状态 %d，响应 %s", rec.Code, rec.Body.String())
+			}
+			var body struct {
+				Page     int `json:"page"`
+				PageSize int `json:"page_size"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("列表响应不是合法 JSON: %v", err)
+			}
+			if body.Page != 1 || body.PageSize != 20 {
+				t.Fatalf("列表响应必须返回规范化分页 1/20，实际 %d/%d，响应 %s", body.Page, body.PageSize, rec.Body.String())
+			}
+		})
+	}
+
+	for _, path := range []string{"/api/servers?page=2&page_size=500", "/api/logs?page=2&page_size=500"} {
+		t.Run(path, func(t *testing.T) {
+			_, _, mux := newLegacyHandlerTestServer(t)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			var body struct {
+				Page     int `json:"page"`
+				PageSize int `json:"page_size"`
+			}
+			if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil || body.Page != 2 || body.PageSize != 500 {
+				t.Fatalf("合法分页必须原样返回，状态=%d page=%d page_size=%d 响应=%s", rec.Code, body.Page, body.PageSize, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestLegacyOperationsServerDetailHandlerDistinguishesNotFoundAndDatabaseErrors(t *testing.T) {
+	t.Run("不存在返回404", func(t *testing.T) {
+		_, _, mux := newLegacyHandlerTestServer(t)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/servers/999999", nil))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("不存在服务器应返回 404，实际 %d，响应 %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("数据库错误返回500及真实错误", func(t *testing.T) {
+		_, st, mux := newLegacyHandlerTestServer(t)
+		if err := st.Close(); err != nil {
+			t.Fatalf("关闭测试数据库失败: %v", err)
+		}
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/servers/1", nil))
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("数据库错误应返回 500，实际 %d，响应 %s", rec.Code, rec.Body.String())
+		}
+		var body map[string]string
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("错误响应不是合法 JSON: %v", err)
+		}
+		if !strings.Contains(body["error"], "database is closed") {
+			t.Fatalf("500 必须返回真实数据库错误，实际 %q", body["error"])
+		}
+	})
+}

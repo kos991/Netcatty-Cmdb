@@ -306,6 +306,7 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
+	page, pageSize = normalizeLegacyPagination(page, pageSize)
 
 	list, total, err := s.Store.QueryServers(kw, loc, status, page, pageSize)
 	if err != nil {
@@ -330,7 +331,11 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 
 	srv, apps, err := s.Store.GetServer(id)
 	if err != nil {
-		writeErr(w, 404, "物理服务器不存在")
+		if errors.Is(err, sql.ErrNoRows) {
+			writeErr(w, http.StatusNotFound, "物理服务器不存在")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]interface{}{
@@ -510,6 +515,7 @@ func (s *Server) handleListLogs(w http.ResponseWriter, r *http.Request) {
 	kw := r.URL.Query().Get("keyword")
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
+	page, pageSize = normalizeLegacyPagination(page, pageSize)
 
 	list, total, err := s.Store.QueryLogs(assetID, logType, kw, page, pageSize)
 	if err != nil {
@@ -522,6 +528,16 @@ func (s *Server) handleListLogs(w http.ResponseWriter, r *http.Request) {
 		"page":      page,
 		"page_size": pageSize,
 	})
+}
+
+func normalizeLegacyPagination(page, pageSize int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 500 {
+		pageSize = 20
+	}
+	return page, pageSize
 }
 
 // ---- IP 规划池 ----

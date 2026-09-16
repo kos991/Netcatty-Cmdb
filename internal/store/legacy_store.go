@@ -592,8 +592,22 @@ func (s *Store) UpdateServer(srv *PhysicalServer, operator string) error {
 }
 
 func (s *Store) DeleteServer(id int64) error {
-	_, err := s.db.Exec(`DELETE FROM servers WHERE id = ?`, id)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM server_apps WHERE server_id = ?`, id); err != nil {
+		return err
+	}
+	result, err := tx.Exec(`DELETE FROM servers WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if err := requireAffected(result, "服务器不存在"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) GetAppsByServerID(id int64) ([]ServerApp, error) {
@@ -656,14 +670,29 @@ func (s *Store) UpdateApp(app *ServerApp) error {
 		return fmt.Errorf("应用名称不能为空")
 	}
 	applyLegacyServerAppFallbacks(app)
-	now := time.Now().Format("2006-01-02 15:04:05")
-	result, err := s.db.Exec(`UPDATE server_apps SET app_name=?, app_type=?, port=?, access_url=?, middleware=?,
-		database_info=?, owner=?, status=?, remark=?, updated_at=? WHERE id=?`, app.AppName, app.AppType, app.Port,
-		app.AccessURL, app.Middleware, app.DatabaseInfo, app.Owner, app.Status, app.Remark, now, app.ID)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	return requireAffected(result, "应用不存在")
+	defer tx.Rollback()
+	if app.ServerID != 0 {
+		var exists int
+		if err := tx.QueryRow(`SELECT 1 FROM servers WHERE id = ?`, app.ServerID).Scan(&exists); err != nil {
+			return err
+		}
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	result, err := tx.Exec(`UPDATE server_apps SET server_id=CASE WHEN ?=0 THEN server_id ELSE ? END,
+		app_name=?, app_type=?, port=?, access_url=?, middleware=?, database_info=?, owner=?, status=?, remark=?, updated_at=?
+		WHERE id=?`, app.ServerID, app.ServerID, app.AppName, app.AppType, app.Port, app.AccessURL, app.Middleware,
+		app.DatabaseInfo, app.Owner, app.Status, app.Remark, now, app.ID)
+	if err != nil {
+		return err
+	}
+	if err := requireAffected(result, "应用不存在"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) DeleteApp(id int64) error {

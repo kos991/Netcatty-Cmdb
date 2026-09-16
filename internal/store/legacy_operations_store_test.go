@@ -317,6 +317,99 @@ func TestLegacyOperationsAppCRUDRelationsAndQueries(t *testing.T) {
 	}
 }
 
+func TestLegacyOperationsUpdateAppPreservesOrChangesServerAtomically(t *testing.T) {
+	s := newLegacyOperationsTestStore(t)
+	firstServerID := createOperationsServer(t, s, PhysicalServer{DeviceName: "原承载服务器"})
+	secondServerID := createOperationsServer(t, s, PhysicalServer{DeviceName: "新承载服务器"})
+	appID, err := s.CreateApp(&ServerApp{ServerID: firstServerID, AppName: "待迁移系统", Status: "正常运行"})
+	if err != nil {
+		t.Fatalf("创建待迁移应用失败: %v", err)
+	}
+
+	if err := s.UpdateApp(&ServerApp{ID: appID, AppName: "原地更新系统", Status: "正常运行"}); err != nil {
+		t.Fatalf("ServerID=0 更新失败: %v", err)
+	}
+	var serverID int64
+	if err := s.db.QueryRow(`SELECT server_id FROM server_apps WHERE id=?`, appID).Scan(&serverID); err != nil {
+		t.Fatalf("读取原地更新关联失败: %v", err)
+	}
+	if serverID != firstServerID {
+		t.Fatalf("ServerID=0 必须保持原关联，want=%d got=%d", firstServerID, serverID)
+	}
+
+	if err := s.UpdateApp(&ServerApp{ID: appID, ServerID: secondServerID, AppName: "已迁移系统", Status: "正常运行"}); err != nil {
+		t.Fatalf("应用改绑有效服务器失败: %v", err)
+	}
+	var appName string
+	if err := s.db.QueryRow(`SELECT server_id, app_name FROM server_apps WHERE id=?`, appID).Scan(&serverID, &appName); err != nil {
+		t.Fatalf("读取改绑结果失败: %v", err)
+	}
+	if serverID != secondServerID || appName != "已迁移系统" {
+		t.Fatalf("应用应完整改绑到新服务器，server_id=%d app_name=%q", serverID, appName)
+	}
+
+	err = s.UpdateApp(&ServerApp{ID: appID, ServerID: 999999, AppName: "不得写入", Status: "异常"})
+	if err == nil {
+		t.Fatal("改绑不存在服务器必须返回错误")
+	}
+	var status string
+	if err := s.db.QueryRow(`SELECT server_id, app_name, status FROM server_apps WHERE id=?`, appID).Scan(&serverID, &appName, &status); err != nil {
+		t.Fatalf("读取改绑失败后的应用失败: %v", err)
+	}
+	if serverID != secondServerID || appName != "已迁移系统" || status != "正常运行" {
+		t.Fatalf("改绑失败必须保持原记录不变，server_id=%d app_name=%q status=%q", serverID, appName, status)
+	}
+}
+
+func TestLegacyOperationsDeleteServerRemovesAppsAtomically(t *testing.T) {
+	t.Run("删除服务器及关联应用", func(t *testing.T) {
+		s := newLegacyOperationsTestStore(t)
+		serverID := createOperationsServer(t, s, PhysicalServer{DeviceName: "待删除服务器"})
+		appID, err := s.CreateApp(&ServerApp{ServerID: serverID, AppName: "待删除应用"})
+		if err != nil {
+			t.Fatalf("创建关联应用失败: %v", err)
+		}
+		if err := s.DeleteServer(serverID); err != nil {
+			t.Fatalf("删除服务器失败: %v", err)
+		}
+		var count int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM servers WHERE id=?`, serverID).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("服务器未删除，count=%d err=%v", count, err)
+		}
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM server_apps WHERE id=?`, appID).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("关联应用未删除，count=%d err=%v", count, err)
+		}
+	})
+
+	t.Run("不存在服务器返回错误", func(t *testing.T) {
+		s := newLegacyOperationsTestStore(t)
+		if err := s.DeleteServer(999999); err == nil {
+			t.Fatal("删除不存在服务器必须返回错误")
+		}
+	})
+
+	t.Run("中间失败整体回滚", func(t *testing.T) {
+		s := newLegacyOperationsTestStore(t)
+		serverID := createOperationsServer(t, s, PhysicalServer{DeviceName: "回滚服务器"})
+		appID, err := s.CreateApp(&ServerApp{ServerID: serverID, AppName: "回滚应用"})
+		if err != nil {
+			t.Fatalf("创建回滚测试应用失败: %v", err)
+		}
+		mustOperationsExec(t, s, `CREATE TRIGGER reject_server_delete BEFORE DELETE ON servers
+			BEGIN SELECT RAISE(ABORT, '拒绝删除服务器'); END`)
+		if err := s.DeleteServer(serverID); err == nil {
+			t.Fatal("服务器删除中间失败必须返回错误")
+		}
+		var count int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM servers WHERE id=?`, serverID).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("失败后服务器必须保留，count=%d err=%v", count, err)
+		}
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM server_apps WHERE id=?`, appID).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("失败后关联应用删除必须回滚，count=%d err=%v", count, err)
+		}
+	})
+}
+
 func TestLegacyOperationsQueryLogsFiltersAndPaginates(t *testing.T) {
 	s := newLegacyOperationsTestStore(t)
 	mustOperationsExec(t, s, `INSERT INTO asset_logs
