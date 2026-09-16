@@ -83,6 +83,38 @@ func TestLegacyAssetDeleteRejectsMalformedJSONWithoutArchiving(t *testing.T) {
 	}
 }
 
+func TestLegacyAssetDeleteRejectsTrailingJSONWithoutArchiving(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "第二个JSON对象", body: `{} {}`},
+		{name: "合法对象后有垃圾", body: `{"reason":"注销"} trailing`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, st, mux := newLegacyHandlerTestServer(t)
+			id, err := st.CreateAsset(&store.Asset{AssetCode: "DELETE-TRAILING", Status: "在用"}, "测试")
+			if err != nil {
+				t.Fatalf("准备资产失败: %v", err)
+			}
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, "/api/assets/"+strconv.FormatInt(id, 10), bytes.NewBufferString(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("尾随内容必须返回 400，实际 %d，响应 %s", rec.Code, rec.Body.String())
+			}
+			asset, logs, err := st.GetAsset(id)
+			if err != nil {
+				t.Fatalf("读取拒绝后的资产失败: %v", err)
+			}
+			if asset.Status != "在用" || len(logs) != 0 {
+				t.Fatalf("尾随内容不得继续归档: asset=%+v logs=%+v", asset, logs)
+			}
+		})
+	}
+}
+
 func TestLegacyAssetExportUsesListFiltersAndIncludeArchived(t *testing.T) {
 	_, st, mux := newLegacyHandlerTestServer(t)
 	for _, asset := range []store.Asset{

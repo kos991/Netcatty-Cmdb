@@ -234,7 +234,12 @@ func (s *Server) handleDeleteAsset(w http.ResponseWriter, r *http.Request) {
 		Reason   string `json:"reason"`
 		Operator string `json:"operator"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体解析失败")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		writeErr(w, http.StatusBadRequest, "请求体解析失败")
 		return
 	}

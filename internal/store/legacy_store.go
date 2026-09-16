@@ -371,7 +371,7 @@ func (s *Store) Maintenance(id int64, req MaintenanceReq) error {
 		oldSN = strings.TrimSpace(asset.DisplaySN)
 	}
 	payloadOldSN := strings.TrimSpace(req.OldSN)
-	if (partType == "box" || partType == "display") && payloadOldSN != "" && payloadOldSN != oldSN {
+	if (partType == "box" || partType == "display") && payloadOldSN != oldSN {
 		return fmt.Errorf("资产旧SN已变化，当前为 %s，请刷新后重试", oldSN)
 	}
 	newSN := strings.TrimSpace(req.NewSN)

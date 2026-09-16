@@ -341,6 +341,31 @@ func TestLegacyAssetMaintenanceUpdatesPartsInventoryLogAndMappedRecord(t *testin
 }
 
 func TestLegacyAssetMaintenanceRejectsStaleAndDuplicatePartRequests(t *testing.T) {
+	t.Run("页面旧SN为空但库中已变非空时拒绝且不写入", func(t *testing.T) {
+		s := newLegacyAssetTestStore(t)
+		id := createLegacyAsset(t, s, Asset{AssetCode: "STALE-EMPTY", BoxSN: "", Status: "在用"})
+		mustLegacyExec(t, s, `UPDATE assets SET box_sn='BOX-CURRENT' WHERE id=?`, id)
+
+		err := s.Maintenance(id, MaintenanceReq{
+			PartType: "box", OldSN: "", NewSN: "BOX-NEW",
+			NewStatus: "维修中", MarkOldAs: "故障待修入库", Description: "空快照陈旧提交",
+		})
+		if err == nil || !strings.Contains(err.Error(), "旧SN") {
+			t.Fatalf("页面空 old_sn 与当前非空 SN 不一致时必须报错，实际 %v", err)
+		}
+		asset, logs, getErr := s.GetAsset(id)
+		if getErr != nil {
+			t.Fatalf("读取拒绝后的资产失败: %v", getErr)
+		}
+		if asset.BoxSN != "BOX-CURRENT" || asset.Status != "在用" || len(logs) != 0 {
+			t.Fatalf("空快照陈旧请求不得更新主表或履历: asset=%+v logs=%+v", asset, logs)
+		}
+		assets, listErr := s.AllAssets()
+		if listErr != nil || len(assets) != 1 {
+			t.Fatalf("空快照陈旧请求不得生成旧件: assets=%+v err=%v", assets, listErr)
+		}
+	})
+
 	t.Run("陈旧旧SN不写主表旧件或履历", func(t *testing.T) {
 		s := newLegacyAssetTestStore(t)
 		id := createLegacyAsset(t, s, Asset{AssetCode: "STALE-BOX", BoxSN: "BOX-CURRENT", Status: "在用"})
