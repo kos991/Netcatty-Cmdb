@@ -130,6 +130,39 @@ func TestApplyCmdbAssetChangesResolvesOwnerID(t *testing.T) {
 	}
 }
 
+func TestApplyCmdbAssetChangesClearsOwnerIDWhenOwnerChangesAlone(t *testing.T) {
+	s := newCmdbTestStore(t)
+	personID, err := s.CreatePerson(&Person{Name: "原负责人", Department: "原部门"})
+	if err != nil {
+		t.Fatalf("准备人员失败: %v", err)
+	}
+	assetID, err := s.CreateCmdbAssetManual(&CmdbAsset{
+		Name: "人员解绑设备", Owner: "原负责人", OwnerID: personID, Department: "原部门",
+	})
+	if err != nil {
+		t.Fatalf("准备资产失败: %v", err)
+	}
+
+	newOwner := "批量文本负责人"
+	if _, err := s.ApplyCmdbAssetChanges([]int64{assetID}, CmdbAssetChanges{Owner: &newOwner}); err != nil {
+		t.Fatalf("修改文本负责人失败: %v", err)
+	}
+	got, _, err := s.GetCmdbAsset(assetID)
+	if err != nil {
+		t.Fatalf("读取资产失败: %v", err)
+	}
+	if got.Owner != newOwner || got.OwnerID != 0 {
+		t.Fatalf("仅修改文本负责人时必须清除旧人员绑定: %+v", got)
+	}
+	_, assets, err := s.GetPersonAssets(personID)
+	if err != nil {
+		t.Fatalf("查询旧人员名下资产失败: %v", err)
+	}
+	if len(assets) != 0 {
+		t.Fatalf("解绑后资产不应继续出现在旧人员名下: %+v", assets)
+	}
+}
+
 func TestApplyCmdbAssetChangesRollsBackBatch(t *testing.T) {
 	s := newCmdbTestStore(t)
 	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "事务设备", Status: "在库"})
@@ -187,6 +220,68 @@ func TestApplyCmdbAssetChangesRollsBackWhenSourceWriteFails(t *testing.T) {
 	assets, err := s.AllAssets()
 	if err != nil || len(assets) != 1 || assets[0].UserName != "原使用人" {
 		t.Fatalf("源台账应保持不变: assets=%+v err=%v", assets, err)
+	}
+}
+
+func TestApplyCmdbAssetChangesRollsBackWhenMappedSourceIsMissing(t *testing.T) {
+	tests := []struct {
+		name       string
+		sourceType string
+		prepare    func(*testing.T, *Store)
+		table      string
+	}{
+		{
+			name:       "旧终端台账",
+			sourceType: "legacy_asset",
+			prepare: func(t *testing.T, s *Store) {
+				t.Helper()
+				if _, err := s.CreateAsset(&Asset{AssetCode: "ZC-MISSING", UserName: "原使用人", Status: "在用"}, "测试"); err != nil {
+					t.Fatalf("准备终端失败: %v", err)
+				}
+			},
+			table: "assets",
+		},
+		{
+			name:       "旧服务器台账",
+			sourceType: "legacy_server",
+			prepare: func(t *testing.T, s *Store) {
+				t.Helper()
+				if _, err := s.CreateServer(&PhysicalServer{DeviceName: "缺失来源服务器", AdminUser: "原管理员", Status: "运行中"}, "测试"); err != nil {
+					t.Fatalf("准备服务器失败: %v", err)
+				}
+			},
+			table: "servers",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newCmdbTestStore(t)
+			tt.prepare(t, s)
+			if _, err := s.SyncLegacyToCmdb(); err != nil {
+				t.Fatalf("同步失败: %v", err)
+			}
+			row := findCmdbBySource(t, s, tt.sourceType)
+			if _, err := s.db.Exec("DELETE FROM "+tt.table+" WHERE id = ?", row.SourceID); err != nil {
+				t.Fatalf("删除来源行失败: %v", err)
+			}
+
+			newOwner := "不应提交的负责人"
+			n, err := s.ApplyCmdbAssetChanges([]int64{row.ID}, CmdbAssetChanges{Owner: &newOwner})
+			if err == nil || !strings.Contains(err.Error(), "来源记录") || !strings.Contains(err.Error(), "不存在") {
+				t.Fatalf("来源行不存在时必须返回明确错误，实际 %v", err)
+			}
+			if n != 0 {
+				t.Fatalf("事务失败时已应用条数应为 0，实际 %d", n)
+			}
+			got, _, getErr := s.GetCmdbAsset(row.ID)
+			if getErr != nil {
+				t.Fatalf("读取 CMDB 资产失败: %v", getErr)
+			}
+			if got.Owner != row.Owner || got.OwnerID != row.OwnerID {
+				t.Fatalf("来源缺失时 CMDB 变更必须回滚: before=%+v after=%+v", row, got)
+			}
+		})
 	}
 }
 

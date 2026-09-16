@@ -133,6 +133,20 @@ func cmdbStatusToLegacyServer(s string) string {
 	}
 }
 
+func verifyLegacyWrite(asset *CmdbAsset, result sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return fmt.Errorf("来源记录 %s/%d 不存在", asset.SourceType, asset.SourceID)
+	}
+	return nil
+}
+
 // writeThroughToLegacy 把可映射字段反向写回源台账。
 func writeThroughToLegacy(tx *sql.Tx, asset *CmdbAsset, ch CmdbAssetChanges) error {
 	if asset.SourceID <= 0 {
@@ -172,8 +186,8 @@ func writeThroughToLegacy(tx *sql.Tx, asset *CmdbAsset, ch CmdbAssetChanges) err
 			return nil
 		}
 		args = append(args, now, asset.SourceID)
-		_, err := tx.Exec("UPDATE assets SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
-		return err
+		result, err := tx.Exec("UPDATE assets SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
+		return verifyLegacyWrite(asset, result, err)
 
 	case "legacy_server":
 		if v, ok := str(ch.Name); ok {
@@ -195,8 +209,8 @@ func writeThroughToLegacy(tx *sql.Tx, asset *CmdbAsset, ch CmdbAssetChanges) err
 			return nil
 		}
 		args = append(args, now, asset.SourceID)
-		_, err := tx.Exec("UPDATE servers SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
-		return err
+		result, err := tx.Exec("UPDATE servers SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
+		return verifyLegacyWrite(asset, result, err)
 	}
 	return nil
 }
@@ -232,6 +246,10 @@ func (s *Store) ApplyCmdbAssetChanges(ids []int64, ch CmdbAssetChanges) (int, er
 	}
 	defer tx.Rollback()
 
+	if ch.Owner != nil && ch.OwnerID == nil {
+		ownerID := int64(0)
+		ch.OwnerID = &ownerID
+	}
 	if ch.OwnerID != nil && *ch.OwnerID != 0 {
 		var owner, department string
 		err := tx.QueryRow("SELECT name, department FROM cmdb_persons WHERE id = ?", *ch.OwnerID).Scan(&owner, &department)
