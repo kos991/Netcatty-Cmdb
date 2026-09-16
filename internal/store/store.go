@@ -148,18 +148,42 @@ func (s *Store) InitSchema() error {
 		server_id INTEGER,
 		app_name TEXT,
 		app_type TEXT,
+		port TEXT,
 		access_url TEXT,
+		middleware TEXT,
+		database_info TEXT,
+		owner TEXT,
 		status TEXT,
 		remark TEXT,
 		created_at TEXT,
 		updated_at TEXT
 	);
-
-	CREATE INDEX IF NOT EXISTS idx_server_apps_server ON server_apps(server_id);
-	CREATE INDEX IF NOT EXISTS idx_server_apps_name ON server_apps(app_name);
 	`
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("init schema: %w", err)
+	}
+	serverAppColumns := map[string]string{
+		"server_id":     "INTEGER",
+		"app_name":      "TEXT",
+		"app_type":      "TEXT",
+		"port":          "TEXT DEFAULT ''",
+		"access_url":    "TEXT DEFAULT ''",
+		"middleware":    "TEXT DEFAULT ''",
+		"database_info": "TEXT DEFAULT ''",
+		"owner":         "TEXT DEFAULT ''",
+		"status":        "TEXT DEFAULT ''",
+		"remark":        "TEXT DEFAULT ''",
+		"created_at":    "TEXT DEFAULT ''",
+		"updated_at":    "TEXT DEFAULT ''",
+	}
+	if err := addMissingColumns(s.db, "server_apps", serverAppColumns); err != nil {
+		return fmt.Errorf("migrate server_apps columns: %w", err)
+	}
+	if _, err := s.db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_server_apps_server ON server_apps(server_id);
+		CREATE INDEX IF NOT EXISTS idx_server_apps_name ON server_apps(app_name);
+	`); err != nil {
+		return fmt.Errorf("init server_apps indexes: %w", err)
 	}
 	if err := s.InitIPSubnetSchema(); err != nil {
 		return fmt.Errorf("init ip subnet schema: %w", err)

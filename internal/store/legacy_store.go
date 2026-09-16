@@ -205,7 +205,8 @@ func (s *Store) GetAssetRelations(id int64) (map[string]interface{}, error) {
 
 	apps := make([]ServerApp, 0)
 	rows, err = s.db.Query(`SELECT app.id, app.server_id, IFNULL(app.app_name,''), IFNULL(app.app_type,''),
-		'', '', IFNULL(app.status,''), IFNULL(app.remark,''), IFNULL(app.created_at,''), IFNULL(app.updated_at,'')
+		IFNULL(app.port,''), IFNULL(app.access_url,''), IFNULL(app.middleware,''), IFNULL(app.database_info,''),
+		IFNULL(app.owner,''), IFNULL(app.status,''), IFNULL(app.remark,''), IFNULL(app.created_at,''), IFNULL(app.updated_at,'')
 		FROM server_apps app JOIN servers server ON server.id = app.server_id
 		WHERE (? <> '' AND (server.mgmt_ip = ? OR server.biz_ip = ?)) OR (? <> '' AND (server.mgmt_ip = ? OR server.biz_ip = ?))
 		ORDER BY app.id`, asset.IP, asset.IP, asset.IP, asset.TerminalIP, asset.TerminalIP, asset.TerminalIP)
@@ -215,8 +216,7 @@ func (s *Store) GetAssetRelations(id int64) (map[string]interface{}, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var app ServerApp
-		if err := rows.Scan(&app.ID, &app.ServerID, &app.AppName, &app.AppType, &app.Port, &app.Version,
-			&app.Status, &app.Description, &app.CreatedAt, &app.UpdatedAt); err != nil {
+		if err := scanServerApp(rows, &app); err != nil {
 			return nil, err
 		}
 		apps = append(apps, app)
@@ -504,11 +504,56 @@ func formatAssetLocation(department, room string) string {
 }
 
 func (s *Store) QueryServers(kw, loc, status string, page, pageSize int) ([]PhysicalServer, int, error) {
-	list, err := s.AllServers()
+	page, pageSize = normalizeLegacyPage(page, pageSize)
+	where := []string{"1=1"}
+	args := make([]interface{}, 0, 10)
+	if kw = strings.TrimSpace(kw); kw != "" {
+		pattern := "%" + kw + "%"
+		where = append(where, `(asset_code LIKE ? OR device_name LIKE ? OR brand_model LIKE ? OR serial_number LIKE ?
+			OR mgmt_ip LIKE ? OR biz_ip LIKE ? OR admin_user LIKE ?)`)
+		for i := 0; i < 7; i++ {
+			args = append(args, pattern)
+		}
+	}
+	if loc = strings.TrimSpace(loc); loc != "" {
+		where = append(where, "location = ?")
+		args = append(args, loc)
+	}
+	if status = strings.TrimSpace(status); status != "" {
+		where = append(where, "status = ?")
+		args = append(args, status)
+	}
+	whereSQL := strings.Join(where, " AND ")
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM servers WHERE `+whereSQL, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	queryArgs := append(append([]interface{}{}, args...), pageSize, (page-1)*pageSize)
+	rows, err := s.db.Query(`SELECT id, IFNULL(asset_code,''), IFNULL(device_name,''), IFNULL(brand_model,''),
+		IFNULL(serial_number,''), IFNULL(location,''), IFNULL(rack_unit,''), IFNULL(cpu_info,''),
+		IFNULL(memory_info,''), IFNULL(disk_info,''), IFNULL(mgmt_ip,''), IFNULL(mgmt_url,''),
+		IFNULL(biz_ip,''), IFNULL(os_type,''), IFNULL(admin_user,''), IFNULL(status,''),
+		IFNULL(purchase_date,''), IFNULL(warranty_date,''), IFNULL(remark,''), IFNULL(created_at,''), IFNULL(updated_at,'')
+		FROM servers WHERE `+whereSQL+` ORDER BY id DESC LIMIT ? OFFSET ?`, queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
-	return list, len(list), nil
+	defer rows.Close()
+	list := make([]PhysicalServer, 0)
+	for rows.Next() {
+		var server PhysicalServer
+		if err := rows.Scan(&server.ID, &server.AssetCode, &server.DeviceName, &server.BrandModel, &server.SerialNumber,
+			&server.Location, &server.RackUnit, &server.CPUInfo, &server.MemoryInfo, &server.DiskInfo, &server.MgmtIP,
+			&server.MgmtURL, &server.BizIP, &server.OSType, &server.AdminUser, &server.Status, &server.PurchaseDate,
+			&server.WarrantyDate, &server.Remark, &server.CreatedAt, &server.UpdatedAt); err != nil {
+			return nil, 0, err
+		}
+		list = append(list, server)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
 }
 
 func (s *Store) GetServer(id int64) (*PhysicalServer, []ServerApp, error) {
@@ -519,7 +564,11 @@ func (s *Store) GetServer(id int64) (*PhysicalServer, []ServerApp, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return &srv, []ServerApp{}, nil
+	apps, err := s.GetAppsByServerID(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &srv, apps, nil
 }
 
 func (s *Store) CreateServer(srv *PhysicalServer, operator string) (int64, error) {
@@ -548,27 +597,217 @@ func (s *Store) DeleteServer(id int64) error {
 }
 
 func (s *Store) GetAppsByServerID(id int64) ([]ServerApp, error) {
-	return []ServerApp{}, nil
+	var exists int
+	if err := s.db.QueryRow(`SELECT 1 FROM servers WHERE id = ?`, id).Scan(&exists); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT id, server_id, IFNULL(app_name,''), IFNULL(app_type,''),
+		IFNULL(port,''), IFNULL(access_url,''), IFNULL(middleware,''), IFNULL(database_info,''),
+		IFNULL(owner,''), IFNULL(status,''), IFNULL(remark,''), IFNULL(created_at,''), IFNULL(updated_at,'')
+		FROM server_apps WHERE server_id = ? ORDER BY id DESC`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	apps := make([]ServerApp, 0)
+	for rows.Next() {
+		var app ServerApp
+		if err := scanServerApp(rows, &app); err != nil {
+			return nil, err
+		}
+		apps = append(apps, app)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return apps, nil
 }
 
 func (s *Store) CreateApp(app *ServerApp) (int64, error) {
-	return 1, nil
+	if app == nil {
+		return 0, fmt.Errorf("应用信息不能为空")
+	}
+	app.AppName = strings.TrimSpace(app.AppName)
+	if app.AppName == "" {
+		return 0, fmt.Errorf("应用名称不能为空")
+	}
+	var exists int
+	if err := s.db.QueryRow(`SELECT 1 FROM servers WHERE id = ?`, app.ServerID).Scan(&exists); err != nil {
+		return 0, err
+	}
+	applyLegacyServerAppFallbacks(app)
+	now := time.Now().Format("2006-01-02 15:04:05")
+	result, err := s.db.Exec(`INSERT INTO server_apps
+		(server_id, app_name, app_type, port, access_url, middleware, database_info, owner, status, remark, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, app.ServerID, app.AppName, app.AppType, app.Port,
+		app.AccessURL, app.Middleware, app.DatabaseInfo, app.Owner, app.Status, app.Remark, now, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 func (s *Store) UpdateApp(app *ServerApp) error {
-	return nil
+	if app == nil {
+		return fmt.Errorf("应用信息不能为空")
+	}
+	app.AppName = strings.TrimSpace(app.AppName)
+	if app.AppName == "" {
+		return fmt.Errorf("应用名称不能为空")
+	}
+	applyLegacyServerAppFallbacks(app)
+	now := time.Now().Format("2006-01-02 15:04:05")
+	result, err := s.db.Exec(`UPDATE server_apps SET app_name=?, app_type=?, port=?, access_url=?, middleware=?,
+		database_info=?, owner=?, status=?, remark=?, updated_at=? WHERE id=?`, app.AppName, app.AppType, app.Port,
+		app.AccessURL, app.Middleware, app.DatabaseInfo, app.Owner, app.Status, app.Remark, now, app.ID)
+	if err != nil {
+		return err
+	}
+	return requireAffected(result, "应用不存在")
 }
 
 func (s *Store) DeleteApp(id int64) error {
-	return nil
+	result, err := s.db.Exec(`DELETE FROM server_apps WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	return requireAffected(result, "应用不存在")
 }
 
 func (s *Store) QueryAllApps(kw, appType, status string, page, pageSize int) ([]ServerApp, int, error) {
-	return []ServerApp{}, 0, nil
+	page, pageSize = normalizeLegacyPage(page, pageSize)
+	where := []string{"1=1"}
+	args := make([]interface{}, 0, 10)
+	if kw = strings.TrimSpace(kw); kw != "" {
+		pattern := "%" + kw + "%"
+		where = append(where, `(app.app_name LIKE ? OR app.app_type LIKE ? OR app.access_url LIKE ?
+			OR app.middleware LIKE ? OR app.database_info LIKE ? OR app.owner LIKE ? OR app.remark LIKE ?)`)
+		for i := 0; i < 7; i++ {
+			args = append(args, pattern)
+		}
+	}
+	if appType = strings.TrimSpace(appType); appType != "" {
+		where = append(where, "app.app_type = ?")
+		args = append(args, appType)
+	}
+	if status = strings.TrimSpace(status); status != "" {
+		where = append(where, "app.status = ?")
+		args = append(args, status)
+	}
+	whereSQL := strings.Join(where, " AND ")
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM server_apps app WHERE `+whereSQL, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	queryArgs := append(append([]interface{}{}, args...), pageSize, (page-1)*pageSize)
+	rows, err := s.db.Query(`SELECT app.id, app.server_id, IFNULL(app.app_name,''), IFNULL(app.app_type,''),
+		IFNULL(app.port,''), IFNULL(app.access_url,''), IFNULL(app.middleware,''), IFNULL(app.database_info,''),
+		IFNULL(app.owner,''), IFNULL(app.status,''), IFNULL(app.remark,''), IFNULL(app.created_at,''), IFNULL(app.updated_at,''),
+		IFNULL(server.device_name,''), IFNULL(server.biz_ip,'')
+		FROM server_apps app LEFT JOIN servers server ON server.id = app.server_id
+		WHERE `+whereSQL+` ORDER BY app.id DESC LIMIT ? OFFSET ?`, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	apps := make([]ServerApp, 0)
+	for rows.Next() {
+		var app ServerApp
+		if err := rows.Scan(&app.ID, &app.ServerID, &app.AppName, &app.AppType, &app.Port, &app.AccessURL,
+			&app.Middleware, &app.DatabaseInfo, &app.Owner, &app.Status, &app.Remark, &app.CreatedAt,
+			&app.UpdatedAt, &app.ServerName, &app.ServerBizIP); err != nil {
+			return nil, 0, err
+		}
+		setLegacyServerAppFields(&app)
+		apps = append(apps, app)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return apps, total, nil
 }
 
 func (s *Store) QueryLogs(assetID int64, logType, kw string, page, pageSize int) ([]AssetLog, int, error) {
-	return []AssetLog{}, 0, nil
+	page, pageSize = normalizeLegacyPage(page, pageSize)
+	where := []string{"1=1"}
+	args := make([]interface{}, 0, 12)
+	if assetID > 0 {
+		where = append(where, "asset_id = ?")
+		args = append(args, assetID)
+	}
+	if logType = strings.TrimSpace(logType); logType != "" {
+		where = append(where, "log_type = ?")
+		args = append(args, logType)
+	}
+	if kw = strings.TrimSpace(kw); kw != "" {
+		pattern := "%" + kw + "%"
+		where = append(where, `(description LIKE ? OR operator LIKE ? OR from_user LIKE ? OR to_user LIKE ?
+			OR from_location LIKE ? OR to_location LIKE ? OR old_sn LIKE ? OR new_sn LIKE ?)`)
+		for i := 0; i < 8; i++ {
+			args = append(args, pattern)
+		}
+	}
+	whereSQL := strings.Join(where, " AND ")
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM asset_logs WHERE `+whereSQL, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	queryArgs := append(append([]interface{}{}, args...), pageSize, (page-1)*pageSize)
+	rows, err := s.db.Query(`SELECT id, asset_id, IFNULL(log_type,''), IFNULL(from_user,''), IFNULL(to_user,''),
+		IFNULL(from_location,''), IFNULL(to_location,''), IFNULL(old_sn,''), IFNULL(new_sn,''),
+		IFNULL(operator,''), IFNULL(description,''), IFNULL(log_time,'')
+		FROM asset_logs WHERE `+whereSQL+` ORDER BY log_time DESC, id DESC LIMIT ? OFFSET ?`, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	logs := make([]AssetLog, 0)
+	for rows.Next() {
+		var log AssetLog
+		if err := rows.Scan(&log.ID, &log.AssetID, &log.LogType, &log.FromUser, &log.ToUser,
+			&log.FromLocation, &log.ToLocation, &log.OldSN, &log.NewSN, &log.Operator,
+			&log.Description, &log.LogTime); err != nil {
+			return nil, 0, err
+		}
+		logs = append(logs, log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return logs, total, nil
+}
+
+func normalizeLegacyPage(page, pageSize int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 500 {
+		pageSize = 20
+	}
+	return page, pageSize
+}
+
+func scanServerApp(scanner interface{ Scan(...interface{}) error }, app *ServerApp) error {
+	if err := scanner.Scan(&app.ID, &app.ServerID, &app.AppName, &app.AppType, &app.Port, &app.AccessURL,
+		&app.Middleware, &app.DatabaseInfo, &app.Owner, &app.Status, &app.Remark, &app.CreatedAt, &app.UpdatedAt); err != nil {
+		return err
+	}
+	setLegacyServerAppFields(app)
+	return nil
+}
+
+func applyLegacyServerAppFallbacks(app *ServerApp) {
+	if app.Middleware == "" {
+		app.Middleware = app.Version
+	}
+	if app.Remark == "" {
+		app.Remark = app.Description
+	}
+}
+
+func setLegacyServerAppFields(app *ServerApp) {
+	app.Version = app.Middleware
+	app.Description = app.Remark
 }
 
 func (s *Store) GlobalSearch(q string, limit int) ([]SearchResult, error) {

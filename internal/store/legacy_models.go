@@ -45,16 +45,23 @@ type PhysicalServer struct {
 }
 
 type ServerApp struct {
-	ID          int64  `json:"id"`
-	ServerID    int64  `json:"server_id"`
-	AppName     string `json:"app_name"`
-	AppType     string `json:"app_type"`
-	Port        string `json:"port"`
-	Version     string `json:"version"`
-	Status      string `json:"status"`
-	Description string `json:"description"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID           int64  `json:"id"`
+	ServerID     int64  `json:"server_id"`
+	AppName      string `json:"app_name"`
+	AppType      string `json:"app_type"`
+	Port         string `json:"port"`
+	AccessURL    string `json:"access_url"`
+	Middleware   string `json:"middleware"`
+	DatabaseInfo string `json:"database_info"`
+	Owner        string `json:"owner"`
+	Status       string `json:"status"`
+	Remark       string `json:"remark"`
+	Version      string `json:"version"`
+	Description  string `json:"description"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	ServerName   string `json:"server_name"`
+	ServerBizIP  string `json:"server_biz_ip"`
 }
 
 type AssetLog struct {
