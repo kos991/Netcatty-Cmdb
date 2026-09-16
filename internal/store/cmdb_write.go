@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,25 +23,35 @@ import (
 
 // CmdbAssetChanges 用指针区分「未提供」与「置为空」。
 type CmdbAssetChanges struct {
-	Status      *string `json:"status"`
-	OrgID       *int64  `json:"org_id"`
-	GroupID     *int64  `json:"group_id"`
-	CategoryID  *int64  `json:"category_id"`
-	Department  *string `json:"department"`
-	Owner       *string `json:"owner"`
-	DataCenter  *string `json:"data_center"`
-	Floor       *string `json:"floor"`
-	CabinetName *string `json:"cabinet_name"`
-	Remark      *string `json:"remark"`
+	Name         *string                 `json:"name"`
+	DeviceType   *string                 `json:"device_type"`
+	Status       *string                 `json:"status"`
+	OrgID        *int64                  `json:"org_id"`
+	GroupID      *int64                  `json:"group_id"`
+	CategoryID   *int64                  `json:"category_id"`
+	Department   *string                 `json:"department"`
+	Owner        *string                 `json:"owner"`
+	OwnerID      *int64                  `json:"owner_id"`
+	DataCenter   *string                 `json:"data_center"`
+	Floor        *string                 `json:"floor"`
+	CabinetName  *string                 `json:"cabinet_name"`
+	Remark       *string                 `json:"remark"`
+	CustomFields *map[string]interface{} `json:"custom_fields"`
 }
 
 // 列名全部为字面量，不接受外部输入，杜绝注入。
-func (c CmdbAssetChanges) build() (string, []interface{}) {
+func (c CmdbAssetChanges) build() (string, []interface{}, error) {
 	var sets []string
 	var args []interface{}
 	add := func(col string, val interface{}) {
 		sets = append(sets, col+" = ?")
 		args = append(args, val)
+	}
+	if c.Name != nil {
+		add("name", *c.Name)
+	}
+	if c.DeviceType != nil {
+		add("device_type", *c.DeviceType)
 	}
 	if c.Status != nil {
 		add("status", *c.Status)
@@ -60,6 +71,9 @@ func (c CmdbAssetChanges) build() (string, []interface{}) {
 	if c.Owner != nil {
 		add("owner", *c.Owner)
 	}
+	if c.OwnerID != nil {
+		add("owner_id", *c.OwnerID)
+	}
 	if c.DataCenter != nil {
 		add("data_center", *c.DataCenter)
 	}
@@ -72,12 +86,21 @@ func (c CmdbAssetChanges) build() (string, []interface{}) {
 	if c.Remark != nil {
 		add("remark", *c.Remark)
 	}
-	return strings.Join(sets, ", "), args
+	if c.CustomFields != nil {
+		encoded, err := json.Marshal(*c.CustomFields)
+		if err != nil {
+			return "", nil, fmt.Errorf("自定义字段序列化失败: %w", err)
+		}
+		add("custom_fields", string(encoded))
+	}
+	return strings.Join(sets, ", "), args, nil
 }
 
 func (c CmdbAssetChanges) isEmpty() bool {
-	clause, _ := c.build()
-	return clause == ""
+	return c.Name == nil && c.DeviceType == nil && c.Status == nil && c.OrgID == nil &&
+		c.GroupID == nil && c.CategoryID == nil && c.Department == nil && c.Owner == nil &&
+		c.OwnerID == nil && c.DataCenter == nil && c.Floor == nil && c.CabinetName == nil &&
+		c.Remark == nil && c.CustomFields == nil
 }
 
 // CMDB 状态 → 旧终端台账状态
@@ -111,7 +134,7 @@ func cmdbStatusToLegacyServer(s string) string {
 }
 
 // writeThroughToLegacy 把可映射字段反向写回源台账。
-func (s *Store) writeThroughToLegacy(asset *CmdbAsset, ch CmdbAssetChanges) error {
+func writeThroughToLegacy(tx *sql.Tx, asset *CmdbAsset, ch CmdbAssetChanges) error {
 	if asset.SourceID <= 0 {
 		return nil // 纯 CMDB 记录，没有源台账
 	}
@@ -149,10 +172,13 @@ func (s *Store) writeThroughToLegacy(asset *CmdbAsset, ch CmdbAssetChanges) erro
 			return nil
 		}
 		args = append(args, now, asset.SourceID)
-		_, err := s.db.Exec("UPDATE assets SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
+		_, err := tx.Exec("UPDATE assets SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
 		return err
 
 	case "legacy_server":
+		if v, ok := str(ch.Name); ok {
+			add("device_name", v)
+		}
 		if v, ok := str(ch.Owner); ok {
 			add("admin_user", v)
 		}
@@ -169,7 +195,7 @@ func (s *Store) writeThroughToLegacy(asset *CmdbAsset, ch CmdbAssetChanges) erro
 			return nil
 		}
 		args = append(args, now, asset.SourceID)
-		_, err := s.db.Exec("UPDATE servers SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
+		_, err := tx.Exec("UPDATE servers SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
 		return err
 	}
 	return nil
@@ -200,25 +226,55 @@ func (s *Store) ApplyCmdbAssetChanges(ids []int64, ch CmdbAssetChanges) (int, er
 	if ch.isEmpty() {
 		return 0, fmt.Errorf("请至少填写一个需要变更的字段")
 	}
-	setClause, args := ch.build()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	if ch.OwnerID != nil && *ch.OwnerID != 0 {
+		var owner, department string
+		err := tx.QueryRow("SELECT name, department FROM cmdb_persons WHERE id = ?", *ch.OwnerID).Scan(&owner, &department)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("人员 %d 不存在", *ch.OwnerID)
+		}
+		if err != nil {
+			return 0, err
+		}
+		if ch.Owner == nil {
+			ch.Owner = &owner
+			if ch.Department == nil {
+				ch.Department = &department
+			}
+		}
+	}
+	setClause, args, err := ch.build()
+	if err != nil {
+		return 0, err
+	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 
-	applied := 0
 	for _, id := range ids {
-		cur, _, err := s.GetCmdbAsset(id)
+		cur := &CmdbAsset{ID: id}
+		err := tx.QueryRow("SELECT source_type, source_id FROM cmdb_assets WHERE id = ?", id).Scan(&cur.SourceType, &cur.SourceID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("资产 %d 不存在", id)
+		}
 		if err != nil {
-			return applied, fmt.Errorf("资产 %d 不存在", id)
+			return 0, err
 		}
 		q := "UPDATE cmdb_assets SET " + setClause + ", updated_at = ? WHERE id = ?"
-		if _, err := s.db.Exec(q, append(append([]interface{}{}, args...), now, id)...); err != nil {
-			return applied, err
+		if _, err := tx.Exec(q, append(append([]interface{}{}, args...), now, id)...); err != nil {
+			return 0, err
 		}
-		if err := s.writeThroughToLegacy(cur, ch); err != nil {
-			return applied, err
+		if err := writeThroughToLegacy(tx, cur, ch); err != nil {
+			return 0, err
 		}
-		applied++
 	}
-	return applied, nil
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(ids), nil
 }
 
 // ArchiveCmdbAssets 批量归档：把状态置为「报废」，并同步回源台账。
@@ -670,7 +726,7 @@ func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
 			CabinetName: &a.CabinetName,
 			Remark:      &a.Remark,
 		}
-		if err := s.writeThroughToLegacy(cur, ch); err != nil {
+		if err := writeThroughToLegacy(tx, cur, ch); err != nil {
 			return err
 		}
 	}

@@ -39,6 +39,7 @@ import { cmdbApi } from './cmdbApi'
 import { buildCmdbColumns, CMDB_SORT_FIELD_MAP, CMDB_COLUMNS } from './columns'
 import CmdbTaxonomy from './CmdbTaxonomy'
 import DynamicFieldForm from './DynamicFieldForm'
+import { buildCmdbAssetEditPayload } from './cmdbAssetFormState'
 import CustomFieldCenter from '../modules/customfields/CustomFieldCenter'
 
 const PAGE_SIZE_OPTIONS = ['10', '50', '100', '300']
@@ -316,21 +317,10 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
         })
         message.success('已新增资产')
       } else {
-        await cmdbApi.updateAsset(editingAsset.id, {
-          device_type: v.device_type ?? editingAsset.device_type,
-          status: v.status,
-          department: v.department ?? '',
-          owner: v.owner ?? '',
-          org_id: v.org_id ?? 0,
-          group_id: v.group_id ?? 0,
-          category_id: v.category_id ?? 0,
-          data_center: v.data_center ?? '',
-          floor: v.floor ?? '',
-          cabinet_name: v.cabinet_name ?? '',
-          remark: v.remark ?? '',
-          custom_fields: customFieldValues,
-          owner_id: v.owner_id || 0,
-        })
+        await cmdbApi.updateAsset(
+          editingAsset.id,
+          buildCmdbAssetEditPayload({ ...v, custom_fields: customFieldValues }, editingAsset),
+        )
         message.success(editingAsset.source_id > 0 ? '已保存，并同步写回源台账' : '已保存')
       }
       setAssetFormOpen(false)
@@ -770,7 +760,7 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
                     <Select options={(cmdbMeta.statuses || []).map((s) => ({ value: s, label: s }))} />
                   </Form.Item>
                   {scope === 'infrastructure' && <Form.Item name="device_type" label="资源类型" rules={[{ required: assetFormMode === 'create', message: '请选择资源类型' }]}>
-                    <Select disabled={assetFormMode === 'edit'} options={[
+                    <Select options={[
                       ['server', '服务器'], ['virtual_machine', '虚拟机'], ['switch', '交换机'], ['router', '路由器'], ['security_device', '安全设备'], ['storage', '存储设备'],
                     ].map(([value, label]) => ({ value, label }))} />
                   </Form.Item>}
@@ -826,6 +816,8 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
                             department: opt.person.department,
                             owner_id: opt.person.id,
                           })
+                        } else if (!val) {
+                          assetForm.setFieldValue('owner_id', 0)
                         }
                       }}
                     />

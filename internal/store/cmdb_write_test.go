@@ -7,6 +7,10 @@ import (
 
 func strPtr(s string) *string { return &s }
 
+func int64Ptr(v int64) *int64 { return &v }
+
+func customFieldsPtr(v map[string]interface{}) *map[string]interface{} { return &v }
+
 func findCmdbBySource(t *testing.T, s *Store, sourceType string) *CmdbAsset {
 	t.Helper()
 	list, _, err := s.QueryCmdbAssets(CmdbAssetQuery{Page: 1, PageSize: 50})
@@ -20,6 +24,189 @@ func findCmdbBySource(t *testing.T, s *Store, sourceType string) *CmdbAsset {
 	}
 	t.Fatalf("未找到 source_type=%s 的记录", sourceType)
 	return nil
+}
+
+func TestApplyCmdbAssetChangesPersistsEditorFields(t *testing.T) {
+	s := newCmdbTestStore(t)
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{
+		Name: "原设备", DeviceType: "server", Status: "在库", Department: "原部门", Owner: "原负责人",
+		OrgID: 1, GroupID: 2, CategoryID: 3, DataCenter: "原机房", Floor: "1F", CabinetName: "A01",
+		Remark: "原备注", CustomFields: map[string]interface{}{"old": "value"},
+	})
+	if err != nil {
+		t.Fatalf("准备资产失败: %v", err)
+	}
+
+	customFields := map[string]interface{}{"z": "末项", "a": float64(1)}
+	changes := CmdbAssetChanges{
+		Name: strPtr("新设备"), DeviceType: strPtr("network"), Status: strPtr("在线"),
+		Department: strPtr("技术处"), Owner: strPtr("李四"), OwnerID: int64Ptr(0),
+		OrgID: int64Ptr(11), GroupID: int64Ptr(12), CategoryID: int64Ptr(13),
+		DataCenter: strPtr("主机房"), Floor: strPtr("2F"), CabinetName: strPtr("B02"),
+		Remark: strPtr("新备注"), CustomFields: customFieldsPtr(customFields),
+	}
+	n, err := s.ApplyCmdbAssetChanges([]int64{id}, changes)
+	if err != nil {
+		t.Fatalf("编辑失败: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("应更新 1 条，实际 %d", n)
+	}
+
+	got, _, err := s.GetCmdbAsset(id)
+	if err != nil {
+		t.Fatalf("读取资产失败: %v", err)
+	}
+	if got.Name != "新设备" || got.DeviceType != "network" || got.Status != "在线" ||
+		got.Department != "技术处" || got.Owner != "李四" || got.OwnerID != 0 ||
+		got.OrgID != 11 || got.GroupID != 12 || got.CategoryID != 13 ||
+		got.DataCenter != "主机房" || got.Floor != "2F" || got.CabinetName != "B02" || got.Remark != "新备注" {
+		t.Fatalf("编辑字段未完整持久化: %+v", got)
+	}
+	var raw string
+	if err := s.db.QueryRow("SELECT custom_fields FROM cmdb_assets WHERE id = ?", id).Scan(&raw); err != nil {
+		t.Fatalf("读取自定义字段原文失败: %v", err)
+	}
+	if raw != `{"a":1,"z":"末项"}` {
+		t.Fatalf("自定义字段应稳定序列化，实际 %s", raw)
+	}
+
+	empty := map[string]interface{}{}
+	if _, err := s.ApplyCmdbAssetChanges([]int64{id}, CmdbAssetChanges{CustomFields: &empty}); err != nil {
+		t.Fatalf("清空自定义字段失败: %v", err)
+	}
+	if err := s.db.QueryRow("SELECT custom_fields FROM cmdb_assets WHERE id = ?", id).Scan(&raw); err != nil {
+		t.Fatalf("读取清空后的自定义字段失败: %v", err)
+	}
+	if raw != `{}` {
+		t.Fatalf("空对象应清空自定义字段，实际 %s", raw)
+	}
+}
+
+func TestApplyCmdbAssetChangesResolvesOwnerID(t *testing.T) {
+	s := newCmdbTestStore(t)
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "人员关联设备", Owner: "原负责人", Department: "原部门"})
+	if err != nil {
+		t.Fatalf("准备资产失败: %v", err)
+	}
+	personID, err := s.CreatePerson(&Person{Name: "王五", Department: "信息技术处"})
+	if err != nil {
+		t.Fatalf("准备人员失败: %v", err)
+	}
+
+	if _, err := s.ApplyCmdbAssetChanges([]int64{id}, CmdbAssetChanges{OwnerID: &personID}); err != nil {
+		t.Fatalf("按人员 ID 编辑失败: %v", err)
+	}
+	got, _, _ := s.GetCmdbAsset(id)
+	if got.OwnerID != personID || got.Owner != "王五" || got.Department != "信息技术处" {
+		t.Fatalf("仅提供人员 ID 时应补齐姓名与部门: %+v", got)
+	}
+
+	customOwner := "临时负责人"
+	if _, err := s.ApplyCmdbAssetChanges([]int64{id}, CmdbAssetChanges{OwnerID: &personID, Owner: &customOwner}); err != nil {
+		t.Fatalf("保存明确负责人失败: %v", err)
+	}
+	got, _, _ = s.GetCmdbAsset(id)
+	if got.Owner != customOwner {
+		t.Fatalf("同时提供负责人时应按 payload 保存，实际 %q", got.Owner)
+	}
+
+	zero := int64(0)
+	if _, err := s.ApplyCmdbAssetChanges([]int64{id}, CmdbAssetChanges{OwnerID: &zero}); err != nil {
+		t.Fatalf("清空人员 ID 失败: %v", err)
+	}
+	got, _, _ = s.GetCmdbAsset(id)
+	if got.OwnerID != 0 {
+		t.Fatalf("人员 ID 应可清空为 0，实际 %d", got.OwnerID)
+	}
+
+	missing := personID + 9999
+	if _, err := s.ApplyCmdbAssetChanges([]int64{id}, CmdbAssetChanges{OwnerID: &missing}); err == nil {
+		t.Fatalf("不存在的人员 ID 必须报错")
+	}
+	got, _, _ = s.GetCmdbAsset(id)
+	if got.OwnerID != 0 {
+		t.Fatalf("校验失败后资产不得变化: %+v", got)
+	}
+}
+
+func TestApplyCmdbAssetChangesRollsBackBatch(t *testing.T) {
+	s := newCmdbTestStore(t)
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "事务设备", Status: "在库"})
+	if err != nil {
+		t.Fatalf("准备资产失败: %v", err)
+	}
+
+	newName := "不应提交的名称"
+	n, err := s.ApplyCmdbAssetChanges([]int64{id, id + 9999}, CmdbAssetChanges{Name: &newName})
+	if err == nil {
+		t.Fatalf("批量包含不存在 ID 时必须报错")
+	}
+	if n != 0 {
+		t.Fatalf("事务失败时已应用条数应为 0，实际 %d", n)
+	}
+	got, _, getErr := s.GetCmdbAsset(id)
+	if getErr != nil {
+		t.Fatalf("读取资产失败: %v", getErr)
+	}
+	if got.Name != "事务设备" {
+		t.Fatalf("批量失败后首条更新必须回滚，实际名称 %q", got.Name)
+	}
+}
+
+func TestApplyCmdbAssetChangesRollsBackWhenSourceWriteFails(t *testing.T) {
+	s, err := Open(t.TempDir() + "/cmdb_source_rollback_test.db")
+	if err != nil {
+		t.Fatalf("打开数据库失败: %v", err)
+	}
+	defer s.Close()
+	if _, err := s.CreateAsset(&Asset{AssetCode: "ZC-TX-1", UserName: "原使用人", Status: "在用"}, "测试"); err != nil {
+		t.Fatalf("准备源资产失败: %v", err)
+	}
+	if _, err := s.SyncLegacyToCmdb(); err != nil {
+		t.Fatalf("同步失败: %v", err)
+	}
+	row := findCmdbBySource(t, s, "legacy_asset")
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_legacy_asset_update BEFORE UPDATE ON assets BEGIN SELECT RAISE(ABORT, '拒绝源台账更新'); END`); err != nil {
+		t.Fatalf("准备失败触发器失败: %v", err)
+	}
+
+	newName, newOwner := "不应提交的名称", "不应提交的使用人"
+	if n, err := s.ApplyCmdbAssetChanges([]int64{row.ID}, CmdbAssetChanges{Name: &newName, Owner: &newOwner}); err == nil {
+		t.Fatalf("源台账写入失败时必须返回错误")
+	} else if n != 0 {
+		t.Fatalf("事务失败时已应用条数应为 0，实际 %d", n)
+	}
+	got, _, err := s.GetCmdbAsset(row.ID)
+	if err != nil {
+		t.Fatalf("读取 CMDB 资产失败: %v", err)
+	}
+	if got.Name != row.Name || got.Owner != "原使用人" {
+		t.Fatalf("源台账写入失败时 CMDB 更新必须回滚: %+v", got)
+	}
+	assets, err := s.AllAssets()
+	if err != nil || len(assets) != 1 || assets[0].UserName != "原使用人" {
+		t.Fatalf("源台账应保持不变: assets=%+v err=%v", assets, err)
+	}
+}
+
+func TestApplyCmdbAssetChangesRejectsInvalidCustomFields(t *testing.T) {
+	s := newCmdbTestStore(t)
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "自定义字段设备", CustomFields: map[string]interface{}{"valid": "value"}})
+	if err != nil {
+		t.Fatalf("准备资产失败: %v", err)
+	}
+	invalid := map[string]interface{}{"unsupported": make(chan int)}
+	if _, err := s.ApplyCmdbAssetChanges([]int64{id}, CmdbAssetChanges{CustomFields: &invalid}); err == nil || !strings.Contains(err.Error(), "自定义字段序列化失败") {
+		t.Fatalf("不可编码值必须返回明确错误，实际 %v", err)
+	}
+	var raw string
+	if err := s.db.QueryRow("SELECT custom_fields FROM cmdb_assets WHERE id = ?", id).Scan(&raw); err != nil {
+		t.Fatalf("读取自定义字段失败: %v", err)
+	}
+	if raw != `{"valid":"value"}` {
+		t.Fatalf("序列化失败后原值必须保持不变，实际 %s", raw)
+	}
 }
 
 // 批量编辑映射来的记录时，必须反向写穿回源台账，避免两边分叉。
@@ -53,6 +240,7 @@ func TestCmdbBatchEditWritesThroughToLegacyLedger(t *testing.T) {
 		t.Fatalf("新增组织失败: %v", err)
 	}
 	n, err := s.ApplyCmdbAssetChanges([]int64{assetRow.ID, serverRow.ID}, CmdbAssetChanges{
+		Name:       strPtr("统一资源名称"),
 		Department: strPtr("执行局"),
 		Owner:      strPtr("李四"),
 		Status:     strPtr("维护中"),
@@ -84,8 +272,8 @@ func TestCmdbBatchEditWritesThroughToLegacyLedger(t *testing.T) {
 	if len(servers) != 1 {
 		t.Fatalf("源台账应仍有 1 台服务器，实际 %d", len(servers))
 	}
-	if servers[0].AdminUser != "李四" || servers[0].Status != "维护中" {
-		t.Fatalf("服务器台账未写穿（admin_user/status）: %+v", servers[0])
+	if servers[0].DeviceName != "统一资源名称" || servers[0].AdminUser != "李四" || servers[0].Status != "维护中" {
+		t.Fatalf("服务器台账未写穿（device_name/admin_user/status）: %+v", servers[0])
 	}
 }
 
