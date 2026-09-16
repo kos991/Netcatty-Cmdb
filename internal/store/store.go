@@ -142,6 +142,21 @@ func (s *Store) InitSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_servers_mgmt_ip ON servers(mgmt_ip);
 	CREATE INDEX IF NOT EXISTS idx_servers_biz_ip ON servers(biz_ip);
 	CREATE INDEX IF NOT EXISTS idx_servers_status ON servers(status);
+
+	CREATE TABLE IF NOT EXISTS server_apps (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		server_id INTEGER,
+		app_name TEXT,
+		app_type TEXT,
+		access_url TEXT,
+		status TEXT,
+		remark TEXT,
+		created_at TEXT,
+		updated_at TEXT
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_server_apps_server ON server_apps(server_id);
+	CREATE INDEX IF NOT EXISTS idx_server_apps_name ON server_apps(app_name);
 	`
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("init schema: %w", err)

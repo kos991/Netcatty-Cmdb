@@ -18,19 +18,6 @@ func TestGlobalSearchSixGroups(t *testing.T) {
 	}
 	insertCmdbAsset(t, s, CmdbAsset{Name: keyword + "交换机", CategoryID: switchCategoryID, ManageIP: "10.0.0.12"})
 
-	if _, err := s.db.Exec(`CREATE TABLE server_apps (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		server_id INTEGER,
-		app_name TEXT,
-		app_type TEXT,
-		access_url TEXT,
-		status TEXT,
-		remark TEXT,
-		created_at TEXT,
-		updated_at TEXT
-	)`); err != nil {
-		t.Fatalf("创建业务系统表失败: %v", err)
-	}
 	if _, err := s.db.Exec(`INSERT INTO server_apps(server_id, app_name, app_type, access_url, status, remark) VALUES (0, ?, '审判系统', 'https://10.0.0.13', '正常运行', '')`, keyword+"业务系统"); err != nil {
 		t.Fatalf("插入业务系统失败: %v", err)
 	}
