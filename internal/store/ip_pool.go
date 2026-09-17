@@ -36,7 +36,18 @@ func BoxIPFromRemark(remark string) string {
 // 盒子地址保留在备注中（ip_pool 表结构不可变更），供资产联动使用。
 // 幂等：已是纯 IP 的行不会被再次处理。
 func (s *Store) NormalizeIPPoolIPs() (int, error) {
-	rows, err := s.db.Query(`SELECT id, ip, IFNULL(remark,'') FROM ip_pool`)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.NormalizeIPPoolIPsForProject(scope)
+}
+
+func (s *Store) NormalizeIPPoolIPsForProject(scope ProjectScope) (int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
+	rows, err := s.db.Query(`SELECT id, ip, IFNULL(remark,'') FROM ip_pool WHERE project_id=?`, scope.ProjectID)
 	if err != nil {
 		return 0, err
 	}
@@ -81,7 +92,7 @@ func (s *Store) NormalizeIPPoolIPs() (int, error) {
 	}
 	defer tx.Rollback()
 	for _, f := range fixes {
-		if _, err := tx.Exec(`UPDATE ip_pool SET ip=?, remark=? WHERE id=?`, f.ip, f.remark, f.id); err != nil {
+		if _, err := tx.Exec(`UPDATE ip_pool SET ip=?, remark=? WHERE id=? AND project_id=?`, f.ip, f.remark, f.id, scope.ProjectID); err != nil {
 			return 0, err
 		}
 	}

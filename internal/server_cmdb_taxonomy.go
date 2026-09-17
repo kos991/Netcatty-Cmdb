@@ -10,8 +10,9 @@ import (
 
 // handleListCmdbTaxonomy 返回某维度的全部节点（orgs / groups / categories）。
 func (s *Server) handleListCmdbTaxonomy(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	kind := r.PathValue("kind")
-	list, err := s.Store.ListCmdbTaxonomy(kind)
+	list, err := s.Store.ListCmdbTaxonomyForProject(scope, kind)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -23,6 +24,7 @@ func (s *Server) handleListCmdbTaxonomy(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleCreateCmdbTaxonomy(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	kind := r.PathValue("kind")
 	var body struct {
 		Name      string `json:"name"`
@@ -33,7 +35,7 @@ func (s *Server) handleCreateCmdbTaxonomy(w http.ResponseWriter, r *http.Request
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.CreateCmdbTaxonomy(kind, body.Name, body.ParentID, body.SortOrder)
+	id, err := s.Store.CreateCmdbTaxonomyForProject(scope, kind, body.Name, body.ParentID, body.SortOrder)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -42,6 +44,7 @@ func (s *Server) handleCreateCmdbTaxonomy(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleUpdateCmdbTaxonomy(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	kind := r.PathValue("kind")
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -57,7 +60,7 @@ func (s *Server) handleUpdateCmdbTaxonomy(w http.ResponseWriter, r *http.Request
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	if err := s.Store.UpdateCmdbTaxonomy(kind, id, body.Name, body.ParentID, body.SortOrder); err != nil {
+	if err := s.Store.UpdateCmdbTaxonomyForProject(scope, kind, id, body.Name, body.ParentID, body.SortOrder); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -65,13 +68,14 @@ func (s *Server) handleUpdateCmdbTaxonomy(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleDeleteCmdbTaxonomy(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	kind := r.PathValue("kind")
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, 400, "无效的节点 ID")
 		return
 	}
-	if err := s.Store.DeleteCmdbTaxonomy(kind, id); err != nil {
+	if err := s.Store.DeleteCmdbTaxonomyForProject(scope, kind, id); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}

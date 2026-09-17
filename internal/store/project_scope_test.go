@@ -222,6 +222,39 @@ func TestProjectScopeIPOwnerAndDeleteIsolation(t *testing.T) {
 	}
 }
 
+func TestProjectScopeNormalizeIPPoolIsolation(t *testing.T) {
+	s := newCmdbTestStore(t)
+	projectA, err := s.CreateCmdbProject(&CmdbProject{Code: "normalize-a", Name: "规范化项目 A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectB, err := s.CreateCmdbProject(&CmdbProject{Code: "normalize-b", Name: "规范化项目 B"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopeA := ProjectScope{ProjectID: projectA.ID}
+	scopeB := ProjectScope{ProjectID: projectB.ID}
+	for _, scope := range []ProjectScope{scopeA, scopeB} {
+		if _, err := s.db.Exec(`INSERT INTO ip_pool(project_id, subnet, ip, status, remark)
+			VALUES (?, '测试', '191.162.17.1 (盒子:180.161.30.1)', '空闲', '')`, scope.ProjectID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	normalized, err := s.NormalizeIPPoolIPsForProject(scopeA)
+	if err != nil || normalized != 1 {
+		t.Fatalf("项目 A 规范化失败: normalized=%d err=%v", normalized, err)
+	}
+	entryA, _, err := s.QueryIPEntriesForProject(scopeA, IPEntryQuery{Page: 1, PageSize: 20})
+	if err != nil || len(entryA) != 1 || entryA[0].IP != "191.162.17.1" {
+		t.Fatalf("项目 A 未规范化: entries=%+v err=%v", entryA, err)
+	}
+	entryB, _, err := s.QueryIPEntriesForProject(scopeB, IPEntryQuery{Page: 1, PageSize: 20})
+	if err != nil || len(entryB) != 1 || entryB[0].IP != "191.162.17.1 (盒子:180.161.30.1)" {
+		t.Fatalf("项目 B 被跨项目规范化: entries=%+v err=%v", entryB, err)
+	}
+}
+
 func insertMappedCmdbAsset(t *testing.T, s *Store, projectID, sourceID int64, boxSN string) {
 	t.Helper()
 	if _, err := s.db.Exec(`INSERT INTO cmdb_assets
