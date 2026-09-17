@@ -673,12 +673,12 @@ cmdbExportFile: (payload) => ipcRenderer.invoke("netcatty:cmdb:export-file", pay
 
 `package.json` 增加 `antd`、`@ant-design/icons`、`@ant-design/v5-patch-for-react-19`、`dayjs`；`electron-builder.config.cjs` 只增加 `cmdb-server`。删除 `cmdb-netcatty.ncpkg` 和 CMDB 插件 workspace 构建逻辑。
 
-- [ ] **步骤 7：在全新锁定上游装配并验证**
+- [ ] **步骤 7：在全新上游 Release 装配并验证**
 
 ```powershell
 git clone https://github.com/binaricat/Netcatty.git build/netcatty-native-validation
 Set-Location build/netcatty-native-validation
-git checkout c16f0c43d4ac8cf9377e330b8fb440cec630aeda
+git checkout v1.1.83
 Set-Location ../..
 node scripts/prepare-netcatty.mjs --target build/netcatty-native-validation
 Set-Location build/netcatty-native-validation

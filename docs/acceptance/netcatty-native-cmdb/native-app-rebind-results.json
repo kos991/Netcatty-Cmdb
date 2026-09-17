@@ -1,6 +1,6 @@
 {
   "check": "业务系统桌面改绑",
-  "databasePath": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\codex-netcatty-cmdb-rebind\\native-app-rebind-20260916191801094.db",
+  "databasePath": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\codex-netcatty-release-rebind\\native-app-rebind-20260917004037619.db",
   "serverFieldVisible": true,
   "rebindAttempted": true,
   "rebindPersisted": true,
@@ -9,10 +9,10 @@
     "",
     "编 辑",
     "删 除",
-    "REBIND-20260916191801094-源服务器"
+    "REBIND-20260917004037619-源服务器"
   ],
   "sourceServerId": 4,
   "targetServerId": 5,
   "persistedServerId": 5,
-  "completedAt": "2026-09-16T19:18:07.129Z"
+  "completedAt": "2026-09-17T00:40:48.575Z"
 }
