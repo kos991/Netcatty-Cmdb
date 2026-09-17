@@ -163,6 +163,43 @@ func backfillProjectMetadata(tx *sql.Tx, table string, projectID int64, now stri
 	)); err != nil {
 		return fmt.Errorf("index %s project_id: %w", table, err)
 	}
+	if err := createProjectInsertTrigger(tx, table); err != nil {
+		return err
+	}
+	return nil
+}
+
+func createProjectInsertTrigger(tx *sql.Tx, table string) error {
+	const uuidExpression = `(
+		lower(hex(randomblob(4))) || '-' ||
+		lower(hex(randomblob(2))) || '-4' ||
+		substr(lower(hex(randomblob(2))), 2) || '-' ||
+		substr('89ab', 1 + abs(random() % 4), 1) ||
+		substr(lower(hex(randomblob(2))), 2) || '-' ||
+		lower(hex(randomblob(6)))
+	)`
+	query := fmt.Sprintf(`
+		CREATE TRIGGER IF NOT EXISTS trg_%s_sync_metadata
+		AFTER INSERT ON %s
+		FOR EACH ROW
+		WHEN NEW.project_id IS NULL OR NEW.project_id = 0
+			OR NEW.sync_id IS NULL OR NEW.sync_id = ''
+			OR NEW.revision IS NULL OR NEW.revision < 1
+			OR NEW.updated_at IS NULL OR NEW.updated_at = ''
+		BEGIN
+			UPDATE %s
+			SET project_id = COALESCE(NULLIF(NEW.project_id, 0), (
+					SELECT id FROM cmdb_projects WHERE code = '%s' AND deleted_at IS NULL
+				)),
+				sync_id = COALESCE(NULLIF(NEW.sync_id, ''), %s),
+				revision = CASE WHEN NEW.revision IS NULL OR NEW.revision < 1 THEN 1 ELSE NEW.revision END,
+				updated_at = COALESCE(NULLIF(NEW.updated_at, ''), strftime('%%Y-%%m-%%dT%%H:%%M:%%fZ', 'now'))
+			WHERE id = NEW.id;
+		END
+	`, table, table, table, DefaultProjectCode, uuidExpression)
+	if _, err := tx.Exec(query); err != nil {
+		return fmt.Errorf("create %s sync metadata trigger: %w", table, err)
+	}
 	return nil
 }
 

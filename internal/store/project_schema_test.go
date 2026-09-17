@@ -115,6 +115,36 @@ func TestProjectMigrationAddsSyncColumnsToEveryBusinessTable(t *testing.T) {
 	}
 }
 
+func TestProjectMigrationAssignsMetadataToNewRows(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "new-rows.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	result, err := s.db.Exec(`INSERT INTO assets(asset_code, created_at, updated_at) VALUES ('NEW-A', '', '')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := s.DefaultProject()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var projectID, revision int64
+	var syncID, updatedAt string
+	if err := s.db.QueryRow(`SELECT project_id, sync_id, revision, updated_at FROM assets WHERE id = ?`, id).
+		Scan(&projectID, &syncID, &revision, &updatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if projectID != project.ID || syncID == "" || revision != 1 || updatedAt == "" {
+		t.Fatalf("新记录同步元数据异常: project=%d sync=%q revision=%d updated=%q", projectID, syncID, revision, updatedAt)
+	}
+}
+
 func assertProjectRow(t *testing.T, s *Store, table string, projectID int64) {
 	t.Helper()
 	var gotProjectID, revision int64
