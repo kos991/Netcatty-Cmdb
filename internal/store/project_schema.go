@@ -108,6 +108,11 @@ func MigrateProjectSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if _, err := tx.Exec(`
+		INSERT OR REPLACE INTO _meta(k, v) VALUES ('project_schema_version', ?)
+	`, projectSchemaVersion); err != nil {
+		return fmt.Errorf("record project schema version: %w", err)
+	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit project migration: %w", err)

@@ -35,7 +35,7 @@ func newHTTPHandler(srv *internal.Server, apiOnly bool) (http.Handler, error) {
 func openApplicationStore(dbPath string) (*store.Store, error) {
 	st, err := store.Open(dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("打开数据库失败: %w", err)
+		return nil, fmt.Errorf("Cmdb 数据库初始化失败: %w", err)
 	}
 	if _, err := st.SeedIPSubnetsFromPool(); err != nil {
 		st.Close()
