@@ -98,6 +98,7 @@ jobs:
           NETCATTY_CMDB_SERVER_SOURCE: ${{ github.workspace }}\build\cmdb-server.exe
         run: |
           npm.cmd run build
+          node ..\..\scripts\check-release-data.mjs ..\cmdb-server.exe .
           npx.cmd electron-builder --config electron-builder.config.cjs --win portable --x64 --publish=never
       - name: Check Portable release data
         shell: pwsh

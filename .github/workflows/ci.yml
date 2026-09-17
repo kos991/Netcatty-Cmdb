@@ -23,6 +23,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Check version consistency
         run: node scripts/check-version.mjs
+      - name: Test release data scanner
+        run: node --test scripts/check-release-data.test.mjs
       - name: Build Ant Design frontend
         working-directory: web
         run: npm ci && npm run build
