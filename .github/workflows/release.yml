@@ -83,6 +83,7 @@ jobs:
           npm.cmd install
           npm.cmd version $version --no-git-tag-version
           $env:MOSH_BIN_RELEASE = $upstream.moshRelease
+          $env:ET_BIN_OWNER = $upstream.etOwner
           $env:ET_BIN_RELEASE = $upstream.etRelease
           node scripts/fetch-mosh-binaries.cjs --host
           node scripts/fetch-et-binaries.cjs --host
@@ -98,9 +99,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: netcatty-cmdb-windows
-          path: |
-            build/netcatty/release/*.exe
-            build/netcatty/examples/plugins/cmdb-netcatty.ncpkg
+          path: build/netcatty/release/*.exe
           if-no-files-found: error
 
   publish:

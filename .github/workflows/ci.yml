@@ -72,15 +72,12 @@ jobs:
       - name: Install Netcatty dependencies
         working-directory: build/netcatty
         run: npm install --ignore-scripts
-      - name: Verify service lifecycle and plugin host
+      - name: Verify service lifecycle and native bridge
         working-directory: build/netcatty
-        run: node --test electron/cmdbService.test.cjs electron/plugins/hostBootstrap.test.cjs
+        run: node --test electron/cmdbService.test.cjs electron/bridges/cmdbBridge.test.cjs
       - name: Lint integrated source
         working-directory: build/netcatty
         run: npm run lint
       - name: Build integrated Netcatty
         working-directory: build/netcatty
         run: npm run build
-      - name: Validate packed CMDB plugin
-        working-directory: build/netcatty
-        run: node packages/plugin-cli/dist/cli.js validate examples/plugins/cmdb-netcatty

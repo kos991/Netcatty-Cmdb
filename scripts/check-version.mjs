@@ -6,8 +6,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const expected = readFileSync(join(root, "VERSION"), "utf8").trim();
 const sources = [
   ["web/package.json", JSON.parse(readFileSync(join(root, "web/package.json"), "utf8")).version],
-  ["integrations/netcatty/plugin/package.json", JSON.parse(readFileSync(join(root, "integrations/netcatty/plugin/package.json"), "utf8")).version],
-  ["integrations/netcatty/plugin/netcatty.plugin.json", JSON.parse(readFileSync(join(root, "integrations/netcatty/plugin/netcatty.plugin.json"), "utf8")).version],
+  ["netcatty/package.json", JSON.parse(readFileSync(join(root, "netcatty/package.json"), "utf8")).version],
 ];
 
 for (const [file, actual] of sources) {

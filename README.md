@@ -7,18 +7,18 @@ Netcatty-CMDB 将本项目的 Go + SQLite CMDB 服务作为内置服务集成到
 [Netcatty](https://github.com/binaricat/Netcatty) 桌面客户端。Netcatty 保留 SSH、SFTP、终端和主机管理能力，
 CMDB 提供全局查询、资产台账、服务器与应用、运维履历、IP 规划池以及资产生命周期管理。
 
-当前版本：`1.1.0`
+当前版本：`1.2.0`
 
 ## 集成结构
 
 ```text
 Netcatty 桌面客户端
 ├─ 原有 SSH / SFTP / 终端能力
-├─ 内置 CMDB 插件
-│  ├─ 全局查询
-│  ├─ CMDB 资源
-│  ├─ IP 规划池
-│  └─ 统计概览
+├─ 原生 CMDB 资产管理工作区
+│  ├─ 全局查询与终端资产
+│  ├─ 基础设施资源与业务系统
+│  ├─ 组织与人员、IP 规划池
+│  └─ 统计概览与运维履历
 └─ 自动管理 cmdb-server 子进程
 
 cmdb-server
@@ -28,18 +28,17 @@ cmdb-server
 ```
 
 Netcatty 前端不直接访问 SQLite。桌面主进程在固定回环地址 `http://127.0.0.1:18080`
-启动 CMDB 服务，插件通过 Netcatty 权限受控的网络 API 调用服务；应用退出时会回收服务进程。
+启动 CMDB 服务，原生工作区通过 preload IPC bridge 调用服务；应用退出时会回收服务进程。
 
 ## 仓库目录
 
 ```text
 internal/                       Go API 与 SQLite 存储层
 web/                            React + Ant Design 管理界面
-integrations/netcatty/plugin/   Netcatty CMDB 插件源码
 integrations/netcatty/electron/ CMDB 子进程生命周期模块与测试
 integrations/netcatty/upstream.json  已验证的 Netcatty 上游提交
 scripts/prepare-netcatty.mjs    可重复的 Netcatty 集成装配器
-.github/workflows/ci.yml        CMDB、插件和 Netcatty 集成验证
+.github/workflows/ci.yml        CMDB、原生 Bridge 和 Netcatty 集成验证
 .github/workflows/release.yml   服务端与集成版客户端发布
 ```
 
@@ -78,10 +77,9 @@ npm.cmd run build
 - Go 全量测试和服务端构建；
 - UOS/Kylin 探针及 Python CLI；
 - 固定 Netcatty 上游提交可成功装配；
-- CMDB 服务生命周期测试、插件宿主测试、Netcatty lint 与完整前端构建；
-- 插件包符合 Netcatty manifest 规范。
+- CMDB 服务生命周期测试、原生 Bridge 测试、Netcatty lint 与完整前端构建。
 
-推送与 `VERSION` 一致的标签会触发 Release。`v1.1.0` 发布内容包括：
+推送与 `VERSION` 一致的标签会触发 Release。`v1.2.0` 发布内容包括：
 
 - Windows、Linux、macOS 的独立 `cmdb-server`；
 - Windows x64 集成版 Netcatty-CMDB Portable；
