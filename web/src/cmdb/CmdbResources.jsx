@@ -83,7 +83,7 @@ function compactChanges(values) {
   return out
 }
 
-export default function CmdbResources({ meta, scope, title = '资源总账', focusTarget }) {
+export default function CmdbResources({ meta, scope, title = '资源总账', focusTarget, hideKeywordSearch = false }) {
   const [mode, setMode] = useState('orgs')
   const [cmdbMeta, setCmdbMeta] = useState({ statuses: [] })
   const [filterOptions, setFilterOptions] = useState({})
@@ -561,9 +561,9 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
           </Space>
         </header>
         <div className="ledger-filterbar">
-          <Input.Search aria-label="搜索资源" allowClear placeholder="搜索名称、编号、SN、IP" value={keywordInput}
-            onChange={(e) => setKeywordInput(e.target.value)}
-            onSearch={(value) => { setKeyword(value.trim()); setPage(1) }} />
+          {!hideKeywordSearch && <Input.Search aria-label="搜索资源" allowClear placeholder="搜索名称、编号、SN、IP" value={keywordInput}
+              onChange={(e) => setKeywordInput(e.target.value)}
+              onSearch={(value) => { setKeyword(value.trim()); setPage(1) }} />}
           <Select aria-label="资产状态" allowClear placeholder="全部状态" value={colFilters.status || undefined}
             options={(cmdbMeta.statuses || []).map((s) => ({value:s,label:s}))}
             onChange={(value) => {setColFilters((prev) => ({...prev,status:value || ''}));setPage(1)}} />

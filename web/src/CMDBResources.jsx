@@ -1535,7 +1535,7 @@ export default function CMDBResources({ meta, onNavigate }) {
             Code-128 条形码与 QR-Code 二维码复合标签，粘贴于终端主机正面与显示器底座。
           </Descriptions.Item>
           <Descriptions.Item label="扫码联动模式">
-            手机终端或扫码枪扫描标签即可在 Cmdb 或全局查询中快速定位目标设备并展示履历。
+            手机终端或扫码枪扫描标签即可在 Cmdb 设备资产中快速定位目标设备并展示履历。
           </Descriptions.Item>
         </Descriptions>
       </Modal>

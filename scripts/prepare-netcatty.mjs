@@ -53,6 +53,7 @@ function assertContainsOnce(relativePath, anchor) {
 [
   ["components/TopTabs.tsx", "{/* Fixed left tabs: Vaults and SFTP */}"],
   ["application/app/AppView.tsx", "<AppVaultThemeSurface VaultViewContainer={VaultViewContainer}>"],
+  ["application/app/AppHandlers.ts", "export function handleGlobalHotkeyKeyDownImpl"],
   ["application/app/workTabSurface.ts", "return activeTabId === 'vault' || activeTabId === 'sftp';"],
   ["electron/preload/api.cjs", "function createPreloadApi"],
   ["global.d.ts", "interface NetcattyBridge {"],
@@ -250,6 +251,26 @@ update("application/app/AppView.tsx", (source) => {
     "application/app/AppView.tsx",
   );
 });
+
+update("application/app/AppHandlers.ts", (source) => replaceOnce(
+  source,
+  `export function handleGlobalHotkeyKeyDownImpl(getCtx: AppContextGetter, e: KeyboardEvent) {
+  const { HOTKEY_DEBUG, closeTabKeyStr, executeHotkeyAction, hotkeyScheme, keyBindings, matchesKeyBinding } = getCtx();
+{`,
+  `export function handleGlobalHotkeyKeyDownImpl(getCtx: AppContextGetter, e: KeyboardEvent) {
+  const { HOTKEY_DEBUG, closeTabKeyStr, executeHotkeyAction, hotkeyScheme, keyBindings, matchesKeyBinding } = getCtx();
+{
+    const visibleCmdb = document.querySelector<HTMLElement>('[data-section="cmdb-view"]');
+    const isCmdbSearchHotkey = Boolean(
+      visibleCmdb?.getClientRects().length
+      && (e.ctrlKey || e.metaKey)
+      && !e.altKey
+      && !e.shiftKey
+      && e.key.toLowerCase() === 'k',
+    );
+    if (isCmdbSearchHotkey) return;`,
+  "application/app/AppHandlers.ts",
+));
 
 update("electron/preload/api.cjs", (source) => replaceOnce(
   source,

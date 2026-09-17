@@ -43,7 +43,7 @@ import { cmdbApi } from './cmdb/cmdbApi'
 
 const { Text } = Typography
 
-export default function AssetCenter({ meta, focusTarget, onNavigate }) {
+export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeywordSearch = false }) {
   const [data, setData] = useState([])
   const [total, setTotal] = useState(0)
   const [summary, setSummary] = useState({})
@@ -620,15 +620,15 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
 
           <Card size="small" className="cmdb-filter-card">
             <Space wrap size={10}>
-          <Input.Search
-            placeholder="搜索资产编码、SN、人员、IP"
-            allowClear
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            onSearch={handleSearch}
-            style={{ width: 300 }}
-            enterButton={<SearchOutlined />}
-          />
+          {!hideKeywordSearch && <Input.Search
+              placeholder="搜索资产编码、SN、人员、IP"
+              allowClear
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              onSearch={handleSearch}
+              style={{ width: 300 }}
+              enterButton={<SearchOutlined />}
+            />}
 
           <span className="cmdb-filter-label">部门</span>
           <Select
@@ -971,7 +971,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
                 showSearch
                 optionFilterProp="label"
                 options={personOptions}
-                placeholder={personOptions.length ? '选择人员' : '请先在组织与人员中维护人员'}
+                placeholder={personOptions.length ? '选择人员' : '请先在组织架构中维护人员'}
                 onChange={(id) => {
                   const person = personDirectory.find((item) => item.id === id)
                   transferForm.setFieldValue('to_department', person?.department || '')

@@ -42,7 +42,7 @@ export const api = {
   // 履历流水
   getLogs: (params = {}) => req(`/api/logs?${toQuery(params)}`),
 
-  // IP 规划池
+  // IPAM/IP
   getIPPool: (params = {}) => req(`/api/ip_pool?${toQuery(params)}`),
   getIPPoolSummary: () => req('/api/ip_pool/summary'),
 

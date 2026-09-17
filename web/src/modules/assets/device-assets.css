@@ -1,0 +1,156 @@
+.cmdb-workspace .device-asset-center {
+  min-width: 0;
+}
+
+.cmdb-workspace .device-asset-search {
+  margin-bottom: 18px;
+  padding: 16px 16px 12px;
+  border: 1px solid var(--cmdb-border);
+  border-radius: 6px;
+  background: var(--cmdb-surface);
+}
+
+.cmdb-workspace .device-asset-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.cmdb-workspace .device-asset-search-row .ant-input-affix-wrapper,
+.cmdb-workspace .device-asset-search-row .ant-btn {
+  min-height: 42px;
+}
+
+.cmdb-workspace .device-asset-search-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cmdb-workspace .device-asset-search-scope .ant-tag {
+  margin: 0;
+  border-radius: 3px;
+  background: var(--cmdb-subtle);
+  color: var(--cmdb-muted);
+}
+
+.cmdb-workspace .device-asset-search-loading,
+.cmdb-workspace .device-asset-results {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cmdb-border);
+}
+
+.cmdb-workspace .device-asset-results {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cmdb-workspace .device-asset-results > .ant-empty {
+  grid-column: 1 / -1;
+  margin-block: 10px;
+}
+
+.cmdb-workspace .device-asset-result-group {
+  min-width: 0;
+  border: 1px solid var(--cmdb-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cmdb-workspace .device-asset-result-group > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--cmdb-border);
+  background: var(--cmdb-subtle);
+}
+
+.cmdb-workspace .device-asset-result-group > header strong {
+  flex: 1;
+  color: var(--cmdb-text);
+  font-size: 12px;
+}
+
+.cmdb-workspace .device-asset-result-group > header .ant-tag {
+  margin: 0;
+}
+
+.cmdb-workspace .device-asset-result-group > button {
+  display: flex;
+  width: 100%;
+  min-height: 54px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--cmdb-border);
+  background: var(--cmdb-surface);
+  color: var(--cmdb-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.cmdb-workspace .device-asset-result-group > button:last-child {
+  border-bottom: 0;
+}
+
+.cmdb-workspace .device-asset-result-group > button:hover,
+.cmdb-workspace .device-asset-result-group > button:focus-visible {
+  background: var(--cmdb-subtle);
+}
+
+.cmdb-workspace .device-asset-result-group > button:focus-visible {
+  outline: 2px solid var(--cmdb-primary);
+  outline-offset: -2px;
+}
+
+.cmdb-workspace .device-asset-result-group > button > span {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.cmdb-workspace .device-asset-result-group b,
+.cmdb-workspace .device-asset-result-group small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmdb-workspace .device-asset-result-group b {
+  color: var(--cmdb-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cmdb-workspace .device-asset-result-group small {
+  color: var(--cmdb-muted);
+  font-size: 11px;
+}
+
+.cmdb-workspace .device-asset-tabs > .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 960px) {
+  .cmdb-workspace .device-asset-results {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .cmdb-workspace .device-asset-search {
+    padding: 12px;
+  }
+
+  .cmdb-workspace .device-asset-search-row {
+    grid-template-columns: 1fr;
+  }
+}

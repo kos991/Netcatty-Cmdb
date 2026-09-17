@@ -1,12 +1,9 @@
 import React, { useCallback, useState } from 'react';
 import {
-  AppWindow,
   ChartNoAxesCombined,
   Database,
   Monitor,
   Network,
-  Search,
-  Server,
   Settings2,
   Users,
   type LucideIcon,
@@ -32,10 +29,7 @@ const SIDEBAR_MAX_WIDTH = 320;
 const SIDEBAR_LABEL_THRESHOLD = 96;
 
 const MODULE_ICONS: Record<string, LucideIcon> = {
-  Search,
   Monitor,
-  Server,
-  AppWindow,
   Users,
   Network,
   ChartNoAxesCombined,
@@ -54,7 +48,7 @@ function readInitialSidebarWidth(): number {
 
 export const CmdbSurface = React.memo(function CmdbSurface() {
   const active = useIsTabActive('cmdb');
-  const [activeModule, setActiveModule] = useState('search');
+  const [activeModule, setActiveModule] = useState('assets');
   const [projectName, setProjectName] = useState('默认项目');
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [sidebarWidth, setSidebarWidth, persistSidebarWidth] = useStoredNumber(
@@ -164,7 +158,7 @@ export const CmdbSurface = React.memo(function CmdbSurface() {
               aria-label="Cmdb 模块"
             >
               {MODULES.map((item) => {
-                const Icon = MODULE_ICONS[item.icon] ?? Search;
+                const Icon = MODULE_ICONS[item.icon] ?? Monitor;
                 const selected = activeModule === item.key;
                 return (
                   <Tooltip key={item.key}>

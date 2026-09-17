@@ -68,7 +68,7 @@ test('import reports an unavailable request channel', async () => {
       { file: 'spreadsheet' },
       { bridge: null, fetchImpl: null },
     ),
-    /CMDB 请求通道不可用/,
+    /Cmdb 请求通道不可用/,
   )
 })
 
@@ -101,6 +101,6 @@ test('export reports an unavailable request channel', async () => {
       'czfy_assets.xlsx',
       { bridge: null, fetchImpl: null },
     ),
-    /CMDB 请求通道不可用/,
+    /Cmdb 请求通道不可用/,
   )
 })

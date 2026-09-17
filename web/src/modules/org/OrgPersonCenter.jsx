@@ -17,6 +17,7 @@ import {
   message,
   Popconfirm,
   Badge,
+  Drawer,
   Tree,
   Typography,
 } from 'antd'
@@ -29,8 +30,10 @@ import {
   EditOutlined,
   DeleteOutlined,
   DesktopOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import { cmdbApi } from '../../cmdb/cmdbApi'
+import OrgTreeConfig from '../../cmdb/OrgTreeConfig'
 import PersonAssetDrawer from './PersonAssetDrawer'
 import { buildOrgNavigationTree, fromOrgPath, orgTreeToCascader, toOrgPath } from './orgFormState'
 import './org-person.css'
@@ -54,6 +57,7 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
   const [editingPerson, setEditingPerson] = useState(null)
   const [formSeed, setFormSeed] = useState(null)
   const [drawerPerson, setDrawerPerson] = useState(null)
+  const [organizationDrawerOpen, setOrganizationDrawerOpen] = useState(false)
   const [form] = Form.useForm()
 
   const loadData = useCallback(async () => {
@@ -276,7 +280,10 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
 
   return (
     <div className="org-person-page">
-      <div className="cmdb-page-heading"><h2>组织与人员</h2></div>
+      <div className="cmdb-page-heading">
+        <h2>组织架构</h2>
+        <Button icon={<SettingOutlined />} onClick={() => setOrganizationDrawerOpen(true)}>维护组织架构</Button>
+      </div>
       {error && <Alert type="error" showIcon message="人员查询失败" description={error} action={<Button onClick={loadData}>重试</Button>} />}
       {directoryError && <Alert type="error" showIcon message="组织目录加载失败" description={directoryError} action={<Button onClick={loadDirectory}>重试</Button>} />}
       {/* 顶部指标 */}
@@ -408,7 +415,7 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
                   options={orgOptions}
                   changeOnSelect
                   showSearch
-                  placeholder={orgOptions.length ? '请选择组织、部门，可继续选择分组' : '请先在配置中心维护组织架构'}
+                  placeholder={orgOptions.length ? '请选择组织、部门，可继续选择分组' : '请先维护组织架构'}
                   disabled={!orgOptions.length}
                 />
               </Form.Item>
@@ -454,6 +461,16 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
         onClose={() => setDrawerPerson(null)}
         onTransferred={refresh}
       />
+
+      <Drawer
+        title="组织架构维护"
+        open={organizationDrawerOpen}
+        onClose={() => setOrganizationDrawerOpen(false)}
+        width="min(960px, 100%)"
+        getContainer={false}
+      >
+        <OrgTreeConfig />
+      </Drawer>
     </div>
   )
 }

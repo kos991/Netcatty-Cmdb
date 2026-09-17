@@ -1,35 +1,51 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MODULES, resolveSearchTarget, panelKeyFor, resolveIPFocus, buildPersonTree } from './cmdbWorkspaceState.js'
+import * as workspaceState from './cmdbWorkspaceState.js'
 
-test('固定八个 Cmdb 业务入口', () => {
+const { MODULES, resolveSearchTarget, panelKeyFor, resolveIPFocus, buildPersonTree } = workspaceState
+
+test('固定五个 Cmdb 一级入口并默认以设备资产开始', () => {
   assert.deepEqual(MODULES.map(({ key, label, icon }) => ({ key, label, icon })), [
-    { key: 'search', label: '全局查询', icon: 'Search' },
-    { key: 'assets', label: '终端资产', icon: 'Monitor' },
-    { key: 'infrastructure', label: '基础设施', icon: 'Server' },
-    { key: 'systems', label: '业务系统', icon: 'AppWindow' },
-    { key: 'people', label: '组织与人员', icon: 'Users' },
-    { key: 'ip', label: 'IP 规划池', icon: 'Network' },
+    { key: 'assets', label: '设备资产', icon: 'Monitor' },
+    { key: 'people', label: '组织架构', icon: 'Users' },
+    { key: 'ip', label: 'IPAM/IP', icon: 'Network' },
     { key: 'operations', label: '统计与履历', icon: 'ChartNoAxesCombined' },
     { key: 'config', label: '配置中心', icon: 'Settings2' },
   ])
 })
 
-for (const [tableKey, module] of [
-  ['assets', 'assets'], ['cmdb_assets', 'infrastructure'], ['server_apps', 'systems'],
-  ['persons', 'people'], ['asset_logs', 'operations'], ['ip_pool', 'ip'],
+for (const [tableKey, module, assetTab] of [
+  ['assets', 'assets', 'terminals'],
+  ['cmdb_assets', 'assets', 'infrastructure'],
+  ['server_apps', 'assets', 'systems'],
+  ['servers', 'assets', 'systems'],
+  ['persons', 'people'],
+  ['asset_logs', 'operations'],
+  ['ip_pool', 'ip'],
 ]) {
-  test(`全局查询 ${tableKey} 保留精确详情目标`, () => {
+  test(`关联导航 ${tableKey} 保留精确详情目标`, () => {
     const focusTarget = { tableKey, id: 7 }
-    assert.deepEqual(resolveSearchTarget(focusTarget), { module, focusTarget })
+    assert.deepEqual(resolveSearchTarget(focusTarget), { module, ...(assetTab ? { assetTab } : {}), focusTarget })
   })
 }
 
-test('每个入口使用独立面板键，未知搜索类型不误跳转', () => {
-  assert.equal(panelKeyFor('search'), 'search')
+test('每个一级入口使用独立面板键，未知搜索类型不误跳转', () => {
+  assert.equal(panelKeyFor('assets'), 'assets')
   assert.equal(panelKeyFor('people'), 'people')
   assert.equal(panelKeyFor('operations'), 'operations')
   assert.equal(resolveSearchTarget({ tableKey: 'unknown', id: 1 }), null)
+})
+
+test('设备资产搜索只保留终端、基础设施和业务系统结果', () => {
+  const results = [
+    { tableKey: 'assets', id: 1 },
+    { tableKey: 'cmdb_assets', id: 2 },
+    { tableKey: 'server_apps', id: 3 },
+    { tableKey: 'persons', id: 4 },
+    { tableKey: 'asset_logs', id: 5 },
+    { tableKey: 'ip_pool', id: 6 },
+  ]
+  assert.deepEqual(workspaceState.filterDeviceAssetResults?.(results), results.slice(0, 3))
 })
 
 test('IP 导航成功消费后，汇总和地址刷新不再次打开旧目标', () => {

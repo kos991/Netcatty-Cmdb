@@ -15,7 +15,6 @@ import {
 import { PlusOutlined, ReloadOutlined, ImportOutlined } from '@ant-design/icons'
 import { cmdbApi } from './cmdbApi'
 import ConfigCatalogPane from './ConfigCatalogPane'
-import OrgTreeConfig from './OrgTreeConfig'
 import CustomFieldCenter from '../modules/customfields/CustomFieldCenter'
 
 const PAGE_SIZES = ['10', '20', '50', '100']
@@ -253,7 +252,6 @@ export default function CmdbConfig() {
       <div className="cmdb-page-heading"><h2>配置中心</h2></div>
       <Tabs
         items={[
-          { key: 'organizations', label: '组织架构', children: <OrgTreeConfig /> },
           { key: 'device-types', label: '设备类型', children: <ConfigCatalogPane kind="device-types" /> },
           { key: 'software', label: '软件目录', children: <ConfigCatalogPane kind="software" /> },
           { key: 'locations', label: '位置目录', children: <ConfigCatalogPane kind="locations" /> },

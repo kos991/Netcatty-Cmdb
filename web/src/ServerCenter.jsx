@@ -44,7 +44,7 @@ import { hasNativeCmdbImportBridge } from './cmdbTransport'
 const { Option } = Select
 const { Text, Title, Paragraph } = Typography
 
-export default function ServerCenter({ meta, focusTarget, section }) {
+export default function ServerCenter({ meta, focusTarget, section, hideKeywordSearch = false }) {
   const nativeImport = hasNativeCmdbImportBridge()
   const [activeTab, setActiveTab] = useState(section || 'servers')
   const [appDetail, setAppDetail] = useState(null)
@@ -690,7 +690,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
                 {statusSummary.map((item) => <button key={item.status} className={`server-status-chip status-${item.status}`} onClick={() => setStatusFilter(item.status)}><span>{item.status}</span><strong>{item.count}</strong></button>)}
               </div>
             <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
-              <Col xs={24} sm={8} md={6}>
+              {!hideKeywordSearch && <Col xs={24} sm={8} md={6}>
                 <Input
                   placeholder="搜索主机名/型号/SN/IP/管理地址..."
                   prefix={<SearchOutlined />}
@@ -699,7 +699,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
                   onPressEnter={() => loadServers(1, pageSize)}
                   allowClear
                 />
-              </Col>
+              </Col>}
               <Col xs={12} sm={6} md={4}>
                 <Select
                   style={{ width: '100%' }}
@@ -808,7 +808,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
           <div>
             {appError && <Alert type="error" showIcon message="业务系统查询失败" description={appError} action={<Button onClick={() => loadAllApps()}>重试</Button>} />}
             <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
-              <Col xs={24} sm={8} md={6}>
+              {!hideKeywordSearch && <Col xs={24} sm={8} md={6}>
                 <Input
                   placeholder="搜索系统名称/中间件/端口/数据库..."
                   prefix={<SearchOutlined />}
@@ -817,7 +817,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
                   onPressEnter={() => loadAllApps(1, appPageSize)}
                   allowClear
                 />
-              </Col>
+              </Col>}
               <Col xs={12} sm={6} md={4}>
                 <Select
                   style={{ width: '100%' }}

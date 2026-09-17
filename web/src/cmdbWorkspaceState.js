@@ -1,21 +1,25 @@
 export const MODULES = [
-  { key: 'search', label: '全局查询', icon: 'Search' },
-  { key: 'assets', label: '终端资产', icon: 'Monitor' },
-  { key: 'infrastructure', label: '基础设施', icon: 'Server' },
-  { key: 'systems', label: '业务系统', icon: 'AppWindow' },
-  { key: 'people', label: '组织与人员', icon: 'Users' },
-  { key: 'ip', label: 'IP 规划池', icon: 'Network' },
+  { key: 'assets', label: '设备资产', icon: 'Monitor' },
+  { key: 'people', label: '组织架构', icon: 'Users' },
+  { key: 'ip', label: 'IPAM/IP', icon: 'Network' },
   { key: 'operations', label: '统计与履历', icon: 'ChartNoAxesCombined' },
   { key: 'config', label: '配置中心', icon: 'Settings2' },
 ]
 
 const SEARCH_TARGETS = {
-  assets: { module: 'assets' },
-  cmdb_assets: { module: 'infrastructure' },
-  server_apps: { module: 'systems' },
+  assets: { module: 'assets', assetTab: 'terminals' },
+  cmdb_assets: { module: 'assets', assetTab: 'infrastructure' },
+  server_apps: { module: 'assets', assetTab: 'systems' },
+  servers: { module: 'assets', assetTab: 'systems' },
   persons: { module: 'people' },
   asset_logs: { module: 'operations' },
   ip_pool: { module: 'ip' },
+}
+
+const DEVICE_ASSET_TABLES = new Set(['assets', 'cmdb_assets', 'server_apps'])
+
+export function filterDeviceAssetResults(results) {
+  return (results || []).filter((item) => DEVICE_ASSET_TABLES.has(item?.tableKey))
 }
 
 export function resolveSearchTarget(result) {

@@ -6,10 +6,7 @@ import { api } from './api'
 import { cmdbApi } from './cmdb/cmdbApi'
 import { MODULES, panelKeyFor, resolveSearchTarget } from './cmdbWorkspaceState'
 import ModuleTabs from './components/ModuleTabs'
-import GlobalSearch from './modules/search/GlobalSearch'
-import AssetCenter from './AssetCenter'
-import CmdbResources from './cmdb/CmdbResources'
-import ServerCenter from './ServerCenter'
+import DeviceAssetCenter from './modules/assets/DeviceAssetCenter'
 import OrgPersonCenter from './modules/org/OrgPersonCenter'
 import IPManager from './IPManager'
 import Dashboard from './Dashboard'
@@ -38,10 +35,10 @@ export default function CmdbWorkspace({
   const [meta, setMeta] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [internalModule, setInternalModule] = useState('search')
+  const [internalModule, setInternalModule] = useState('assets')
   const [operationsTab, setOperationsTab] = useState('dashboard')
   const [targets, setTargets] = useState({})
-  const [visited, setVisited] = useState(new Set(['search']))
+  const [visited, setVisited] = useState(new Set(['assets']))
   const [hostTheme, setHostTheme] = useState({})
   const module = activeModule ?? internalModule
   const setModule = useCallback((nextModule) => {
@@ -93,11 +90,6 @@ export default function CmdbWorkspace({
   }, [])
 
   const navigateSearch = (result) => {
-    if (result.tableKey === 'servers') {
-      setModule('systems')
-      setTargets((previous) => ({ ...previous, systems: { ...result } }))
-      return
-    }
     const target = resolveSearchTarget(result)
     if (!target) return
     setModule(target.module)
@@ -111,19 +103,17 @@ export default function CmdbWorkspace({
       if (!root.current?.getClientRects().length) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        setModule('search')
-        requestAnimationFrame(() => root.current?.querySelector('[data-global-search-input]')?.focus())
+        event.stopImmediatePropagation()
+        setModule('assets')
+        requestAnimationFrame(() => root.current?.querySelector('[data-device-asset-search-input]')?.focus())
       }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [])
+  }, [setModule])
 
   const panels = [
-    ['search', <GlobalSearch onNavigate={navigateSearch} />],
-    ['assets', <AssetCenter meta={meta} focusTarget={targets.assets} onNavigate={navigateSearch} />],
-    ['infrastructure', <CmdbResources meta={meta} scope="infrastructure" title="基础设施资源" focusTarget={targets.infrastructure} />],
-    ['systems', <ServerCenter meta={meta} section="apps" focusTarget={targets.systems} />],
+    ['assets', <DeviceAssetCenter meta={meta} focusTarget={targets.assets} onNavigate={navigateSearch} />],
     ['people', <OrgPersonCenter focusTarget={targets.people} onNavigate={navigateSearch} />],
     ['ip', <IPManager meta={meta} focusTarget={targets.ip} onNavigate={navigateSearch} />],
     ['operations', <Tabs activeKey={operationsTab} onChange={setOperationsTab} items={[

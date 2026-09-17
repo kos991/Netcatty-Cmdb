@@ -22,7 +22,7 @@ const STATUS_ORDER = ['在线', '在库', '报废', '维护中', '离线', '故�
 
 // 快捷功能：全部指向系统内真实存在的模块
 const SHORTCUTS = [
-  { key: 'search', label: '全局查询', icon: <SearchOutlined /> },
+  { key: 'assets', label: '设备资产', icon: <SearchOutlined /> },
   { key: 'cmdb:resources', label: 'Cmdb', icon: <DatabaseOutlined /> },
   { key: 'cmdb:assets', label: '终端资产', icon: <DesktopOutlined /> },
   { key: 'cmdb:servers', label: '基础设施', icon: <DatabaseOutlined /> },
@@ -30,7 +30,7 @@ const SHORTCUTS = [
   { key: 'cmdb:work-orders', label: '工单管理', icon: <ToolOutlined /> },
   { key: 'cmdb:credentials', label: '凭证中心', icon: <SafetyCertificateOutlined /> },
   { key: 'cmdb:config', label: '配置中心', icon: <SettingOutlined /> },
-  { key: 'ip_pool', label: 'IP 规划池', icon: <ClusterOutlined /> },
+  { key: 'ip_pool', label: 'IPAM/IP', icon: <ClusterOutlined /> },
   { key: 'logs', label: '运维履历', icon: <HistoryOutlined /> },
   { key: 'dashboard', label: '统计看板', icon: <DashboardOutlined /> },
 ]

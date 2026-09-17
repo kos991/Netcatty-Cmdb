@@ -11,17 +11,17 @@ import {
 import './top-header.css'
 
 const ITEMS = [
-  { key: 'search', label: '全局查询', icon: <SearchOutlined /> },
+  { key: 'assets', label: '设备资产', icon: <SearchOutlined /> },
   { key: 'cmdb_center', label: 'Cmdb', icon: <DatabaseOutlined /> },
-  { key: 'org_persons', label: '组织与人员', icon: <TeamOutlined /> },
+  { key: 'org_persons', label: '组织架构', icon: <TeamOutlined /> },
   { key: 'custom_fields', label: '自定义字段', icon: <SlidersOutlined /> },
-  { key: 'ip_pool', label: 'IP 规划池', icon: <ClusterOutlined /> },
+  { key: 'ip_pool', label: 'IPAM/IP', icon: <ClusterOutlined /> },
 ]
 
 export default function TopHeader({ current, onNavigate, onSearch }) {
   return (
     <header className="top-header">
-      <button className="top-brand" type="button" onClick={() => onNavigate('search')}>
+      <button className="top-brand" type="button" onClick={() => onNavigate('assets')}>
         <span className="top-brand-mark"><DatabaseOutlined /></span>
         <span><strong>Cmdb</strong><small>资产管理</small></span>
       </button>
