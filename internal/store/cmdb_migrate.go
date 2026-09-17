@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+type schemaExecutor interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
 // MigrateCMDBFullSchema 负责检查并平滑补齐 CMDB 所需的所有扩展列与新建表。
 // 支持在全新数据库以及已有旧版本数据库上安全幂等执行。
 func MigrateCMDBFullSchema(db *sql.DB) error {
@@ -148,7 +153,7 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	return nil
 }
 
-func addMissingColumns(db *sql.DB, tableName string, cols map[string]string) error {
+func addMissingColumns(db schemaExecutor, tableName string, cols map[string]string) error {
 	existingCols, err := getTableColumns(db, tableName)
 	if err != nil {
 		return err
@@ -168,7 +173,9 @@ func addMissingColumns(db *sql.DB, tableName string, cols map[string]string) err
 	return nil
 }
 
-func getTableColumns(db *sql.DB, tableName string) (map[string]bool, error) {
+func getTableColumns(db interface {
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}, tableName string) (map[string]bool, error) {
 	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
 	if err != nil {
 		return nil, err

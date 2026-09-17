@@ -43,12 +43,15 @@ func Open(path string) (*Store, error) {
 	if err := s.InitSchema(); err != nil {
 		return nil, err
 	}
-	// 先执行全量扩展迁移，确保已有旧表已被平滑补充 owner_id、custom_fields 等列
+	if err := s.InitCmdbSchema(); err != nil {
+		return nil, fmt.Errorf("init cmdb schema: %w", err)
+	}
+	// 建表后再执行扩展迁移，旧表补列与全新表初始化走同一顺序。
 	if err := MigrateCMDBFullSchema(s.db); err != nil {
 		return nil, fmt.Errorf("migrate cmdb full schema: %w", err)
 	}
-	if err := s.InitCmdbSchema(); err != nil {
-		return nil, fmt.Errorf("init cmdb schema: %w", err)
+	if err := MigrateProjectSchema(s.db); err != nil {
+		return nil, fmt.Errorf("migrate project schema: %w", err)
 	}
 	return s, nil
 }
