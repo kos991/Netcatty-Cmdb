@@ -116,7 +116,18 @@ type IPPoolSummary struct {
 
 // IPPoolSummaryData 按网段聚合 IP 容量与占用，全部基于全量数据（不是当前页）。
 func (s *Store) IPPoolSummaryData() (*IPPoolSummary, error) {
-	rows, err := s.db.Query(`SELECT subnet, ip, status FROM ip_pool`)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, err
+	}
+	return s.IPPoolSummaryDataForProject(scope)
+}
+
+func (s *Store) IPPoolSummaryDataForProject(scope ProjectScope) (*IPPoolSummary, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT subnet, ip, status FROM ip_pool WHERE project_id=?`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -290,19 +301,30 @@ func (s *Store) buildIPWhere(q IPEntryQuery) (string, []interface{}) {
 
 // QueryIPEntries 分页查询 IP 条目，并回填「占用资产」。
 func (s *Store) QueryIPEntries(q IPEntryQuery) ([]IPEntry, int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.QueryIPEntriesForProject(scope, q)
+}
+
+func (s *Store) QueryIPEntriesForProject(scope ProjectScope, q IPEntryQuery) ([]IPEntry, int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, 0, err
+	}
 	if q.Page < 1 {
 		q.Page = 1
 	}
 	if q.PageSize < 1 || q.PageSize > 500 {
 		q.PageSize = 100
 	}
-	where, args := s.buildIPWhere(q)
+	where, args := s.buildIPWhereForProject(scope, q)
 
 	var total int
 	if err := s.db.QueryRow("SELECT COUNT(*) FROM ip_pool"+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	query := `SELECT id, subnet, ip, IFNULL(department,''), IFNULL(room,''), IFNULL(account,''),
+	query := `SELECT id, project_id, subnet, ip, IFNULL(department,''), IFNULL(room,''), IFNULL(account,''),
 		IFNULL(status,''), IFNULL(remark,'') FROM ip_pool` + where +
 		" ORDER BY subnet, " + ipLastOctetOrder + " LIMIT ? OFFSET ?"
 
@@ -315,7 +337,7 @@ func (s *Store) QueryIPEntries(q IPEntryQuery) ([]IPEntry, int, error) {
 	list := make([]IPEntry, 0, q.PageSize)
 	for rows.Next() {
 		var e IPEntry
-		if err := rows.Scan(&e.ID, &e.Subnet, &e.IP, &e.Department, &e.Room, &e.Account, &e.Status, &e.Remark); err != nil {
+		if err := rows.Scan(&e.ID, &e.ProjectID, &e.Subnet, &e.IP, &e.Department, &e.Room, &e.Account, &e.Status, &e.Remark); err != nil {
 			return nil, 0, err
 		}
 		list = append(list, e)
@@ -323,15 +345,31 @@ func (s *Store) QueryIPEntries(q IPEntryQuery) ([]IPEntry, int, error) {
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	if err := s.attachIPOwners(list); err != nil {
+	if err := s.attachIPOwnersForProject(scope, list); err != nil {
 		return nil, 0, err
 	}
 	return list, total, nil
 }
 
+func (s *Store) buildIPWhereForProject(scope ProjectScope, q IPEntryQuery) (string, []interface{}) {
+	where, args := s.buildIPWhere(q)
+	if where == "" {
+		return " WHERE project_id=?", []interface{}{scope.ProjectID}
+	}
+	return " WHERE project_id=? AND " + strings.TrimPrefix(where, " WHERE "), append([]interface{}{scope.ProjectID}, args...)
+}
+
 // attachIPOwners 用 IP / 终端 IP 与资产台账做匹配，回填占用设备。
 // 外网段额外用备注里的盒子地址参与匹配（资产的 terminal_ip 存的是盒子地址）。
 func (s *Store) attachIPOwners(list []IPEntry) error {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.attachIPOwnersForProject(scope, list)
+}
+
+func (s *Store) attachIPOwnersForProject(scope ProjectScope, list []IPEntry) error {
 	if len(list) == 0 {
 		return nil
 	}
@@ -360,8 +398,8 @@ func (s *Store) attachIPOwners(list []IPEntry) error {
 	}
 	inClause := strings.Join(holders, ",")
 	q := `SELECT IFNULL(asset_code,''), IFNULL(user_name,''), IFNULL(ip,''), IFNULL(terminal_ip,'')
-		FROM assets WHERE ip IN (` + inClause + `) OR terminal_ip IN (` + inClause + `)`
-	args = append(args, args...)
+		FROM assets WHERE project_id=? AND (ip IN (` + inClause + `) OR terminal_ip IN (` + inClause + `))`
+	args = append([]interface{}{scope.ProjectID}, append(args, args...)...)
 
 	rows, err := s.db.Query(q, args...)
 	if err != nil {
@@ -388,10 +426,21 @@ func (s *Store) attachIPOwners(list []IPEntry) error {
 // ============================ 写操作 ============================
 
 func (s *Store) GetIPEntry(id int64) (*IPEntry, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, err
+	}
+	return s.GetIPEntryForProject(scope, id)
+}
+
+func (s *Store) GetIPEntryForProject(scope ProjectScope, id int64) (*IPEntry, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
 	var e IPEntry
-	err := s.db.QueryRow(`SELECT id, subnet, ip, IFNULL(department,''), IFNULL(room,''),
-		IFNULL(account,''), IFNULL(status,''), IFNULL(remark,'') FROM ip_pool WHERE id = ?`, id).
-		Scan(&e.ID, &e.Subnet, &e.IP, &e.Department, &e.Room, &e.Account, &e.Status, &e.Remark)
+	err := s.db.QueryRow(`SELECT id, project_id, subnet, ip, IFNULL(department,''), IFNULL(room,''),
+		IFNULL(account,''), IFNULL(status,''), IFNULL(remark,'') FROM ip_pool WHERE id = ? AND project_id=?`, id, scope.ProjectID).
+		Scan(&e.ID, &e.ProjectID, &e.Subnet, &e.IP, &e.Department, &e.Room, &e.Account, &e.Status, &e.Remark)
 	if err != nil {
 		return nil, err
 	}
@@ -399,6 +448,20 @@ func (s *Store) GetIPEntry(id int64) (*IPEntry, error) {
 }
 
 func (s *Store) CreateIPEntry(e *IPEntry) (int64, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.CreateIPEntryForProject(scope, e)
+}
+
+func (s *Store) CreateIPEntryForProject(scope ProjectScope, e *IPEntry) (int64, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
+	if e == nil {
+		return 0, fmt.Errorf("IP 条目不能为空")
+	}
 	e.IP = strings.TrimSpace(e.IP)
 	e.Subnet = strings.TrimSpace(e.Subnet)
 	if e.IP == "" {
@@ -414,14 +477,14 @@ func (s *Store) CreateIPEntry(e *IPEntry) (int64, error) {
 		e.Status = "空闲"
 	}
 	var cnt int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ip_pool WHERE ip = ?`, e.IP).Scan(&cnt); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ip_pool WHERE ip = ? AND project_id=?`, e.IP, scope.ProjectID).Scan(&cnt); err != nil {
 		return 0, err
 	}
 	if cnt > 0 {
 		return 0, fmt.Errorf("IP %s 已存在", e.IP)
 	}
-	res, err := s.db.Exec(`INSERT INTO ip_pool (subnet, ip, department, room, account, status, remark)
-		VALUES (?,?,?,?,?,?,?)`, e.Subnet, e.IP, e.Department, e.Room, e.Account, e.Status, e.Remark)
+	res, err := s.db.Exec(`INSERT INTO ip_pool (project_id, subnet, ip, department, room, account, status, remark)
+		VALUES (?,?,?,?,?,?,?,?)`, scope.ProjectID, e.Subnet, e.IP, e.Department, e.Room, e.Account, e.Status, e.Remark)
 	if err != nil {
 		return 0, err
 	}
@@ -429,17 +492,39 @@ func (s *Store) CreateIPEntry(e *IPEntry) (int64, error) {
 }
 
 func (s *Store) UpdateIPEntry(e *IPEntry) error {
-	if _, err := s.GetIPEntry(e.ID); err != nil {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.UpdateIPEntryForProject(scope, e)
+}
+
+func (s *Store) UpdateIPEntryForProject(scope ProjectScope, e *IPEntry) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	if e == nil {
+		return fmt.Errorf("IP 条目不能为空")
+	}
+	if _, err := s.GetIPEntryForProject(scope, e.ID); err != nil {
 		return fmt.Errorf("IP 条目不存在")
 	}
 	_, err := s.db.Exec(`UPDATE ip_pool SET subnet=?, ip=?, department=?, room=?, account=?, status=?, remark=?
-		WHERE id=?`, e.Subnet, e.IP, e.Department, e.Room, e.Account, e.Status, e.Remark, e.ID)
+		WHERE id=? AND project_id=?`, e.Subnet, e.IP, e.Department, e.Room, e.Account, e.Status, e.Remark, e.ID, scope.ProjectID)
 	return err
 }
 
 // AllocateIP 分配一个 IP：置为「在用」并写入占用信息。
 func (s *Store) AllocateIP(id int64, department, account, room, remark string) error {
-	cur, err := s.GetIPEntry(id)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.AllocateIPForProject(scope, id, department, account, room, remark)
+}
+
+func (s *Store) AllocateIPForProject(scope ProjectScope, id int64, department, account, room, remark string) error {
+	cur, err := s.GetIPEntryForProject(scope, id)
 	if err != nil {
 		return fmt.Errorf("IP 条目不存在")
 	}
@@ -449,21 +534,29 @@ func (s *Store) AllocateIP(id int64, department, account, room, remark string) e
 	if strings.TrimSpace(account) == "" && strings.TrimSpace(department) == "" {
 		return fmt.Errorf("请至少填写使用人或归属部门")
 	}
-	_, err = s.db.Exec(`UPDATE ip_pool SET status='在用', department=?, account=?, room=?, remark=? WHERE id=?`,
-		department, account, room, remark, id)
+	_, err = s.db.Exec(`UPDATE ip_pool SET status='在用', department=?, account=?, room=?, remark=? WHERE id=? AND project_id=?`,
+		department, account, room, remark, id, scope.ProjectID)
 	return err
 }
 
 // ReleaseIP 释放一个 IP：置回「空闲」并清空占用信息，保留 IP 与网段。
 func (s *Store) ReleaseIP(id int64) error {
-	cur, err := s.GetIPEntry(id)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.ReleaseIPForProject(scope, id)
+}
+
+func (s *Store) ReleaseIPForProject(scope ProjectScope, id int64) error {
+	cur, err := s.GetIPEntryForProject(scope, id)
 	if err != nil {
 		return fmt.Errorf("IP 条目不存在")
 	}
 	if cur.Status != "在用" {
 		return fmt.Errorf("IP %s 当前不是占用状态，无需释放", cur.IP)
 	}
-	_, err = s.db.Exec(`UPDATE ip_pool SET status='空闲', department='', account='', room='', remark='' WHERE id=?`, id)
+	_, err = s.db.Exec(`UPDATE ip_pool SET status='空闲', department='', account='', room='', remark='' WHERE id=? AND project_id=?`, id, scope.ProjectID)
 	return err
 }
 
@@ -543,8 +636,19 @@ func (s *Store) IPEntryOwner(id int64) (string, string, error) {
 
 // AllIPEntries 返回当前筛选条件下的全部条目（用于导出，不受分页限制）。
 func (s *Store) AllIPEntries(q IPEntryQuery) ([]IPEntry, error) {
-	where, args := s.buildIPWhere(q)
-	query := `SELECT id, subnet, ip, IFNULL(department,''), IFNULL(room,''), IFNULL(account,''),
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, err
+	}
+	return s.AllIPEntriesForProject(scope, q)
+}
+
+func (s *Store) AllIPEntriesForProject(scope ProjectScope, q IPEntryQuery) ([]IPEntry, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
+	where, args := s.buildIPWhereForProject(scope, q)
+	query := `SELECT id, project_id, subnet, ip, IFNULL(department,''), IFNULL(room,''), IFNULL(account,''),
 		IFNULL(status,''), IFNULL(remark,'') FROM ip_pool` + where + " ORDER BY subnet, " + ipLastOctetOrder
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -554,7 +658,7 @@ func (s *Store) AllIPEntries(q IPEntryQuery) ([]IPEntry, error) {
 	list := []IPEntry{}
 	for rows.Next() {
 		var e IPEntry
-		if err := rows.Scan(&e.ID, &e.Subnet, &e.IP, &e.Department, &e.Room, &e.Account, &e.Status, &e.Remark); err != nil {
+		if err := rows.Scan(&e.ID, &e.ProjectID, &e.Subnet, &e.IP, &e.Department, &e.Room, &e.Account, &e.Status, &e.Remark); err != nil {
 			return nil, err
 		}
 		list = append(list, e)
