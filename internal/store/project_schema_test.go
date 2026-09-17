@@ -156,6 +156,10 @@ func createLegacyProjectFixture(t *testing.T) string {
 		db.Close()
 		t.Fatal(err)
 	}
+	if err := legacy.InitConfigSchema(); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
 	for _, table := range projectScopedTables {
 		insertProjectScopedRow(t, db, table, "LEGACY")
 	}
@@ -214,6 +218,16 @@ func insertProjectScopedRow(t *testing.T, db *sql.DB, table, prefix string) int6
 		result, err = db.Exec(`INSERT INTO cmdb_persons(name, department, updated_at) VALUES (?, ?, '')`, value, value)
 	case "cmdb_custom_fields":
 		result, err = db.Exec(`INSERT INTO cmdb_custom_fields(field_key, field_name, field_type, updated_at) VALUES (?, ?, 'text', '')`, value, value)
+	case "cmdb_org_nodes":
+		result, err = db.Exec(`INSERT INTO cmdb_org_nodes(node_type, name, updated_at) VALUES ('organization', ?, '')`, value)
+	case "cmdb_software_catalog":
+		result, err = db.Exec(`INSERT INTO cmdb_software_catalog(name, updated_at) VALUES (?, '')`, value)
+	case "cmdb_asset_software":
+		result, err = db.Exec(`INSERT INTO cmdb_asset_software(remark, updated_at) VALUES (?, '')`, value)
+	case "cmdb_locations":
+		result, err = db.Exec(`INSERT INTO cmdb_locations(name, updated_at) VALUES (?, '')`, value)
+	case "cmdb_statuses":
+		result, err = db.Exec(`INSERT INTO cmdb_statuses(name, updated_at) VALUES (?, '')`, value)
 	default:
 		t.Fatalf("未定义 %s 的测试插入语句", table)
 	}

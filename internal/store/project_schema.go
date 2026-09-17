@@ -43,6 +43,11 @@ var projectScopedTables = []string{
 	"cmdb_labels",
 	"cmdb_persons",
 	"cmdb_custom_fields",
+	"cmdb_org_nodes",
+	"cmdb_software_catalog",
+	"cmdb_asset_software",
+	"cmdb_locations",
+	"cmdb_statuses",
 }
 
 const projectSchema = `
@@ -120,6 +125,9 @@ func MigrateProjectSchema(db *sql.DB) error {
 		return fmt.Errorf("record project schema version: %w", err)
 	}
 	if err := migrateProjectUniqueIndexes(tx); err != nil {
+		return err
+	}
+	if err := migrateLegacyPersonOrgPaths(tx, now); err != nil {
 		return err
 	}
 

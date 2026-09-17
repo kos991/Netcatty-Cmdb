@@ -10,22 +10,25 @@ import (
 
 // Person 对应 cmdb_persons 表。
 type Person struct {
-	ID         int64  `json:"id"`
-	ProjectID  int64  `json:"project_id"`
-	SyncID     string `json:"sync_id"`
-	PersonCode string `json:"person_code"`
-	Name       string `json:"name"`
-	OrgName    string `json:"org_name"`
-	GroupName  string `json:"group_name"`
-	Department string `json:"department"`
-	Title      string `json:"title"`
-	Phone      string `json:"phone"`
-	Email      string `json:"email"`
-	Status     string `json:"status"` // 在职 / 离职 / 调休
-	Remark     string `json:"remark"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
-	AssetCount int    `json:"asset_count"` // 穿透计算名下资产数量
+	ID           int64  `json:"id"`
+	ProjectID    int64  `json:"project_id"`
+	SyncID       string `json:"sync_id"`
+	OrgID        int64  `json:"org_id"`
+	DepartmentID int64  `json:"department_id"`
+	GroupID      int64  `json:"group_id"`
+	PersonCode   string `json:"person_code"`
+	Name         string `json:"name"`
+	OrgName      string `json:"org_name"`
+	GroupName    string `json:"group_name"`
+	Department   string `json:"department"`
+	Title        string `json:"title"`
+	Phone        string `json:"phone"`
+	Email        string `json:"email"`
+	Status       string `json:"status"` // 在职 / 离职 / 调休
+	Remark       string `json:"remark"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	AssetCount   int    `json:"asset_count"` // 穿透计算名下资产数量
 }
 
 // PersonQuery 人员列表筛选参数。
@@ -77,15 +80,15 @@ func (s *Store) ListPersonsForProject(scope ProjectScope, q PersonQuery) ([]Pers
 		args = append(args, pat, pat, pat, pat)
 	}
 	if dept := strings.TrimSpace(q.Department); dept != "" && dept != "全部" {
-		where = append(where, "p.department = ?")
+		where = append(where, "COALESCE(NULLIF(d.name,''), p.department) = ?")
 		args = append(args, dept)
 	}
 	if org := strings.TrimSpace(q.OrgName); org != "" && org != "全部" {
-		where = append(where, "p.org_name = ?")
+		where = append(where, "COALESCE(NULLIF(o.name,''), p.org_name) = ?")
 		args = append(args, org)
 	}
 	if grp := strings.TrimSpace(q.GroupName); grp != "" && grp != "全部" {
-		where = append(where, "p.group_name = ?")
+		where = append(where, "COALESCE(NULLIF(g.name,''), p.group_name) = ?")
 		args = append(args, grp)
 	}
 	if st := strings.TrimSpace(q.Status); st != "" && st != "全部" {
@@ -99,21 +102,28 @@ func (s *Store) ListPersonsForProject(scope ProjectScope, q PersonQuery) ([]Pers
 	}
 
 	var total int
-	countQuery := "SELECT COUNT(*) FROM cmdb_persons p" + whereClause
+	personFrom := ` FROM cmdb_persons p
+		LEFT JOIN cmdb_org_nodes o ON o.id=p.org_id AND o.project_id=p.project_id AND o.deleted_at IS NULL
+		LEFT JOIN cmdb_org_nodes d ON d.id=p.department_id AND d.project_id=p.project_id AND d.deleted_at IS NULL
+		LEFT JOIN cmdb_org_nodes g ON g.id=p.group_id AND g.project_id=p.project_id AND g.deleted_at IS NULL`
+	countQuery := "SELECT COUNT(*)" + personFrom + whereClause
 	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	offset := (q.Page - 1) * q.PageSize
 	query := fmt.Sprintf(`
-		SELECT p.id, p.project_id, IFNULL(p.sync_id,''), IFNULL(p.person_code,''), p.name, IFNULL(p.org_name,''), IFNULL(p.group_name,''),
-		       p.department, IFNULL(p.title,''), IFNULL(p.phone,''), IFNULL(p.email,''),
+		SELECT p.id, p.project_id, IFNULL(p.sync_id,''), p.org_id, p.department_id, p.group_id,
+		       IFNULL(p.person_code,''), p.name,
+		       COALESCE(NULLIF(o.name,''), IFNULL(p.org_name,'')),
+		       COALESCE(NULLIF(g.name,''), IFNULL(p.group_name,'')),
+		       COALESCE(NULLIF(d.name,''), p.department), IFNULL(p.title,''), IFNULL(p.phone,''), IFNULL(p.email,''),
 		       p.status, IFNULL(p.remark,''), IFNULL(p.created_at,''), IFNULL(p.updated_at,''),
 		       (SELECT COUNT(*) FROM cmdb_assets a WHERE a.project_id = p.project_id AND (a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name))) AS asset_count
-		FROM cmdb_persons p
+		%s
 		%s
 		ORDER BY p.id DESC
-		LIMIT ? OFFSET ?`, whereClause)
+		LIMIT ? OFFSET ?`, personFrom, whereClause)
 
 	queryArgs := append(append([]interface{}{}, args...), q.PageSize, offset)
 	rows, err := s.db.Query(query, queryArgs...)
@@ -126,7 +136,8 @@ func (s *Store) ListPersonsForProject(scope ProjectScope, q PersonQuery) ([]Pers
 	for rows.Next() {
 		var p Person
 		if err := rows.Scan(
-			&p.ID, &p.ProjectID, &p.SyncID, &p.PersonCode, &p.Name, &p.OrgName, &p.GroupName,
+			&p.ID, &p.ProjectID, &p.SyncID, &p.OrgID, &p.DepartmentID, &p.GroupID,
+			&p.PersonCode, &p.Name, &p.OrgName, &p.GroupName,
 			&p.Department, &p.Title, &p.Phone, &p.Email,
 			&p.Status, &p.Remark, &p.CreatedAt, &p.UpdatedAt,
 			&p.AssetCount,
@@ -154,15 +165,22 @@ func (s *Store) GetPersonForProject(scope ProjectScope, id int64) (*Person, erro
 	}
 	var p Person
 	query := `
-		SELECT p.id, p.project_id, IFNULL(p.sync_id,''), IFNULL(p.person_code,''), p.name, IFNULL(p.org_name,''), IFNULL(p.group_name,''),
-		       p.department, IFNULL(p.title,''), IFNULL(p.phone,''), IFNULL(p.email,''),
+		SELECT p.id, p.project_id, IFNULL(p.sync_id,''), p.org_id, p.department_id, p.group_id,
+		       IFNULL(p.person_code,''), p.name,
+		       COALESCE(NULLIF(o.name,''), IFNULL(p.org_name,'')),
+		       COALESCE(NULLIF(g.name,''), IFNULL(p.group_name,'')),
+		       COALESCE(NULLIF(d.name,''), p.department), IFNULL(p.title,''), IFNULL(p.phone,''), IFNULL(p.email,''),
 		       p.status, IFNULL(p.remark,''), IFNULL(p.created_at,''), IFNULL(p.updated_at,''),
 		       (SELECT COUNT(*) FROM cmdb_assets a WHERE a.project_id = p.project_id AND (a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name))) AS asset_count
 		FROM cmdb_persons p
+		LEFT JOIN cmdb_org_nodes o ON o.id=p.org_id AND o.project_id=p.project_id AND o.deleted_at IS NULL
+		LEFT JOIN cmdb_org_nodes d ON d.id=p.department_id AND d.project_id=p.project_id AND d.deleted_at IS NULL
+		LEFT JOIN cmdb_org_nodes g ON g.id=p.group_id AND g.project_id=p.project_id AND g.deleted_at IS NULL
 		WHERE p.id = ? AND p.project_id = ?`
 
 	err := s.db.QueryRow(query, id, scope.ProjectID).Scan(
-		&p.ID, &p.ProjectID, &p.SyncID, &p.PersonCode, &p.Name, &p.OrgName, &p.GroupName,
+		&p.ID, &p.ProjectID, &p.SyncID, &p.OrgID, &p.DepartmentID, &p.GroupID,
+		&p.PersonCode, &p.Name, &p.OrgName, &p.GroupName,
 		&p.Department, &p.Title, &p.Phone, &p.Email,
 		&p.Status, &p.Remark, &p.CreatedAt, &p.UpdatedAt,
 		&p.AssetCount,
@@ -190,12 +208,11 @@ func (s *Store) CreatePersonForProject(scope ProjectScope, p *Person) (int64, er
 		return 0, err
 	}
 	p.Name = strings.TrimSpace(p.Name)
-	p.Department = strings.TrimSpace(p.Department)
 	if p.Name == "" {
 		return 0, fmt.Errorf("人员姓名不能为空")
 	}
-	if p.Department == "" {
-		return 0, fmt.Errorf("所属部门不能为空")
+	if err := s.resolvePersonOrgPath(scope, p); err != nil {
+		return 0, err
 	}
 	if p.Status == "" {
 		p.Status = "在职"
@@ -205,9 +222,9 @@ func (s *Store) CreatePersonForProject(scope ProjectScope, p *Person) (int64, er
 	p.UpdatedAt = now
 
 	res, err := s.db.Exec(`
-		INSERT INTO cmdb_persons (project_id, person_code, name, org_name, group_name, department, title, phone, email, status, remark, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		scope.ProjectID, p.PersonCode, p.Name, p.OrgName, p.GroupName, p.Department, p.Title, p.Phone, p.Email, p.Status, p.Remark, p.CreatedAt, p.UpdatedAt,
+		INSERT INTO cmdb_persons (project_id, org_id, department_id, group_id, person_code, name, org_name, group_name, department, title, phone, email, status, remark, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		scope.ProjectID, p.OrgID, p.DepartmentID, p.GroupID, p.PersonCode, p.Name, p.OrgName, p.GroupName, p.Department, p.Title, p.Phone, p.Email, p.Status, p.Remark, p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
 		return 0, err
@@ -238,12 +255,11 @@ func (s *Store) UpdatePersonForProject(scope ProjectScope, p *Person) error {
 		return err
 	}
 	p.Name = strings.TrimSpace(p.Name)
-	p.Department = strings.TrimSpace(p.Department)
 	if p.Name == "" {
 		return fmt.Errorf("人员姓名不能为空")
 	}
-	if p.Department == "" {
-		return fmt.Errorf("所属部门不能为空")
+	if err := s.resolvePersonOrgPath(scope, p); err != nil {
+		return err
 	}
 	if p.Status == "" {
 		p.Status = "在职"
@@ -253,9 +269,9 @@ func (s *Store) UpdatePersonForProject(scope ProjectScope, p *Person) error {
 
 	res, err := s.db.Exec(`
 		UPDATE cmdb_persons
-		SET person_code = ?, name = ?, org_name = ?, group_name = ?, department = ?, title = ?, phone = ?, email = ?, status = ?, remark = ?, updated_at = ?
+		SET org_id=?, department_id=?, group_id=?, person_code = ?, name = ?, org_name = ?, group_name = ?, department = ?, title = ?, phone = ?, email = ?, status = ?, remark = ?, updated_at = ?
 		WHERE id = ? AND project_id = ?`,
-		p.PersonCode, p.Name, p.OrgName, p.GroupName, p.Department, p.Title, p.Phone, p.Email, p.Status, p.Remark, p.UpdatedAt, p.ID, scope.ProjectID,
+		p.OrgID, p.DepartmentID, p.GroupID, p.PersonCode, p.Name, p.OrgName, p.GroupName, p.Department, p.Title, p.Phone, p.Email, p.Status, p.Remark, p.UpdatedAt, p.ID, scope.ProjectID,
 	)
 	if err != nil {
 		return err

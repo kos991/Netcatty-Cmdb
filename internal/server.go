@@ -792,6 +792,14 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("PUT /api/cmdb/models/{id}", s.handleUpdateCmdbModel)
 	scoped("DELETE /api/cmdb/models/{id}", s.handleDeleteCmdbModel)
 
+	// CMDB 统一配置目录（组织 / 设备类型 / 软件 / 位置 / 状态 / 厂商型号）
+	scoped("GET /api/cmdb/config/org-tree", s.handleGetCmdbOrgTree)
+	scoped("POST /api/cmdb/config/org-tree/move", s.handleMoveCmdbOrgNode)
+	scoped("GET /api/cmdb/config/{kind}", s.handleListCmdbConfig)
+	scoped("POST /api/cmdb/config/{kind}", s.handleCreateCmdbConfig)
+	scoped("PUT /api/cmdb/config/{kind}/{id}", s.handleUpdateCmdbConfig)
+	scoped("DELETE /api/cmdb/config/{kind}/{id}", s.handleDeleteCmdbConfig)
+
 	// CMDB 分类管理（组织 / 分组 / 设备分类 三个维度）
 	scoped("GET /api/cmdb/taxonomy/{kind}", s.handleListCmdbTaxonomy)
 	scoped("POST /api/cmdb/taxonomy/{kind}", s.handleCreateCmdbTaxonomy)

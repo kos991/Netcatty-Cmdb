@@ -71,6 +71,9 @@ func Open(path string) (*Store, error) {
 	if err := MigrateCMDBFullSchema(s.db); err != nil {
 		return fail(fmt.Errorf("migrate cmdb full schema: %w", err))
 	}
+	if err := s.InitConfigSchema(); err != nil {
+		return fail(err)
+	}
 	if err := MigrateProjectSchema(s.db); err != nil {
 		return fail(fmt.Errorf("migrate project schema: %w", err))
 	}
