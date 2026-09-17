@@ -39,6 +39,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { api } from './api'
+import { cmdbApi } from './cmdb/cmdbApi'
 
 const { Text } = Typography
 
@@ -78,6 +79,49 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [editForm] = Form.useForm()
+  const [personDirectory, setPersonDirectory] = useState([])
+  const [configuredStatuses, setConfiguredStatuses] = useState([])
+  const [softwareCatalog, setSoftwareCatalog] = useState([])
+
+  useEffect(() => {
+    let active = true
+    const loadDirectories = async () => {
+      try {
+        const people = []
+        let current = 1
+        let count = 0
+        do {
+          const response = await cmdbApi.listPersons({ page: current++, page_size: 500 })
+          people.push(...(response.list || []))
+          count = response.total || 0
+        } while (people.length < count)
+        const [statuses, software] = await Promise.all([
+          cmdbApi.listConfig('statuses'),
+          cmdbApi.listConfig('software'),
+        ])
+        if (!active) return
+        setPersonDirectory(people)
+        setConfiguredStatuses((statuses.list || []).map((item) => item.name))
+        setSoftwareCatalog((software.list || []).map((item) => item.name))
+      } catch (error) {
+        if (active) message.error(`加载人员与配置目录失败: ${error.message}`)
+      }
+    }
+    loadDirectories()
+    const refreshDirectories = () => loadDirectories()
+    window.addEventListener('cmdb:directory-changed', refreshDirectories)
+    return () => {
+      active = false
+      window.removeEventListener('cmdb:directory-changed', refreshDirectories)
+    }
+  }, [])
+
+  const personOptions = useMemo(() => personDirectory.map((person) => ({
+    value: person.id,
+    label: [person.name, person.org_name, person.department, person.group_name].filter(Boolean).join(' · '),
+  })), [personDirectory])
+  const statusOptions = useMemo(() => [...new Set([...configuredStatuses, ...(meta?.statuses || [])])], [configuredStatuses, meta?.statuses])
+  const softwareOptions = useMemo(() => [...new Set([...softwareCatalog, ...(meta?.security_software || [])])], [softwareCatalog, meta?.security_software])
 
   const loadData = async (overrides = {}) => {
     setLoading(true)
@@ -166,11 +210,17 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
   const submitTransfer = async () => {
     try {
       const vals = await transferForm.validateFields()
+      const person = personDirectory.find((item) => item.id === vals.to_person_id)
+      if (!person) throw new Error('所选人员已不存在，请刷新后重试')
+      const transferValues = { ...vals }
+      delete transferValues.to_person_id
       await api.transferUser(transferTarget.id, {
-        ...vals,
+        ...transferValues,
+        to_user: person.name,
+        to_department: person.department,
         date: vals.date ? vals.date.format('YYYY-MM-DD HH:mm:ss') : '',
       })
-      message.success(`成功将设备调换给 ${vals.to_user}，已自动记录履历！`)
+      message.success(`成功将设备调换给 ${person.name}，已自动记录履历！`)
       setTransferModalOpen(false)
       loadData()
       if (drawerAsset && drawerAsset.id === transferTarget.id) {
@@ -187,7 +237,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
     setMaintTarget(record)
     maintForm.resetFields()
     maintForm.setFieldsValue({
-      maintenance_type: '更换云桌面盒子',
+      maintenance_type: '更换终端主机',
       part_type: 'box',
       old_sn: record.box_sn,
       new_status: record.status,
@@ -223,7 +273,6 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
     editForm.resetFields()
     editForm.setFieldsValue({
       status: '在用',
-      security_software: '已安装',
       net_type: '专网',
     })
     setEditModalOpen(true)
@@ -302,7 +351,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
       ),
     },
     {
-      title: '盒子SN',
+      title: '终端主机 SN',
       dataIndex: 'box_sn',
       key: 'box_sn',
       width: 130,
@@ -350,7 +399,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
       render: (v) => (v ? <Tag color="cyan">{v}</Tag> : <span style={{ color: '#ccc' }}>-</span>),
     },
     {
-      title: '安元软件',
+      title: '软件安装情况',
       dataIndex: 'security_software',
       key: 'security_software',
       width: 100,
@@ -409,7 +458,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
             </Button>
           </Tooltip>
 
-          <Tooltip title="维修送修或更换盒子/显示器SN">
+          <Tooltip title="维修送修或更换终端主机 / 显示器 SN">
             <Button
               type="text"
               size="small"
@@ -470,7 +519,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
       title: '设备分类',
       key: 'category',
       width: 150,
-      render: () => <Tag color="blue">云桌面终端</Tag>,
+      render: () => <Tag color="blue">终端资产</Tag>,
     },
     {
       title: 'SN / IP',
@@ -494,7 +543,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
       },
     },
     {
-      title: '安元软件',
+      title: '软件安装情况',
       dataIndex: 'security_software',
       key: 'security_software',
       width: 110,
@@ -521,7 +570,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
 
   return (
     <div className="cmdb-assets-page">
-      <div className="cmdb-breadcrumb">资源管理 <span>/</span> 云桌面终端资产</div>
+      <div className="cmdb-breadcrumb">资源管理 <span>/</span> 终端资产</div>
       <div className="cmdb-assets-layout">
         <main className="cmdb-assets-main">
           <div className="cmdb-page-heading">
@@ -538,7 +587,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
             <div className="cmdb-occupancy-heading">
               <div>
                 <strong>资产占用总览</strong>
-                <span>当前关键词、部门和安元软件筛选下的全量统计</span>
+                <span>当前关键词、部门和软件安装筛选下的全量统计</span>
               </div>
               <span className="cmdb-occupancy-total">共 {summary.total ?? total} 项</span>
             </div>
@@ -615,7 +664,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
             ))}
           </Select>
 
-          <span className="cmdb-filter-label">安元软件</span>
+          <span className="cmdb-filter-label">软件安装情况</span>
           <Select
             value={secSoft}
             onChange={(v) => {
@@ -665,10 +714,10 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
                         <div className="cmdb-card-owner">{r.user_name || '公用 / 闲置'}</div>
                         <div className="cmdb-card-location">{r.department || '未分配'} · {r.room || '未指定位置'}</div>
                         <div className="cmdb-card-fields">
-                          <div><span>设备类型</span><b>云桌面终端</b></div>
-                          <div><span>盒子 SN</span><b className="cmdb-card-mono">{r.box_sn || r.display_sn || '-'}</b></div>
+                          <div><span>设备类型</span><b>终端资产</b></div>
+                          <div><span>终端主机 SN</span><b className="cmdb-card-mono">{r.box_sn || r.display_sn || '-'}</b></div>
                           <div><span>业务 IP</span><b className="cmdb-card-mono">{r.ip || r.terminal_ip || '未配置'}</b></div>
-                          <div><span>安元软件</span><b>{r.security_software || '未登记'}</b></div>
+                          <div><span>软件安装情况</span><b>{r.security_software || '未登记'}</b></div>
                         </div>
                         <div className="cmdb-card-actions">
                           <Button type="link" size="small" onClick={(e) => { e.stopPropagation(); openHistory(r) }}>详情</Button>
@@ -752,15 +801,15 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
                 <Descriptions.Item label="所在部门">
                   {drawerAsset.department || '-'}
                 </Descriptions.Item>
-                <Descriptions.Item label="房间/法庭">{drawerAsset.room || '-'}</Descriptions.Item>
+                <Descriptions.Item label="房间 / 位置">{drawerAsset.room || '-'}</Descriptions.Item>
                 <Descriptions.Item label="业务IP">{drawerAsset.ip || '-'}</Descriptions.Item>
-                <Descriptions.Item label="云桌面盒子SN">
+                <Descriptions.Item label="终端主机 SN">
                   <span style={{ fontFamily: 'monospace' }}>{drawerAsset.box_sn || '-'}</span>
                 </Descriptions.Item>
                 <Descriptions.Item label="显示器SN">
                   <span style={{ fontFamily: 'monospace' }}>{drawerAsset.display_sn || '-'}</span>
                 </Descriptions.Item>
-                <Descriptions.Item label="安元软件情况">
+                <Descriptions.Item label="软件安装情况">
                   {drawerAsset.security_software || '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="建档时间">{drawerAsset.created_at || '-'}</Descriptions.Item>
@@ -909,16 +958,25 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
                 </div>
               </div>
               <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-                盒子SN: {transferTarget.box_sn} | IP: {transferTarget.ip || '未分配'}
+                终端主机 SN: {transferTarget.box_sn} | IP: {transferTarget.ip || '未分配'}
               </div>
             </Card>
 
             <Form.Item
-              name="to_user"
+              name="to_person_id"
               label="新使用人 (责任人)"
-              rules={[{ required: true, message: '请输入新使用人姓名' }]}
+              rules={[{ required: true, message: '请选择新使用人' }]}
             >
-              <Input placeholder="输入新使用人姓名，如：李四" />
+              <Select
+                showSearch
+                optionFilterProp="label"
+                options={personOptions}
+                placeholder={personOptions.length ? '选择人员' : '请先在组织与人员中维护人员'}
+                onChange={(id) => {
+                  const person = personDirectory.find((item) => item.id === id)
+                  transferForm.setFieldValue('to_department', person?.department || '')
+                }}
+              />
             </Form.Item>
 
             <Space orientation="horizontal" style={{ width: '100%', display: 'flex' }} size={12}>
@@ -927,21 +985,15 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
                 label="调入新部门"
                 style={{ flex: 1 }}
               >
-                <Select placeholder="选择或输入新部门" allowClear showSearch>
-                  {meta?.departments?.map((d) => (
-                    <Select.Option key={d} value={d}>
-                      {d}
-                    </Select.Option>
-                  ))}
-                </Select>
+                <Input readOnly placeholder="选择人员后自动带出" />
               </Form.Item>
 
               <Form.Item
                 name="to_room"
-                label="新房间/法庭号"
+                label="新房间 / 位置"
                 style={{ flex: 1 }}
               >
-                <Input placeholder="如：305室 或 第3法庭" />
+                <Input placeholder="如：305 室或 3 层会议室" />
               </Form.Item>
             </Space>
 
@@ -964,7 +1016,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
             <Form.Item name="description" label="交接调换说明 / 备注">
               <Input.TextArea
                 rows={2}
-                placeholder="例如：岗位调动交接、法庭设备轮换、借调使用"
+                placeholder="例如：岗位调动交接、设备位置调整、借调使用"
               />
             </Form.Item>
           </Form>
@@ -992,7 +1044,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
             <Card size="small" style={{ background: '#fffbe6', marginBottom: 16, border: '1px solid #ffe58f' }}>
               <div>设备：{maintTarget.user_name} ({maintTarget.department} {maintTarget.room})</div>
               <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-                当前盒子SN: <strong>{maintTarget.box_sn || '无'}</strong> | 显示器SN: <strong>{maintTarget.display_sn || '无'}</strong>
+                当前终端主机 SN: <strong>{maintTarget.box_sn || '无'}</strong> | 显示器 SN: <strong>{maintTarget.display_sn || '无'}</strong>
               </div>
             </Card>
 
@@ -1001,7 +1053,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
                 onChange={(e) => {
                   if (e.target.value === 'box') {
                     maintForm.setFieldsValue({
-                      maintenance_type: '更换云桌面盒子',
+                      maintenance_type: '更换终端主机',
                       old_sn: maintTarget.box_sn,
                     })
                   } else if (e.target.value === 'display') {
@@ -1017,7 +1069,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
                   }
                 }}
               >
-                <Radio.Button value="box">更换盒子</Radio.Button>
+                <Radio.Button value="box">更换终端主机</Radio.Button>
                 <Radio.Button value="display">更换显示器</Radio.Button>
                 <Radio.Button value="other">整机排障/维修</Radio.Button>
               </Radio.Group>
@@ -1066,7 +1118,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
             <Form.Item name="description" label="故障原因与维保说明" rules={[{ required: true, message: '请简述维修原因' }]}>
               <Input.TextArea
                 rows={2}
-                placeholder="例如：原盒子电源指示灯不亮无法开机，替换为仓库备用机"
+                placeholder="例如：原终端主机电源指示灯不亮无法开机，替换为仓库备用机"
               />
             </Form.Item>
           </Form>
@@ -1075,7 +1127,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
 
       {/* 4. 资产属性新增 / 编辑弹窗 */}
       <Modal
-        title={editTarget ? '编辑资产基本信息' : '录入新云桌面资产'}
+        title={editTarget ? '编辑资产基本信息' : '录入新终端资产'}
         open={editModalOpen}
         onOk={submitEdit}
         onCancel={() => setEditModalOpen(false)}
@@ -1091,7 +1143,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
             </Form.Item>
             <Form.Item name="status" label="设备状态" style={{ flex: 1 }}>
               <Select>
-                {meta?.statuses?.map((s) => (
+                {statusOptions.map((s) => (
                   <Select.Option key={s} value={s}>
                     {s}
                   </Select.Option>
@@ -1101,7 +1153,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
           </Space>
 
           <Space style={{ width: '100%', display: 'flex' }} size={12}>
-            <Form.Item name="box_sn" label="云桌面盒子SN" style={{ flex: 1 }}>
+            <Form.Item name="box_sn" label="终端主机 SN" style={{ flex: 1 }}>
               <Input placeholder="如：71W5270xxx" />
             </Form.Item>
             <Form.Item name="display_sn" label="显示器SN" style={{ flex: 1 }}>
@@ -1111,19 +1163,23 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
 
           <Space style={{ width: '100%', display: 'flex' }} size={12}>
             <Form.Item name="user_name" label="当前使用人" style={{ flex: 1 }}>
-              <Input placeholder="使用人员姓名" />
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder={personOptions.length ? '选择人员' : '请先维护人员目录'}
+                options={personDirectory.map((person) => ({ value: person.name, label: [person.name, person.org_name, person.department, person.group_name].filter(Boolean).join(' · ') }))}
+                onChange={(name) => {
+                  const person = personDirectory.find((item) => item.name === name)
+                  if (person) editForm.setFieldValue('department', person.department)
+                }}
+              />
             </Form.Item>
             <Form.Item name="department" label="所属部门" style={{ flex: 1 }}>
-              <Select showSearch allowClear placeholder="选择部门">
-                {meta?.departments?.map((d) => (
-                  <Select.Option key={d} value={d}>
-                    {d}
-                  </Select.Option>
-                ))}
-              </Select>
+              <Input readOnly placeholder="选择人员后自动带出" />
             </Form.Item>
-            <Form.Item name="room" label="所在房间/法庭" style={{ flex: 1 }}>
-              <Input placeholder="如：305 或 第5法庭" />
+            <Form.Item name="room" label="房间 / 位置" style={{ flex: 1 }}>
+              <Input placeholder="如：305 室或 3 层会议室" />
             </Form.Item>
           </Space>
 
@@ -1134,12 +1190,8 @@ export default function AssetCenter({ meta, focusTarget, onNavigate }) {
             <Form.Item name="terminal_ip" label="终端物理IP" style={{ flex: 1 }}>
               <Input placeholder="如：192.168.35.x" />
             </Form.Item>
-            <Form.Item name="security_software" label="安元软件情况" style={{ flex: 1 }}>
-              <Select>
-                <Select.Option value="已安装">已安装</Select.Option>
-                <Select.Option value="未安装">未安装</Select.Option>
-                <Select.Option value="待核实">待核实</Select.Option>
-              </Select>
+            <Form.Item name="security_software" label="软件安装情况" style={{ flex: 1 }}>
+              <Select allowClear showSearch optionFilterProp="label" options={softwareOptions.map((name) => ({ value: name, label: name }))} placeholder={softwareOptions.length ? '选择已安装软件' : '请先在配置中心维护软件目录'} />
             </Form.Item>
           </Space>
 

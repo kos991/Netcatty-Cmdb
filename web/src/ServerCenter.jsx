@@ -742,7 +742,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
                       serverForm.resetFields()
                       serverForm.setFieldsValue({
                         status: '运行中',
-                        location: '科技法庭核心机房',
+                        location: '核心机房',
                       })
                       setServerModalVisible(true)
                     }}
@@ -984,7 +984,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="location" label="机房位置">
-                <Input placeholder="如：科技法庭核心机房 / 3层弱电间" />
+                <Input placeholder="如：核心机房 / 3 层弱电间" />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -1223,7 +1223,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
             label="应用系统名称"
             rules={[{ required: true, message: '请输入应用名称' }]}
           >
-            <Input placeholder="如：宝兰德 BES Application Server / 数字法庭审判业务系统" />
+            <Input placeholder="如：BES Application Server / 统一业务系统" />
           </Form.Item>
 
           <Row gutter={16}>

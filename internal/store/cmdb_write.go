@@ -917,9 +917,9 @@ func (s *Store) DeleteCmdbAssetForProject(scope ProjectScope, id int64) error {
 		return fmt.Errorf("资产不属于当前项目: %w", err)
 	}
 	if cur.SourceID > 0 {
-		src := "云桌面终端台账"
+		src := "终端资产台账"
 		if cur.SourceType == "legacy_server" {
-			src = "物理服务器与应用"
+			src = "基础设施与业务系统"
 		}
 		return fmt.Errorf("该记录由「%s」映射而来，删除后下次同步会重新出现；如需停用请改为「归档」，或到源台账中注销", src)
 	}

@@ -261,21 +261,21 @@ func TestLegacyAssetTransferUpdatesLedgerLogAndMappedRecord(t *testing.T) {
 }
 
 func TestLegacyAssetMaintenanceUpdatesPartsInventoryLogAndMappedRecord(t *testing.T) {
-	t.Run("盒子换件并将旧件待修入库", func(t *testing.T) {
+	t.Run("终端主机换件并将旧件待修入库", func(t *testing.T) {
 		s := newLegacyAssetTestStore(t)
 		id := createLegacyAsset(t, s, Asset{AssetCode: "FIX-BOX", BoxSN: "BOX-OLD", DisplaySN: "DISPLAY-KEEP", UserName: "张三", Department: "执行局", Room: "201", Status: "在用"})
 		if _, err := s.SyncLegacyToCmdb(); err != nil {
 			t.Fatalf("准备 CMDB 映射失败: %v", err)
 		}
-		req := MaintenanceReq{MaintenanceType: "更换云桌面盒子", PartType: "box", OldSN: "BOX-OLD", NewSN: "BOX-NEW", NewStatus: "在用", MarkOldAs: "故障待修入库", Date: "2026-09-16 11:00:00", Operator: "维修员", Description: "盒子无法启动"}
+		req := MaintenanceReq{MaintenanceType: "更换终端主机", PartType: "box", OldSN: "BOX-OLD", NewSN: "BOX-NEW", NewStatus: "在用", MarkOldAs: "故障待修入库", Date: "2026-09-16 11:00:00", Operator: "维修员", Description: "终端主机无法启动"}
 		if err := s.Maintenance(id, req); err != nil {
-			t.Fatalf("盒子换件失败: %v", err)
+			t.Fatalf("终端主机换件失败: %v", err)
 		}
 		asset, logs, _ := s.GetAsset(id)
 		if asset.BoxSN != "BOX-NEW" || asset.DisplaySN != "DISPLAY-KEEP" || asset.Status != "在用" {
-			t.Fatalf("盒子换件误改或漏改字段: %+v", asset)
+			t.Fatalf("终端主机换件误改或漏改字段: %+v", asset)
 		}
-		if len(logs) != 1 || logs[0].LogType != "设备维修更换" || logs[0].OldSN != "BOX-OLD" || logs[0].NewSN != "BOX-NEW" || logs[0].Operator != "维修员" || logs[0].Description != "盒子无法启动" || logs[0].LogTime != req.Date {
+		if len(logs) != 1 || logs[0].LogType != "设备维修更换" || logs[0].OldSN != "BOX-OLD" || logs[0].NewSN != "BOX-NEW" || logs[0].Operator != "维修员" || logs[0].Description != "终端主机无法启动" || logs[0].LogTime != req.Date {
 			t.Fatalf("维修履历不完整: %+v", logs)
 		}
 		var oldPart Asset
@@ -283,14 +283,14 @@ func TestLegacyAssetMaintenanceUpdatesPartsInventoryLogAndMappedRecord(t *testin
 			t.Fatalf("旧件未入库: %v", err)
 		}
 		if oldPart.BoxSN != "BOX-OLD" || oldPart.DisplaySN != "" || oldPart.Status != "维修中" || !strings.Contains(oldPart.Remark, "FIX-BOX") {
-			t.Fatalf("旧盒子仓库记录不可追溯: %+v", oldPart)
+			t.Fatalf("旧终端主机仓库记录不可追溯: %+v", oldPart)
 		}
 		var sn, boxSN, status string
 		if err := s.db.QueryRow(`SELECT sn, box_sn, status FROM cmdb_assets WHERE source_type='legacy_asset' AND source_id=?`, id).Scan(&sn, &boxSN, &status); err != nil {
 			t.Fatalf("读取 CMDB 映射失败: %v", err)
 		}
 		if sn != "BOX-NEW" || boxSN != "BOX-NEW" || status != "在线" {
-			t.Fatalf("CMDB 盒子 SN/状态未同步: sn=%q box_sn=%q status=%q", sn, boxSN, status)
+			t.Fatalf("Cmdb 终端主机 SN/状态未同步: sn=%q box_sn=%q status=%q", sn, boxSN, status)
 		}
 	})
 

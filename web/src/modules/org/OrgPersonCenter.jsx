@@ -6,6 +6,7 @@ import {
   Button,
   Input,
   Select,
+  Cascader,
   Tag,
   Space,
   Modal,
@@ -31,7 +32,7 @@ import {
 } from '@ant-design/icons'
 import { cmdbApi } from '../../cmdb/cmdbApi'
 import PersonAssetDrawer from './PersonAssetDrawer'
-import { buildPersonTree } from '../../cmdbWorkspaceState'
+import { buildOrgNavigationTree, fromOrgPath, orgTreeToCascader, toOrgPath } from './orgFormState'
 import './org-person.css'
 
 const { Text } = Typography
@@ -45,11 +46,13 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
   const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
   const [directory, setDirectory] = useState([])
+  const [orgTree, setOrgTree] = useState([])
   const [error, setError] = useState('')
   const [directoryError, setDirectoryError] = useState('')
   const requestVersion = useRef(0)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingPerson, setEditingPerson] = useState(null)
+  const [formSeed, setFormSeed] = useState(null)
   const [drawerPerson, setDrawerPerson] = useState(null)
   const [form] = Form.useForm()
 
@@ -72,6 +75,7 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
 
   const loadDirectory = async () => {
     try {
+      const treeRes = await cmdbApi.getOrgTree()
       const entries = []
       let current = 1
       let count
@@ -81,6 +85,7 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
         count = res.total || 0
         if (!res.list?.length && entries.length < count) throw new Error('人员目录返回不完整，请重试')
       } while (entries.length < count)
+      setOrgTree(treeRes.list || [])
       setDirectory(entries)
       setDirectoryError('')
     } catch (err) { setDirectoryError(err.message) }
@@ -89,6 +94,18 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
   useEffect(() => { loadData() }, [loadData])
   useEffect(() => { loadDirectory() }, [])
   useEffect(() => {
+    const refreshOrganizations = (event) => {
+      if (event.detail?.kind === 'org-nodes') loadDirectory()
+    }
+    window.addEventListener('cmdb:directory-changed', refreshOrganizations)
+    return () => window.removeEventListener('cmdb:directory-changed', refreshOrganizations)
+  }, [])
+  useEffect(() => {
+    if (!modalVisible || !formSeed) return
+    form.resetFields()
+    form.setFieldsValue(formSeed)
+  }, [form, formSeed, modalVisible])
+  useEffect(() => {
     if (focusTarget?.tableKey !== 'persons') return
     cmdbApi.getPersonAssets(focusTarget.id).then((res) => {
       setDrawerPerson(res.person)
@@ -96,12 +113,15 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
     }).catch((err) => setError(err.message))
   }, [focusTarget])
 
-  // 聚合部门与组织树
-  const treeData = useMemo(() => buildPersonTree(directory).map((node) => ({
-    ...node,
-    icon: node.key === 'all' ? <ApartmentOutlined /> : <TeamOutlined />,
-    children: node.children?.map((child) => ({ ...child, icon: <ApartmentOutlined /> })),
-  })), [directory])
+  const treeData = useMemo(() => {
+    const decorate = (node) => ({
+      ...node,
+      icon: node.key === 'all' || node.nodeType === 'department' ? <ApartmentOutlined /> : <TeamOutlined />,
+      children: node.children?.map(decorate),
+    })
+    return buildOrgNavigationTree(orgTree, directory).map(decorate)
+  }, [directory, orgTree])
+  const orgOptions = useMemo(() => orgTreeToCascader(orgTree), [orgTree])
 
   // 统计数据
   const stats = useMemo(() => {
@@ -114,14 +134,9 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
   const handleOpenModal = (record = null) => {
     setEditingPerson(record)
     if (record) {
-      form.setFieldsValue(record)
+      setFormSeed({ ...record, org_path: toOrgPath(record) })
     } else {
-      form.resetFields()
-      form.setFieldsValue({
-        status: '在职',
-        org_name: '总机构',
-        group_name: '技术运维组',
-      })
+      setFormSeed({ status: '在职' })
     }
     setModalVisible(true)
   }
@@ -129,13 +144,16 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
   const handleSave = async () => {
     try {
       const values = await form.validateFields()
+      const { org_path: orgPath, ...personValues } = values
+      const payload = { ...personValues, ...fromOrgPath(orgPath) }
       if (editingPerson) {
-        await cmdbApi.updatePerson(editingPerson.id, values)
+        await cmdbApi.updatePerson(editingPerson.id, payload)
         message.success('人员信息更新成功')
       } else {
-        await cmdbApi.createPerson(values)
+        await cmdbApi.createPerson(payload)
         message.success('新增人员成功')
       }
+      window.dispatchEvent(new CustomEvent('cmdb:directory-changed', { detail: { kind: 'persons' } }))
       setModalVisible(false)
       refresh()
     } catch (err) {
@@ -148,6 +166,7 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
     try {
       await cmdbApi.deletePerson(id)
       message.success('已删除人员档案')
+      window.dispatchEvent(new CustomEvent('cmdb:directory-changed', { detail: { kind: 'persons' } }))
       refresh()
     } catch (err) {
       message.error(`删除失败: ${err.message}`)
@@ -355,7 +374,7 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
         onCancel={() => setModalVisible(false)}
         okText="保存"
         cancelText="取消"
-        destroyOnClose
+        forceRender
       >
         <Form form={form} layout="vertical" preserve={false}>
           <Row gutter={16}>
@@ -377,30 +396,26 @@ export default function OrgPersonCenter({ focusTarget, onNavigate }) {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="org_name" label="所属组织">
-                <Input placeholder="例如：信息运维部" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="group_name" label="所属分组">
-                <Input placeholder="例如：核心业务保障组" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={12}>
               <Form.Item
-                name="department"
-                label="所属部门"
-                rules={[{ required: true, message: '请输入部门名称' }]}
+                name="org_path"
+                label="组织 / 部门 / 分组"
+                rules={[
+                  { required: true, message: '请选择所属组织和部门' },
+                  { validator: (_, value) => value?.length >= 2 ? Promise.resolve() : Promise.reject(new Error('至少选择到部门')) },
+                ]}
               >
-                <Input placeholder="例如：审判管理处、技术科" />
+                <Cascader
+                  options={orgOptions}
+                  changeOnSelect
+                  showSearch
+                  placeholder={orgOptions.length ? '请选择组织、部门，可继续选择分组' : '请先在配置中心维护组织架构'}
+                  disabled={!orgOptions.length}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="title" label="职位 / 岗位">
-                <Input placeholder="例如：系统管理员、法官助理" />
+                <Input placeholder="例如：系统管理员、运维工程师" />
               </Form.Item>
             </Col>
           </Row>

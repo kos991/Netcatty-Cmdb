@@ -10,11 +10,13 @@ import {
   Popconfirm,
   message,
   Tabs,
-  Alert,
   Typography,
 } from 'antd'
 import { PlusOutlined, ReloadOutlined, ImportOutlined } from '@ant-design/icons'
 import { cmdbApi } from './cmdbApi'
+import ConfigCatalogPane from './ConfigCatalogPane'
+import OrgTreeConfig from './OrgTreeConfig'
+import CustomFieldCenter from '../modules/customfields/CustomFieldCenter'
 
 const PAGE_SIZES = ['10', '20', '50', '100']
 
@@ -57,6 +59,7 @@ export default function CmdbConfig() {
   const [keyword, setKeyword] = useState('')
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [formSeed, setFormSeed] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
@@ -80,16 +83,21 @@ export default function CmdbConfig() {
     load()
   }, [load])
 
+  useEffect(() => {
+    if (!modalOpen || !formSeed) return
+    form.resetFields()
+    form.setFieldsValue(formSeed)
+  }, [form, formSeed, modalOpen])
+
   const openAdd = () => {
     setEditing(null)
-    form.resetFields()
-    form.setFieldsValue({ height_u: 1 })
+    setFormSeed({ height_u: 1 })
     setModalOpen(true)
   }
 
   const openEdit = (rec) => {
     setEditing(rec)
-    form.setFieldsValue(rec)
+    setFormSeed(rec)
     setModalOpen(true)
   }
 
@@ -241,22 +249,17 @@ export default function CmdbConfig() {
   )
 
   return (
-    <div>
+    <div className="cmdb-config-center">
+      <div className="cmdb-page-heading"><h2>配置中心</h2></div>
       <Tabs
         items={[
-          { key: 'models', label: '设备模型库', children: modelLibrary },
-          {
-            key: 'snmp',
-            label: 'SNMP 采集配置',
-            children: (
-              <Alert
-                type="warning"
-                showIcon
-                message="SNMP 采集配置依赖常驻采集端与真实被管设备"
-                description="本项目当前是被动台账（SQLite + 人工录入），没有采集进程，也没有可联调的网络设备。该配置属于原规划的 P2 采集与联动阶段，在没有采集端之前无法验证，因此本阶段不提供可编辑界面，也不做假的占位表单。"
-              />
-            ),
-          },
+          { key: 'organizations', label: '组织架构', children: <OrgTreeConfig /> },
+          { key: 'device-types', label: '设备类型', children: <ConfigCatalogPane kind="device-types" /> },
+          { key: 'software', label: '软件目录', children: <ConfigCatalogPane kind="software" /> },
+          { key: 'locations', label: '位置目录', children: <ConfigCatalogPane kind="locations" /> },
+          { key: 'statuses', label: '状态配置', children: <ConfigCatalogPane kind="statuses" /> },
+          { key: 'models', label: '厂商与型号', children: modelLibrary },
+          { key: 'custom-fields', label: '自定义字段', children: <CustomFieldCenter embedded /> },
         ]}
       />
 
@@ -268,7 +271,7 @@ export default function CmdbConfig() {
         confirmLoading={saving}
         okText="保存"
         cancelText="取消"
-        destroyOnClose
+        forceRender
       >
         <Form form={form} layout="vertical">
           <Form.Item name="vendor" label="厂商">

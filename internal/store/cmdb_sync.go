@@ -28,7 +28,7 @@ func mapLegacyAssetStatus(s string) string {
 	}
 }
 
-// mapLegacyServerStatus 旧物理服务器状态 → CMDB 状态白名单。
+// mapLegacyServerStatus 将旧基础设施状态映射到 Cmdb 状态白名单。
 func mapLegacyServerStatus(s string) string {
 	switch strings.TrimSpace(s) {
 	case "运行中":
@@ -44,7 +44,7 @@ func mapLegacyServerStatus(s string) string {
 	}
 }
 
-// AllServers 读取全部物理服务器（不分页）。
+// AllServers 读取全部基础设施记录（不分页）。
 // 现有 QueryServers 的 pageSize 上限为 500，超过会回退到默认值 20，
 // 映射同步需要完整数据，因此这里单独提供无上限读取。
 func (s *Store) AllServers() ([]PhysicalServer, error) {

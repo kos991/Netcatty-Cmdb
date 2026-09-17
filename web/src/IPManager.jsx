@@ -752,7 +752,7 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
             <Input placeholder="如 张三 / 诉服达1" allowClear />
           </Form.Item>
           <Form.Item name="department" label="归属部门">
-            <Input placeholder="如 立案庭" allowClear />
+            <Input placeholder="如 信息技术部" allowClear />
           </Form.Item>
           <Form.Item name="room" label="房间 / 位置">
             <Input placeholder="如 302" allowClear />

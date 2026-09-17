@@ -1,27 +1,27 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MODULES, SUBMODULES, resolveSearchTarget, panelKeyFor, resolveIPFocus, buildPersonTree } from './cmdbWorkspaceState.js'
+import { MODULES, resolveSearchTarget, panelKeyFor, resolveIPFocus, buildPersonTree } from './cmdbWorkspaceState.js'
 
-test('固定六入口及基础管理、运维分析子页签', () => {
-  assert.deepEqual(MODULES.map((item) => item.key), ['search', 'assets', 'infrastructure', 'systems', 'base', 'operations'])
-  assert.deepEqual(SUBMODULES.base.map((item) => item.key), ['people', 'ip'])
-  assert.deepEqual(SUBMODULES.operations.map((item) => item.key), ['dashboard', 'audit'])
+test('固定八个 Cmdb 业务入口', () => {
+  assert.deepEqual(MODULES.map((item) => item.key), [
+    'search', 'assets', 'infrastructure', 'systems', 'people', 'ip', 'operations', 'config',
+  ])
 })
 
-for (const [tableKey, module, submodule] of [
+for (const [tableKey, module] of [
   ['assets', 'assets'], ['cmdb_assets', 'infrastructure'], ['server_apps', 'systems'],
-  ['persons', 'base', 'people'], ['asset_logs', 'operations', 'audit'], ['ip_pool', 'base', 'ip'],
+  ['persons', 'people'], ['asset_logs', 'operations'], ['ip_pool', 'ip'],
 ]) {
   test(`全局查询 ${tableKey} 保留精确详情目标`, () => {
     const focusTarget = { tableKey, id: 7 }
-    assert.deepEqual(resolveSearchTarget(focusTarget), { module, ...(submodule ? { submodule } : {}), focusTarget })
+    assert.deepEqual(resolveSearchTarget(focusTarget), { module, focusTarget })
   })
 }
 
-test('子页签使用独立面板键，未知搜索类型不误跳转', () => {
-  assert.equal(panelKeyFor('search', 'people', 'dashboard'), 'search')
-  assert.equal(panelKeyFor('base', 'ip', 'dashboard'), 'base:ip')
-  assert.equal(panelKeyFor('operations', 'people', 'audit'), 'operations:audit')
+test('每个入口使用独立面板键，未知搜索类型不误跳转', () => {
+  assert.equal(panelKeyFor('search'), 'search')
+  assert.equal(panelKeyFor('people'), 'people')
+  assert.equal(panelKeyFor('operations'), 'operations')
   assert.equal(resolveSearchTarget({ tableKey: 'unknown', id: 1 }), null)
 })
 

@@ -23,9 +23,9 @@ const STATUS_ORDER = ['在线', '在库', '报废', '维护中', '离线', '故�
 // 快捷功能：全部指向系统内真实存在的模块
 const SHORTCUTS = [
   { key: 'search', label: '全局查询', icon: <SearchOutlined /> },
-  { key: 'cmdb:resources', label: 'CMDB 资源', icon: <DatabaseOutlined /> },
-  { key: 'cmdb:assets', label: '云桌面终端', icon: <DesktopOutlined /> },
-  { key: 'cmdb:servers', label: '物理服务器', icon: <DatabaseOutlined /> },
+  { key: 'cmdb:resources', label: 'Cmdb', icon: <DatabaseOutlined /> },
+  { key: 'cmdb:assets', label: '终端资产', icon: <DesktopOutlined /> },
+  { key: 'cmdb:servers', label: '基础设施', icon: <DatabaseOutlined /> },
   { key: 'cmdb:labels', label: '编码与标签', icon: <QrcodeOutlined /> },
   { key: 'cmdb:work-orders', label: '工单管理', icon: <ToolOutlined /> },
   { key: 'cmdb:credentials', label: '凭证中心', icon: <SafetyCertificateOutlined /> },

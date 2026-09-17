@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import '@ant-design/v5-patch-for-react-19'
-import { Alert, Button, ConfigProvider, Skeleton, theme } from 'antd'
+import { Alert, Button, ConfigProvider, Skeleton, Tabs, theme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { api } from './api'
 import ModuleTabs from './components/ModuleTabs'
-import { MODULES, SUBMODULES, panelKeyFor, resolveSearchTarget } from './cmdbWorkspaceState'
+import { MODULES, panelKeyFor, resolveSearchTarget } from './cmdbWorkspaceState'
 import GlobalSearch from './modules/search/GlobalSearch'
 import AssetCenter from './AssetCenter'
 import CmdbResources from './cmdb/CmdbResources'
@@ -13,6 +13,7 @@ import OrgPersonCenter from './modules/org/OrgPersonCenter'
 import IPManager from './IPManager'
 import Dashboard from './Dashboard'
 import AuditLogs from './AuditLogs'
+import CmdbConfig from './cmdb/CmdbConfig'
 import './app.css'
 import './cmdb/cmdb.css'
 import './cmdb/resource-ledger.css'
@@ -32,21 +33,20 @@ export default function CmdbWorkspace() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [module, setModule] = useState('search')
-  const [baseTab, setBaseTab] = useState('people')
   const [operationsTab, setOperationsTab] = useState('dashboard')
   const [targets, setTargets] = useState({})
   const [visited, setVisited] = useState(new Set(['search']))
   const [hostTheme, setHostTheme] = useState({})
-  const panelKey = panelKeyFor(module, baseTab, operationsTab)
+  const panelKey = panelKeyFor(module)
 
   const initialize = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       if (window.netcatty) {
-        if (typeof window.netcatty.cmdbStatus !== 'function') throw new Error('CMDB 原生状态通道不可用')
+        if (typeof window.netcatty.cmdbStatus !== 'function') throw new Error('Cmdb 原生状态通道不可用')
         const status = await window.netcatty.cmdbStatus()
-        if (!status?.available) throw new Error([status?.error || 'CMDB 服务未启动', status?.logPath].filter(Boolean).join('；'))
+        if (!status?.available) throw new Error([status?.error || 'Cmdb 服务未启动', status?.logPath].filter(Boolean).join('；'))
       }
       setMeta(await api.meta())
     } catch (e) { setError(e.message) }
@@ -88,9 +88,8 @@ export default function CmdbWorkspace() {
     const target = resolveSearchTarget(result)
     if (!target) return
     setModule(target.module)
-    if (target.module === 'base') setBaseTab(target.submodule)
-    if (target.module === 'operations') setOperationsTab(target.submodule)
-    const key = panelKeyFor(target.module, target.submodule, target.submodule)
+    if (result.tableKey === 'asset_logs') setOperationsTab('audit')
+    const key = panelKeyFor(target.module)
     setTargets((previous) => ({ ...previous, [key]: { ...target.focusTarget } }))
   }
 
@@ -112,19 +111,20 @@ export default function CmdbWorkspace() {
     ['assets', <AssetCenter meta={meta} focusTarget={targets.assets} onNavigate={navigateSearch} />],
     ['infrastructure', <CmdbResources meta={meta} scope="infrastructure" title="基础设施资源" focusTarget={targets.infrastructure} />],
     ['systems', <ServerCenter meta={meta} section="apps" focusTarget={targets.systems} />],
-    ['base:people', <OrgPersonCenter focusTarget={targets['base:people']} onNavigate={navigateSearch} />],
-    ['base:ip', <IPManager meta={meta} focusTarget={targets['base:ip']} onNavigate={navigateSearch} />],
-    ['operations:dashboard', <Dashboard />],
-    ['operations:audit', <AuditLogs meta={meta} focusTarget={targets['operations:audit']} />],
+    ['people', <OrgPersonCenter focusTarget={targets.people} onNavigate={navigateSearch} />],
+    ['ip', <IPManager meta={meta} focusTarget={targets.ip} onNavigate={navigateSearch} />],
+    ['operations', <Tabs activeKey={operationsTab} onChange={setOperationsTab} items={[
+      { key: 'dashboard', label: '统计概览', children: <Dashboard /> },
+      { key: 'audit', label: '运维履历', children: <AuditLogs meta={meta} focusTarget={targets.operations} /> },
+    ]} />],
+    ['config', <CmdbConfig />],
   ]
 
   return <div ref={root} className="cmdb-workspace">
     <ConfigProvider locale={zhCN} theme={hostTheme} getPopupContainer={(trigger) => trigger?.closest('.cmdb-workspace') || root.current}>
-      <ModuleTabs items={MODULES} activeKey={module} onChange={setModule} label="CMDB 模块" />
-      {SUBMODULES[module] && <ModuleTabs secondary items={SUBMODULES[module]} activeKey={module === 'base' ? baseTab : operationsTab}
-        onChange={module === 'base' ? setBaseTab : setOperationsTab} label={module === 'base' ? '基础管理' : '运维分析'} />}
+      <ModuleTabs items={MODULES} activeKey={module} onChange={setModule} label="Cmdb 模块" />
       <main className="cmdb-workspace-content">
-        {error ? <Alert type="error" showIcon message="CMDB 服务不可用" description={error} action={<Button onClick={initialize} loading={loading}>重试</Button>} />
+        {error ? <Alert type="error" showIcon message="Cmdb 服务不可用" description={error} action={<Button onClick={initialize} loading={loading}>重试</Button>} />
           : !meta ? <Skeleton active paragraph={{ rows: 8 }} />
           : panels.map(([key, content]) => visited.has(key) && <ModulePanel key={key} hidden={panelKey !== key}>{content}</ModulePanel>)}
       </main>

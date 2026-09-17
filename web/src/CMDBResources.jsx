@@ -71,9 +71,9 @@ const { Text, Title, Paragraph } = Typography
 
 const resourceTypes = [
   { key: 'all', label: '全部资源', icon: <DatabaseOutlinedIcon /> },
-  { key: 'assets', label: '云桌面终端', icon: <LaptopOutlined /> },
-  { key: 'servers', label: '物理服务器', icon: <HddOutlined /> },
-  { key: 'apps', label: '系统与应用', icon: <AppstoreOutlined /> },
+  { key: 'assets', label: '终端资产', icon: <LaptopOutlined /> },
+  { key: 'servers', label: '基础设施', icon: <HddOutlined /> },
+  { key: 'apps', label: '业务系统', icon: <AppstoreOutlined /> },
   { key: 'ip', label: 'IP 资源池', icon: <ClusterOutlined /> },
 ]
 
@@ -83,8 +83,8 @@ function DatabaseOutlinedIcon() {
 
 const networkGroups = [
   { key: '全部', label: '全部环境' },
-  { key: '专网', label: '法院专网办公区' },
-  { key: '审判', label: '审判法庭网络区' },
+  { key: '专网', label: '专用网络办公区' },
+  { key: '业务', label: '业务网络区' },
   { key: '机房', label: '核心机房托管区' },
   { key: '容灾', label: '容灾备用中心' },
   { key: '外网', label: '互联网隔离区' },
@@ -171,14 +171,14 @@ export default function CMDBResources({ meta, onNavigate }) {
           id: `asset-${item.id}`,
           rawId: item.id,
           resource_type: 'assets',
-          type_name: '云桌面终端',
+          type_name: '终端资产',
           code: item.asset_code || `ZC-${item.id}`,
-          name: item.user_name ? `${item.user_name} 的云桌面` : '公用云桌面',
+          name: item.user_name ? `${item.user_name} 的终端` : '公用终端',
           primary_ip: item.ip || item.terminal_ip || '-',
           org: item.department || '未分配',
-          location: item.room || '审判区/办公区',
+          location: item.room || '办公区',
           sn: item.box_sn || item.display_sn || '-',
-          spec: `${item.net_type || '专网'} | ${item.security_software || '安元情况未知'}`,
+          spec: `${item.net_type || '专网'} | ${item.security_software || '软件安装情况未知'}`,
         }))
 
         const serversMapped = (serverRes.list || []).map((item) => ({
@@ -186,9 +186,9 @@ export default function CMDBResources({ meta, onNavigate }) {
           id: `server-${item.id}`,
           rawId: item.id,
           resource_type: 'servers',
-          type_name: '物理服务器',
+          type_name: '基础设施',
           code: item.asset_code || `SRV-${item.id}`,
-          name: item.device_name || '物理服务器',
+          name: item.device_name || '基础设施',
           primary_ip: item.biz_ip || item.mgmt_ip || '-',
           org: item.admin_user ? `管理员: ${item.admin_user}` : '信息技术科',
           location: `${item.location || '核心机房'} ${item.rack_unit || ''}`.trim(),
@@ -201,11 +201,11 @@ export default function CMDBResources({ meta, onNavigate }) {
           id: `app-${item.id}`,
           rawId: item.id,
           resource_type: 'apps',
-          type_name: '系统与应用',
+          type_name: '业务系统',
           code: `APP-${item.id}`,
           name: item.app_name || '业务系统',
           primary_ip: item.server_biz_ip || '-',
-          org: item.owner || '审判管理办公室',
+          org: item.owner || '未分配',
           location: item.server_name || '宿主机',
           sn: item.port ? `Port: ${item.port}` : '-',
           spec: `${item.app_type || '应用'} | ${item.middleware || ''}`.trim(),
@@ -241,14 +241,14 @@ export default function CMDBResources({ meta, onNavigate }) {
           id: `asset-${item.id}`,
           rawId: item.id,
           resource_type: 'assets',
-          type_name: '云桌面终端',
+          type_name: '终端资产',
           code: item.asset_code || `ZC-${item.id}`,
-          name: item.user_name ? `${item.user_name} 的云桌面` : '公用云桌面',
+          name: item.user_name ? `${item.user_name} 的终端` : '公用终端',
           primary_ip: item.ip || item.terminal_ip || '-',
           org: item.department || '未分配',
-          location: item.room || '审判区/办公区',
+          location: item.room || '办公区',
           sn: item.box_sn || item.display_sn || '-',
-          spec: `${item.net_type || '专网'} · ${item.security_software || '安元软件'}`,
+          spec: `${item.net_type || '专网'} · ${item.security_software || '软件安装情况未知'}`,
         }))
         setData(mapped)
         setTotal(res.total || 0)
@@ -265,9 +265,9 @@ export default function CMDBResources({ meta, onNavigate }) {
           id: `server-${item.id}`,
           rawId: item.id,
           resource_type: 'servers',
-          type_name: '物理服务器',
+          type_name: '基础设施',
           code: item.asset_code || `SRV-${item.id}`,
-          name: item.device_name || '物理服务器',
+          name: item.device_name || '基础设施',
           primary_ip: item.biz_ip || item.mgmt_ip || '-',
           org: item.admin_user ? `责任人: ${item.admin_user}` : '信息技术科',
           location: `${item.location || '核心机房'} ${item.rack_unit || ''}`.trim(),
@@ -317,7 +317,7 @@ export default function CMDBResources({ meta, onNavigate }) {
           name: item.ip,
           primary_ip: item.ip,
           org: item.department || (item.allocated_to ? `使用人: ${item.allocated_to}` : '待分配池'),
-          location: item.subnet || '法院专网',
+          location: item.subnet || '专用网络',
           sn: item.allocated_to ? `绑定: ${item.allocated_to}` : '空闲',
           spec: `${item.subnet || ''} · ${item.status || '可用'}`,
         }))
@@ -326,7 +326,7 @@ export default function CMDBResources({ meta, onNavigate }) {
       }
       setSelectedKeys([])
     } catch (e) {
-      message.error(`加载 CMDB 资源失败：${e.message}`)
+      message.error(`加载 Cmdb 资源失败：${e.message}`)
     } finally {
       setLoading(false)
     }
@@ -349,10 +349,7 @@ export default function CMDBResources({ meta, onNavigate }) {
 
   // 组织列表
   const orgList = useMemo(() => {
-    const list = meta?.departments || [
-      '立案庭', '刑事审判第一庭', '刑事审判第二庭', '民事审判第一庭', '民事审判第二庭',
-      '行政审判庭', '执行局', '政治部', '督察室', '审判管理办公室', '信息技术科', '司法行政装备科', '法警支队'
-    ]
+    const list = meta?.departments || []
     return list
   }, [meta])
 
@@ -428,10 +425,10 @@ export default function CMDBResources({ meta, onNavigate }) {
       const values = await assetForm.validateFields()
       if (assetTarget) {
         await api.updateAsset(assetTarget.rawId || assetTarget.id, values)
-        message.success('云桌面终端资产已更新')
+        message.success('终端资产已更新')
       } else {
         await api.createAsset(values)
-        message.success('已新建云桌面终端资产')
+        message.success('已新建终端资产')
       }
       setAssetModal(false)
       loadData()
@@ -466,10 +463,10 @@ export default function CMDBResources({ meta, onNavigate }) {
       const values = await serverForm.validateFields()
       if (serverTarget) {
         await api.updateServer(serverTarget.rawId || serverTarget.id, values)
-        message.success('物理服务器配置已更新')
+        message.success('基础设施配置已更新')
       } else {
         await api.createServer(values)
-        message.success('已新建物理服务器档案')
+        message.success('已新建基础设施档案')
       }
       setServerModal(false)
       loadData()
@@ -515,7 +512,7 @@ export default function CMDBResources({ meta, onNavigate }) {
     setMaintTarget(record)
     maintForm.resetFields()
     maintForm.setFieldsValue({
-      maint_type: '更换云桌面盒子',
+      maint_type: '更换终端主机',
       old_sn: record.box_sn || '',
       new_sn: '',
       send_to_stock: true,
@@ -543,13 +540,13 @@ export default function CMDBResources({ meta, onNavigate }) {
     try {
       if (record.resource_type === 'assets') {
         await api.deleteAsset(record.rawId || record.id, {
-          reason: 'CMDB 统一资源管理中心注销归档',
+          reason: 'Cmdb 资源注销归档',
           operator: '资产管理员',
         })
         message.success('该资产已合规注销归档并写入时间轴')
       } else if (record.resource_type === 'servers') {
         await api.deleteServer(record.rawId || record.id)
-        message.success('物理服务器及关联服务记录已安全注销')
+        message.success('基础设施及关联服务记录已安全注销')
       }
       if (detail?.id === record.id) setDetail(null)
       loadData()
@@ -625,7 +622,7 @@ export default function CMDBResources({ meta, onNavigate }) {
       for (const item of selected) {
         if (item.resource_type === 'assets') {
           await api.deleteAsset(item.rawId, {
-            reason: 'CMDB 批量注销归档',
+            reason: 'Cmdb 批量注销归档',
             operator: '资产管理员',
           })
         }
@@ -780,14 +777,14 @@ export default function CMDBResources({ meta, onNavigate }) {
                 <Tooltip title="编辑服务器配置">
                   <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openServerForm(r)} />
                 </Tooltip>
-                <Tooltip title="直达物理服务器专有台账">
+                <Tooltip title="直达基础设施台账">
                   <Button type="text" size="small" icon={<RightOutlined />} onClick={() => onNavigate('servers', { tableKey: 'servers', id: r.rawId })} />
                 </Tooltip>
               </>
             )}
 
             {r.resource_type === 'apps' && (
-              <Tooltip title="直达系统应用台账">
+              <Tooltip title="直达业务系统台账">
                 <Button type="text" size="small" icon={<RightOutlined />} onClick={() => onNavigate('servers', { tableKey: 'server_apps', id: r.rawId })} />
               </Tooltip>
             )}
@@ -803,7 +800,7 @@ export default function CMDBResources({ meta, onNavigate }) {
       <div className="cmdb-module-tabs">
         <div className="cmdb-module-brand">
           <ClusterOutlined style={{ marginRight: 6, color: '#1677ff' }} />
-          配置管理数据库 (CMDB)
+          Cmdb
         </div>
         <div className="cmdb-module-tab active">
           <AppstoreOutlined style={{ marginRight: 4 }} /> 资源中心
@@ -823,14 +820,14 @@ export default function CMDBResources({ meta, onNavigate }) {
             icon={<DesktopOutlined />}
             onClick={() => onNavigate('servers')}
           >
-            服务器与应用
+            基础设施与业务系统
           </Button>
           <Button
             size="small"
             icon={<LaptopOutlined />}
             onClick={() => onNavigate('assets')}
           >
-            云桌面终端
+            终端资产
           </Button>
         </div>
       </div>
@@ -1030,7 +1027,7 @@ export default function CMDBResources({ meta, onNavigate }) {
                   { key: 'col1', label: '资产编码 (固定列)' },
                   { key: 'col2', label: '网络/业务IP (单播/多播)' },
                   { key: 'col3', label: '所属组织与责任部门' },
-                  { key: 'col4', label: '物理机房/法庭位置' },
+                  { key: 'col4', label: '机房 / 办公位置' },
                 ],
               }}
             >
@@ -1056,7 +1053,7 @@ export default function CMDBResources({ meta, onNavigate }) {
                 emptyText: (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="暂无符合条件的 CMDB 资源数据"
+                    description="暂无符合条件的 Cmdb 资源数据"
                   />
                 ),
               }}
@@ -1089,7 +1086,7 @@ export default function CMDBResources({ meta, onNavigate }) {
           detail && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <Tag color={detail.resource_type === 'assets' ? 'blue' : detail.resource_type === 'servers' ? 'purple' : 'cyan'}>
-                {detail.type_name || 'CMDB 资源'}
+                {detail.type_name || 'Cmdb 资源'}
               </Tag>
               <strong style={{ fontSize: 16 }}>
                 {detail.code || detail.asset_code || `ZC-${detail.rawId || detail.id}`}
@@ -1157,7 +1154,7 @@ export default function CMDBResources({ meta, onNavigate }) {
       >
         {detailLoading ? (
           <div className="cmdb-detail-loading">
-            <Spin tip="正在提取 CMDB 关联关系与网络拓扑..." />
+            <Spin tip="正在提取 Cmdb 关联关系与网络拓扑..." />
           </div>
         ) : (
           detail && (
@@ -1185,7 +1182,7 @@ export default function CMDBResources({ meta, onNavigate }) {
             icon={<LaptopOutlined />}
             onClick={() => { setAddTypeModal(false); openAssetForm() }}
           >
-            新建云桌面终端资产
+            新建终端资产
           </Button>
           <Button
             block
@@ -1193,14 +1190,14 @@ export default function CMDBResources({ meta, onNavigate }) {
             icon={<HddOutlined />}
             onClick={() => { setAddTypeModal(false); openServerForm() }}
           >
-            新建物理服务器档案
+            新建基础设施档案
           </Button>
         </Space>
       </Modal>
 
-      {/* 新增/编辑云桌面终端 Modal */}
+      {/* 新增/编辑终端资产 Modal */}
       <Modal
-        title={assetTarget ? '编辑云桌面终端资产' : '新增云桌面终端资产'}
+        title={assetTarget ? '编辑终端资产' : '新增终端资产'}
         open={assetModal}
         onCancel={() => setAssetModal(false)}
         onOk={submitAsset}
@@ -1226,10 +1223,10 @@ export default function CMDBResources({ meta, onNavigate }) {
           <Form.Item name="department" label="所属组织 (科室/庭)">
             <Select showSearch allowClear options={orgList.map((v) => ({ value: v, label: v }))} />
           </Form.Item>
-          <Form.Item name="room" label="法庭 / 办公室位置">
-            <Input placeholder="例：主楼 302法庭" />
+          <Form.Item name="room" label="房间 / 位置">
+            <Input placeholder="例：主楼 302 室" />
           </Form.Item>
-          <Form.Item name="box_sn" label="云桌面盒子 SN">
+          <Form.Item name="box_sn" label="终端主机 SN">
             <Input placeholder="硬件序列号" />
           </Form.Item>
           <Form.Item name="display_sn" label="显示器 SN">
@@ -1244,7 +1241,7 @@ export default function CMDBResources({ meta, onNavigate }) {
           <Form.Item name="net_type" label="网络环境">
             <Select options={['专网', '外网'].map((v) => ({ value: v, label: v }))} />
           </Form.Item>
-          <Form.Item name="security_software" label="安元软件安装状态">
+          <Form.Item name="security_software" label="软件安装情况">
             <Select options={['已安装', '未安装'].map((v) => ({ value: v, label: v }))} />
           </Form.Item>
           <Form.Item name="remark" label="配置备注" className="cmdb-form-wide">
@@ -1253,9 +1250,9 @@ export default function CMDBResources({ meta, onNavigate }) {
         </Form>
       </Modal>
 
-      {/* 新增/编辑物理服务器 Modal */}
+      {/* 新增/编辑基础设施 Modal */}
       <Modal
-        title={serverTarget ? '编辑物理服务器配置' : '新增物理服务器'}
+        title={serverTarget ? '编辑基础设施配置' : '新增基础设施'}
         open={serverModal}
         onCancel={() => setServerModal(false)}
         onOk={submitServer}
@@ -1332,7 +1329,7 @@ export default function CMDBResources({ meta, onNavigate }) {
           <Form.Item name="department" label="变更为新组织/科室">
             <Select showSearch allowClear options={orgList.map((v) => ({ value: v, label: v }))} />
           </Form.Item>
-          <Form.Item name="room" label="调整后房间/法庭">
+          <Form.Item name="room" label="调整后房间 / 位置">
             <Input placeholder="新房间号" />
           </Form.Item>
           <Form.Item name="reason" label="调换事由">
@@ -1356,7 +1353,7 @@ export default function CMDBResources({ meta, onNavigate }) {
       >
         <Form form={maintForm} layout="vertical">
           <Form.Item name="maint_type" label="维护类型" rules={[{ required: true }]}>
-            <Select options={['更换云桌面盒子', '更换显示器', '主板维修', '网卡更换', '系统重装'].map((v) => ({ value: v, label: v }))} />
+            <Select options={['更换终端主机', '更换显示器', '主板维修', '网卡更换', '系统重装'].map((v) => ({ value: v, label: v }))} />
           </Form.Item>
           <Form.Item name="old_sn" label="原故障旧件序列号">
             <Input placeholder="旧件 SN" />
@@ -1396,7 +1393,7 @@ export default function CMDBResources({ meta, onNavigate }) {
           <Form.Item name="department" label="统一所属组织">
             <Select showSearch allowClear options={orgList.map((v) => ({ value: v, label: v }))} />
           </Form.Item>
-          <Form.Item name="security_software" label="统一安元软件状态">
+          <Form.Item name="security_software" label="统一软件安装情况">
             <Select allowClear options={['已安装', '未安装'].map((v) => ({ value: v, label: v }))} />
           </Form.Item>
         </Form>
@@ -1404,7 +1401,7 @@ export default function CMDBResources({ meta, onNavigate }) {
 
       {/* 批量导入 Modal (支持校验预览与提交) */}
       <Modal
-        title="CMDB 批量导入 (深信服 / 法院终端 Excel)"
+        title="Cmdb 批量导入"
         open={importModal}
         onCancel={() => setImportModal(false)}
         width={680}
@@ -1454,7 +1451,7 @@ export default function CMDBResources({ meta, onNavigate }) {
             <FileExcelOutlined style={{ color: '#1677ff', fontSize: 36 }} />
           </p>
           <p className="ant-upload-text">点击或拖拽 Excel 文件到此区域进行解析</p>
-          <p className="ant-upload-hint">支持标准深信服导出表或标准 CMDB 资产台账模板</p>
+          <p className="ant-upload-hint">支持标准终端导出表或 Cmdb 资产台账模板</p>
         </Upload.Dragger>
 
         {importPreview && (
@@ -1482,26 +1479,26 @@ export default function CMDBResources({ meta, onNavigate }) {
 
       {/* 分类管理 Modal */}
       <Modal
-        title="CMDB 资源分类模型与统计总览"
+        title="Cmdb 资源分类与统计总览"
         open={categoryModal}
         onCancel={() => setCategoryModal(false)}
         footer={<Button type="primary" onClick={() => setCategoryModal(false)}>我知道了</Button>}
         width={760}
       >
         <Paragraph>
-          常州中级人民法院配置管理数据库 (CMDB) 按照三层对象模型统一纳管全院 IT 资产：
+          Cmdb 按照三层对象模型统一管理当前项目的 IT 资产：
         </Paragraph>
         <Row gutter={[16, 16]}>
           <Col span={8}>
-            <Card size="small" title="云桌面终端 (User Devices)">
+            <Card size="small" title="终端资产 (User Devices)">
               <Statistic title="纳管总数" value={summaryStats.assets || 104} prefix={<LaptopOutlined />} />
               <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
-                按部门/审判庭分片，覆盖升降桌、法庭桌面与合议室终端。
+                按部门和办公区域分组，覆盖固定工位、会议室与移动终端。
               </div>
             </Card>
           </Col>
           <Col span={8}>
-            <Card size="small" title="物理服务器 (Servers)">
+            <Card size="small" title="基础设施 (Infrastructure)">
               <Statistic title="机架宿主" value={summaryStats.servers || 38} prefix={<HddOutlined />} />
               <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
                 涵盖 BMC 带外口、机房 U 位、品牌型号与底层硬件参数。
@@ -1509,10 +1506,10 @@ export default function CMDBResources({ meta, onNavigate }) {
             </Card>
           </Col>
           <Col span={8}>
-            <Card size="small" title="系统与应用 (Apps)">
+            <Card size="small" title="业务系统 (Apps)">
               <Statistic title="承载服务" value={summaryStats.apps || 48} prefix={<AppstoreOutlined />} />
               <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
-                部署于物理宿主机上的中间件、数据库及核心审判业务应用。
+                部署于基础设施上的中间件、数据库及核心业务应用。
               </div>
             </Card>
           </Col>
@@ -1531,29 +1528,29 @@ export default function CMDBResources({ meta, onNavigate }) {
           <Descriptions.Item label="终端资产编码规则">
             <code>ZC-{'{年份}'}-{'{序号}'}</code> (例如: <code>ZC-2026-0042</code>)
           </Descriptions.Item>
-          <Descriptions.Item label="物理服务器编码规则">
+          <Descriptions.Item label="基础设施编码规则">
             <code>SRV-{'{机房}'}-{'{序号}'}</code> (例如: <code>SRV-01-008</code>)
           </Descriptions.Item>
           <Descriptions.Item label="条码/二维码类型">
             Code-128 条形码与 QR-Code 二维码复合标签，粘贴于终端主机正面与显示器底座。
           </Descriptions.Item>
           <Descriptions.Item label="扫码联动模式">
-            手机终端或扫码枪扫描标签即可在 CMDB 或全局查询中快速秒级定位目标设备并展示履历。
+            手机终端或扫码枪扫描标签即可在 Cmdb 或全局查询中快速定位目标设备并展示履历。
           </Descriptions.Item>
         </Descriptions>
       </Modal>
 
       {/* 资产盘点 Modal */}
       <Modal
-        title="全院资产盘点中心"
+        title="资产盘点中心"
         open={inventoryModal}
         onCancel={() => setInventoryModal(false)}
         footer={<Button type="primary" onClick={() => setInventoryModal(false)}>完成查看</Button>}
         width={680}
       >
         <Alert
-          message="2026年度 IT 资产全要素线上盘点计划"
-          description="系统基于 SQLite 本地数据库每日核对深信服云桌面状态与服务器在线流水，对于离线超过 30 天的闲置资产自动发出预警。"
+          message="年度 IT 资产全要素线上盘点计划"
+          description="系统基于 SQLite 本地数据库核对终端资产状态与服务器在线流水，对于离线超过 30 天的闲置资产自动发出预警。"
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
@@ -1563,7 +1560,7 @@ export default function CMDBResources({ meta, onNavigate }) {
             <Statistic title="在用合规率" value={98.4} precision={1} suffix="%" />
           </Col>
           <Col span={6}>
-            <Statistic title="安元软件覆盖率" value={97.8} precision={1} suffix="%" />
+            <Statistic title="软件安装覆盖率" value={97.8} precision={1} suffix="%" />
           </Col>
           <Col span={6}>
             <Statistic title="待处置/报废" value={14} />
@@ -1586,17 +1583,17 @@ function buildDetailTabs(resource, extra, onNavigate) {
   const baseEntries = isAsset
     ? [
         ['资产编号', resource.asset_code || resource.code],
-        ['资源分类', '云桌面终端'],
+        ['资源分类', '终端资产'],
         ['运行状态', resource.status],
         ['所属组织', resource.department],
         ['当前使用人', resource.user_name || '公用'],
-        ['房间 / 法庭', resource.room],
+        ['房间 / 位置', resource.room],
         ['专网业务 IP', resource.ip],
         ['终端管理 IP', resource.terminal_ip],
-        ['云桌面盒子 SN', resource.box_sn],
+        ['终端主机 SN', resource.box_sn],
         ['显示器 SN', resource.display_sn],
         ['网络环境', resource.net_type],
-        ['安元软件状态', resource.security_software],
+        ['软件安装情况', resource.security_software],
         ['录入经办人', resource.operator || '系统导入'],
         ['配置备注', resource.remark || '无特殊说明'],
       ]
@@ -1617,7 +1614,7 @@ function buildDetailTabs(resource, extra, onNavigate) {
         ['硬件配置备注', resource.remark || '无'],
       ]
     : [
-        ['系统应用名称', resource.name || resource.app_name],
+        ['业务系统名称', resource.name || resource.app_name],
         ['应用分类', resource.app_type],
         ['运行状态', resource.status],
         ['宿主物理机', resource.server_name || resource.location],
@@ -1648,7 +1645,7 @@ function buildDetailTabs(resource, extra, onNavigate) {
       label: '机房与位置',
       children: (
         <Descriptions bordered size="small" column={2}>
-          <Descriptions.Item label="所属大楼 / 区域">常州中级人民法院审判综合楼</Descriptions.Item>
+          <Descriptions.Item label="所属大楼 / 区域">主办公楼</Descriptions.Item>
           <Descriptions.Item label="物理房间/位置">{resource.location || resource.room || '核心机房'}</Descriptions.Item>
           {isServer && (
             <>
@@ -1660,9 +1657,9 @@ function buildDetailTabs(resource, extra, onNavigate) {
           )}
           {isAsset && (
             <>
-              <Descriptions.Item label="法庭/办公区工位">{resource.room || '主楼办公区'}</Descriptions.Item>
-              <Descriptions.Item label="桌面部署类型">深信服 aDesk VDI 云桌面</Descriptions.Item>
-              <Descriptions.Item label="外设连接规范">支持认证 U 盘、高拍仪与数字法庭扩音</Descriptions.Item>
+              <Descriptions.Item label="房间 / 位置">{resource.room || '主楼办公区'}</Descriptions.Item>
+              <Descriptions.Item label="桌面部署类型">VDI 终端</Descriptions.Item>
+              <Descriptions.Item label="外设连接规范">支持认证 U 盘、高拍仪与会议扩音设备</Descriptions.Item>
               <Descriptions.Item label="接入交换机端口">GigabitEthernet 0/12</Descriptions.Item>
             </>
           )}
@@ -1675,14 +1672,14 @@ function buildDetailTabs(resource, extra, onNavigate) {
       children: (
         <Descriptions bordered size="small" column={2}>
           <Descriptions.Item label="业务网络地址">{resource.primary_ip || resource.ip || '-'}</Descriptions.Item>
-          <Descriptions.Item label="网络环境类型">{resource.net_type || '法院专用内网'}</Descriptions.Item>
+          <Descriptions.Item label="网络环境类型">{resource.net_type || '专用内网'}</Descriptions.Item>
           <Descriptions.Item label="子网规划匹配">
             <Tag color="blue">{getMatchingSubnet(resource.primary_ip || resource.ip)}</Tag>
           </Descriptions.Item>
           <Descriptions.Item label="网关与掩码">255.255.255.0 (VLAN 隔离)</Descriptions.Item>
           {isAsset && <Descriptions.Item label="终端硬件管理 IP">{resource.terminal_ip || '-'}</Descriptions.Item>}
           {isServer && <Descriptions.Item label="带外 BMC 远程控制 IP">{resource.mgmt_ip || '-'}</Descriptions.Item>}
-          <Descriptions.Item label="安元终端安全软件">
+          <Descriptions.Item label="终端安全软件">
             <Tag color={resource.security_software === '已安装' ? 'success' : 'warning'}>
               {resource.security_software || '检测正常'}
             </Tag>
@@ -1714,11 +1711,11 @@ function buildDetailTabs(resource, extra, onNavigate) {
             values={(extra.relations.ips || []).map((v) => `${v.ip} · 状态: ${v.status || '在用'}`)}
           />
           <RelationBlock
-            title="关联宿主物理服务器"
+            title="关联宿主基础设施"
             values={(extra.relations.servers || []).map((v) => `${v.device_name} (${v.biz_ip || v.mgmt_ip || '无IP'})`)}
           />
           <RelationBlock
-            title="承载/连通系统应用"
+            title="承载 / 连通业务系统"
             values={(extra.relations.apps || []).map((v) => `${v.app_name}${v.port ? ` :${v.port}` : ''}`)}
           />
           <Button
@@ -1726,7 +1723,7 @@ function buildDetailTabs(resource, extra, onNavigate) {
             icon={<RightOutlined />}
             onClick={() => onNavigate('assets', { tableKey: 'assets', id: resource.rawId })}
           >
-            进入云桌面终端专有台账进行深度运维
+            进入终端资产台账进行运维
           </Button>
         </div>
       ),
@@ -1764,7 +1761,7 @@ function buildDetailTabs(resource, extra, onNavigate) {
   if (isServer) {
     items.push({
       key: 'server_apps',
-      label: `承载系统应用 (${extra.apps.length})`,
+      label: `承载业务系统 (${extra.apps.length})`,
       children: extra.apps.length ? (
         <Table
           rowKey="id"
@@ -1792,7 +1789,7 @@ function buildDetailTabs(resource, extra, onNavigate) {
           ]}
         />
       ) : (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该物理服务器暂未配置承载应用" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该基础设施暂未配置承载应用" />
       ),
     })
   }
@@ -1846,7 +1843,7 @@ function AssetTopologyView({ resource, extra }) {
           </div>
           <div className="cmdb-topo-node-body">
             <div><b>网段:</b> {subnet}</div>
-            <div><b>VLAN:</b> 102 (法院核心网)</div>
+            <div><b>VLAN:</b> 102 (核心网络)</div>
             <div><b>汇聚:</b> 核心交换机 SW-01</div>
           </div>
         </div>
@@ -1875,7 +1872,7 @@ function AssetTopologyView({ resource, extra }) {
             <span>承载应用</span>
           </div>
           <div className="cmdb-topo-node-body">
-            <div><b>服务:</b> {extra.apps?.[0]?.app_name || (resource.resource_type === 'apps' ? resource.name : '审判综合协同系统')}</div>
+            <div><b>服务:</b> {extra.apps?.[0]?.app_name || (resource.resource_type === 'apps' ? resource.name : '业务协同系统')}</div>
             <div><b>端口:</b> {extra.apps?.[0]?.port || '8080/443'}</div>
             <div><b>中间件:</b> {extra.apps?.[0]?.middleware || 'Tomcat/Nginx'}</div>
           </div>
@@ -1915,12 +1912,12 @@ function RelationBlock({ title, values }) {
 
 function getMatchingSubnet(ip) {
   if (!ip) return '未分配网段'
-  if (ip.includes('.7.')) return '专网 7号段 (立案/民庭)'
-  if (ip.includes('.8.')) return '专网 8号段 (刑庭/执行局)'
-  if (ip.includes('.9.')) return '专网 9号段 (审判管理)'
-  if (ip.includes('.10.')) return '专网 10号段 (法警/行装)'
+  if (ip.includes('.7.')) return '专网 7 号段'
+  if (ip.includes('.8.')) return '专网 8 号段'
+  if (ip.includes('.9.')) return '专网 9 号段'
+  if (ip.includes('.10.')) return '专网 10 号段'
   if (ip.includes('.100.')) return '带外管理网络'
   if (ip.startsWith('10.') || ip.startsWith('192.168.')) return '终端内网隔离段'
-  return '法院专网段'
+  return '专用网络段'
 }
 

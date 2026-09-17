@@ -46,6 +46,12 @@
 .cmdb-workspace .cmdb-page-heading { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 0 0 16px; }
 .cmdb-workspace .cmdb-page-heading h2, .cmdb-workspace .ledger-heading h2 { font-size: 18px; color: var(--cmdb-text); margin: 0; }
 .cmdb-workspace .cmdb-page-heading .ant-btn-primary span { color: inherit; }
+.cmdb-workspace .cmdb-config-center, .cmdb-workspace .cmdb-config-pane { min-width: 0; }
+.cmdb-workspace .cmdb-config-center > .ant-tabs > .ant-tabs-nav { margin-bottom: 14px; }
+.cmdb-workspace .cmdb-config-center > .ant-tabs > .ant-tabs-nav .ant-tabs-nav-wrap { overflow: auto hidden; }
+.cmdb-workspace .cmdb-config-center .cmdb-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.cmdb-workspace .cmdb-config-center .cmdb-toolbar .ant-typography { margin-inline-start: auto; }
+.cmdb-workspace .cmdb-config-center .ant-table-wrapper { border: 1px solid var(--cmdb-border); border-radius: 4px; overflow: hidden; }
 .cmdb-workspace .resource-ledger { min-height: 0; margin: 0; }
 .cmdb-workspace .ledger-heading { margin-bottom: 16px; }
 .cmdb-workspace .new-search-page { max-width: none; margin: 0; }
@@ -82,4 +88,6 @@
   .cmdb-workspace .new-search-box > .ant-input-affix-wrapper { flex: 1 1 220px; }
   .cmdb-workspace .cmdb-occupancy-grid { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
   .cmdb-workspace .ant-space, .cmdb-workspace .ant-input-search { max-width: 100%; }
+  .cmdb-workspace .cmdb-config-center .cmdb-toolbar .ant-typography { width: 100%; margin-inline-start: 0; }
+  .cmdb-workspace .cmdb-config-center .cmdb-toolbar .ant-input-search { width: 100% !important; }
 }

@@ -309,7 +309,7 @@ func (s *Server) handleMaintenance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{"message": "设备维修/换件操作已登记，旧件已入库并生成维护记录"})
 }
 
-// ---- 物理服务器管理接口 ----
+// ---- 基础设施管理接口 ----
 func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
 	kw := r.URL.Query().Get("keyword")
@@ -344,7 +344,7 @@ func (s *Server) handleGetServer(w http.ResponseWriter, r *http.Request) {
 	srv, apps, err := s.Store.GetServerForProject(scope, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeErr(w, http.StatusNotFound, "物理服务器不存在")
+			writeErr(w, http.StatusNotFound, "基础设施记录不存在")
 			return
 		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
@@ -376,7 +376,7 @@ func (s *Server) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 201, map[string]interface{}{"id": newID, "message": "物理服务器建档成功"})
+	writeJSON(w, 201, map[string]interface{}{"id": newID, "message": "基础设施建档成功"})
 }
 
 func (s *Server) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
@@ -407,7 +407,7 @@ func (s *Server) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]interface{}{"message": "物理服务器更新成功"})
+	writeJSON(w, 200, map[string]interface{}{"message": "基础设施更新成功"})
 }
 
 func (s *Server) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
@@ -422,7 +422,7 @@ func (s *Server) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]interface{}{"message": "物理服务器及关联应用已删除"})
+	writeJSON(w, 200, map[string]interface{}{"message": "基础设施及关联业务系统已删除"})
 }
 
 // ---- 系统与应用管理接口 ----
@@ -464,7 +464,7 @@ func (s *Server) handleCreateServerApp(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 201, map[string]interface{}{"id": newID, "message": "系统应用添加成功"})
+	writeJSON(w, 201, map[string]interface{}{"id": newID, "message": "业务系统添加成功"})
 }
 
 func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
@@ -503,7 +503,7 @@ func (s *Server) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]interface{}{"message": "系统应用已删除"})
+	writeJSON(w, 200, map[string]interface{}{"message": "业务系统已删除"})
 }
 
 func (s *Server) handleListAllApps(w http.ResponseWriter, r *http.Request) {
@@ -635,7 +635,7 @@ func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
 	sheet := "资产台账"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"序号", "资产编码", "盒子SN", "显示器SN", "使用人", "部门", "房间", "业务IP", "终端IP", "安元情况", "状态", "网络类型", "备注"}
+	headers := []string{"序号", "资产编码", "终端主机SN", "显示器SN", "使用人", "部门", "房间/位置", "业务IP", "终端IP", "软件安装情况", "状态", "网络类型", "备注"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(sheet, cell, h)
@@ -653,7 +653,7 @@ func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", `attachment; filename="czfy_assets.xlsx"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="terminal_assets.xlsx"`)
 	_ = f.Write(w)
 }
 
@@ -665,20 +665,20 @@ func (s *Server) handleDownloadTemplate(w http.ResponseWriter, r *http.Request) 
 	sheet := "资产导入模板"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"资产编码", "盒子SN", "显示器SN", "当前使用人", "所属组织", "房间/法庭", "业务IP", "终端IP", "安元软件", "状态", "网络类型", "备注"}
+	headers := []string{"资产编码", "终端主机SN", "显示器SN", "当前使用人", "所属组织", "房间/位置", "业务IP", "终端IP", "软件安装情况", "状态", "网络类型", "备注"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(sheet, cell, h)
 	}
 
-	example := []interface{}{"ZC-2026-001", "BOX-SN-001", "DISP-SN-001", "张三", "立案庭", "101室", "172.16.7.10", "172.16.7.11", "已安装", "在用", "专网", "示例数据"}
+	example := []interface{}{"ASSET-2026-001", "HOST-SN-001", "DISPLAY-SN-001", "示例人员", "信息技术部", "A101", "10.10.1.10", "10.10.1.11", "终端安全客户端", "在用", "专网", "示例数据"}
 	for colIdx, v := range example {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 2)
 		f.SetCellValue(sheet, cell, v)
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", `attachment; filename="czfy_asset_template.xlsx"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="terminal_asset_template.xlsx"`)
 	_ = f.Write(w)
 }
 
@@ -702,14 +702,14 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("POST /api/assets/{id}/transfer", s.handleTransferUser)
 	scoped("POST /api/assets/{id}/maintenance", s.handleMaintenance)
 
-	// 物理服务器
+	// 基础设施
 	scoped("GET /api/servers", s.handleListServers)
 	scoped("GET /api/servers/{id}", s.handleGetServer)
 	scoped("POST /api/servers", s.handleCreateServer)
 	scoped("PUT /api/servers/{id}", s.handleUpdateServer)
 	scoped("DELETE /api/servers/{id}", s.handleDeleteServer)
 
-	// 系统应用
+	// 业务系统
 	scoped("GET /api/servers/{id}/apps", s.handleListServerApps)
 	scoped("POST /api/servers/{id}/apps", s.handleCreateServerApp)
 	scoped("PUT /api/apps/{id}", s.handleUpdateApp)
@@ -738,7 +738,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("POST /api/import/sangfor", s.handleSangforImport)
 	mux.HandleFunc("GET /api/template/assets", s.handleDownloadTemplate)
 
-	// CMDB 资源管理
+	// Cmdb 资源管理
 	scoped("GET /api/cmdb/meta", s.handleCmdbMeta)
 	scoped("GET /api/cmdb/assets", s.handleListCmdbAssets)
 	scoped("GET /api/cmdb/assets/{id}", s.handleGetCmdbAsset)

@@ -120,9 +120,9 @@ func (s *Store) SyncLegacyToCmdbForProject(scope ProjectScope) (*CmdbSyncResult,
 
 		name := strings.TrimSpace(asset.UserName)
 		if name != "" {
-			name += " 的云桌面"
+			name += " 的终端"
 		} else {
-			name = "公用云桌面"
+			name = "公用终端"
 		}
 		item := &CmdbAsset{
 			AssetCode: asset.AssetCode, Name: name, Status: mapLegacyAssetStatus(asset.Status),

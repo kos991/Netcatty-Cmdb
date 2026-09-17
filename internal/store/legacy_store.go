@@ -1144,7 +1144,7 @@ func (s *Store) globalSearchForProject(scope ProjectScope, q string, limit int) 
 				return err
 			}
 			item.Type, item.Group, item.TableKey = "terminal", searchGroups["terminal"].Group, searchGroups["terminal"].TableKey
-			item.Subtitle, item.Tag, item.Extra = room, "云桌面终端", assetCode
+			item.Subtitle, item.Tag, item.Extra = room, "终端资产", assetCode
 			item.Data = map[string]interface{}{"资产编号": assetCode, "房间": room}
 			return nil
 		}); err != nil {

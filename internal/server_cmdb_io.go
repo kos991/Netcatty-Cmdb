@@ -121,7 +121,7 @@ func (s *Server) handleExportCmdbAssets(w http.ResponseWriter, r *http.Request) 
 	switch format {
 	case "csv":
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		w.Header().Set("Content-Disposition", "attachment; filename=\"CMDB资源_"+stamp+".csv\"")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"Cmdb_"+stamp+".csv\"")
 		w.Write([]byte{0xEF, 0xBB, 0xBF})
 		cw := csv.NewWriter(w)
 		head := make([]string, len(cmdbExportColumns))
@@ -140,7 +140,7 @@ func (s *Server) handleExportCmdbAssets(w http.ResponseWriter, r *http.Request) 
 	case "xlsx":
 		f := excelize.NewFile()
 		defer f.Close()
-		const sheet = "CMDB资源"
+		const sheet = "Cmdb"
 		idx, _ := f.NewSheet(sheet)
 		f.SetActiveSheet(idx)
 		_ = f.DeleteSheet("Sheet1")
@@ -160,7 +160,7 @@ func (s *Server) handleExportCmdbAssets(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-		w.Header().Set("Content-Disposition", "attachment; filename=\"CMDB资源_"+stamp+".xlsx\"")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"Cmdb_"+stamp+".xlsx\"")
 		w.Write(buf.Bytes())
 	default:
 		writeErr(w, 400, "不支持的格式: "+format)
@@ -175,7 +175,7 @@ func (s *Server) handleDownloadCmdbTemplate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", `attachment; filename="czfy_cmdb_import_template.xlsx"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="cmdb_import_template.xlsx"`)
 	w.Write(b)
 }
 

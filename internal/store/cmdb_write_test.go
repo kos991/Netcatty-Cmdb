@@ -568,7 +568,7 @@ func TestCmdbDeleteGuardsMappedRecords(t *testing.T) {
 	if err == nil {
 		t.Fatalf("映射来的记录必须拒绝删除")
 	}
-	if !strings.Contains(err.Error(), "云桌面终端台账") || !strings.Contains(err.Error(), "下次同步会重新出现") {
+	if !strings.Contains(err.Error(), "终端资产台账") || !strings.Contains(err.Error(), "下次同步会重新出现") {
 		t.Fatalf("错误信息应说明来源与后果，实际: %v", err)
 	}
 	if _, _, err := s.GetCmdbAsset(mapped.ID); err != nil {

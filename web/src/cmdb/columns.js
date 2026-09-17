@@ -33,7 +33,7 @@ export const CMDB_BASE_COLUMNS = [
   { title: '业务IP', dataIndex: 'biz_ip', width: 130 },
   { title: '公网IP', dataIndex: 'public_ip', width: 130 },
   { title: '序列号(SN)', dataIndex: 'sn', width: 150 },
-  { title: '云桌面盒子SN', dataIndex: 'box_sn', width: 140 },
+  { title: '终端主机 SN', dataIndex: 'box_sn', width: 140 },
   { title: '显示器SN', dataIndex: 'display_sn', width: 130 },
   { title: 'MAC地址', dataIndex: 'mac_address', width: 140 },
   { title: '所属组织', dataIndex: 'organization', width: 130, sorter: true },

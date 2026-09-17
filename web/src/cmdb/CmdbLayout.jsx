@@ -12,8 +12,8 @@ gsap.registerPlugin(Flip)
 
 export const CMDB_NAV = [
   { key: 'resources', label: '资源总账', note: '统一资源视图', icon: <AppstoreOutlined /> },
-  { key: 'assets', label: '云桌面终端', note: '人员与位置台账', icon: <LaptopOutlined /> },
-  { key: 'servers', label: '服务器与应用', note: '主机和业务系统', icon: <DesktopOutlined /> },
+  { key: 'assets', label: '终端资产', note: '人员与位置台账', icon: <LaptopOutlined /> },
+  { key: 'servers', label: '基础设施与业务系统', note: '主机和业务系统', icon: <DesktopOutlined /> },
 ]
 
 const EMPTY_META = {
@@ -51,9 +51,9 @@ export default function CmdbLayout({ meta, tab, onTabChange, focusTarget }) {
       <header className="cmdb-head-v2">
         <div className="cmdb-title-v2">
           <span><DatabaseOutlined /></span>
-          <div><h1>CMDB 资源管理</h1></div>
+          <div><h1>Cmdb</h1></div>
         </div>
-        <nav className="cmdb-module-nav-v2" aria-label="CMDB 台账">
+        <nav className="cmdb-module-nav-v2" aria-label="Cmdb 台账">
           {CMDB_NAV.map((item) => (
             <button key={item.key} type="button" className={current === item.key ? 'active' : ''} onClick={() => switchTab(item.key)}>
               {current === item.key ? <i className="active-marker" /> : null}

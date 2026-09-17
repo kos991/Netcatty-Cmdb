@@ -17,8 +17,8 @@ gsap.registerPlugin(Flip)
 
 const GROUPS = [
   { name: '终端资产', icon: <LaptopOutlined />, tone: 'blue', module: 'cmdb_center' },
-  { name: '物理服务器', icon: <DesktopOutlined />, tone: 'green', module: 'cmdb_center' },
-  { name: '系统应用', icon: <AppstoreOutlined />, tone: 'violet', module: 'cmdb_center' },
+  { name: '基础设施', icon: <DesktopOutlined />, tone: 'green', module: 'cmdb_center' },
+  { name: '业务系统', icon: <AppstoreOutlined />, tone: 'violet', module: 'cmdb_center' },
   { name: '运维履历', icon: <HistoryOutlined />, tone: 'amber', module: 'logs' },
   { name: 'IP规划池', icon: <ClusterOutlined />, tone: 'cyan', module: 'ip_pool' },
 ]

@@ -38,13 +38,13 @@ const FIELD_TYPES = [
 
 const ASSET_CLASSES = [
   { value: 'all', label: '全部资产类型通用' },
-  { value: 'physical', label: '仅物理服务器' },
+  { value: 'physical', label: '仅基础设施' },
   { value: 'virtual', label: '仅虚拟机' },
-  { value: 'desktop', label: '仅云桌面终端' },
+  { value: 'desktop', label: '仅终端资产' },
   { value: 'network', label: '仅网络与安全设备' },
 ]
 
-export default function CustomFieldCenter() {
+export default function CustomFieldCenter({ embedded = false }) {
   const [loading, setLoading] = useState(false)
   const [fields, setFields] = useState([])
   const [modalVisible, setModalVisible] = useState(false)
@@ -249,14 +249,14 @@ export default function CustomFieldCenter() {
   ]
 
   return (
-    <div style={{ padding: '16px 20px', background: '#f8fafc', minHeight: 'calc(100vh - 64px)' }}>
-      <Alert
+    <div style={embedded ? undefined : { padding: '16px 20px', background: '#f8fafc', minHeight: 'calc(100vh - 64px)' }}>
+      {!embedded && <Alert
         type="info"
         showIcon
         message="无代码动态自定义字段配置"
         description="您可以根据单位特定管理需求（如安全等保级别、合同编号、质保服务商等），在此自由新增和扩展资产字段。配置后，资产录入表单、资产详情抽屉和资产大表格将自动动态生效。"
         style={{ marginBottom: 16 }}
-      />
+      />}
 
       <Card
         title={

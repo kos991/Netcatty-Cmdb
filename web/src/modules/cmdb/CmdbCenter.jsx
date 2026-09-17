@@ -9,7 +9,7 @@ import './cmdb-new.css'
 const tabs = [
   { key: 'resources', label: '资源总账' },
   { key: 'assets', label: '终端资产' },
-  { key: 'servers', label: '物理服务器与应用' },
+  { key: 'servers', label: '基础设施与业务系统' },
   { key: 'logs', label: '全院运维履历' },
 ]
 
@@ -24,11 +24,11 @@ export default function CmdbCenter({ meta, tab = 'resources', onTabChange, focus
   else if (active === 'assets') content = <AssetCenter meta={meta} focusTarget={focusTarget} />
   else if (active === 'servers') content = <ServerCenter meta={meta} focusTarget={focusTarget} />
   else if (active === 'logs') content = <AuditLogs meta={meta} />
-  else content = <Alert type="warning" showIcon message="未知的 CMDB 台账" />
+  else content = <Alert type="warning" showIcon message="未知的 Cmdb 台账" />
 
   return (
     <section className="cmdb-new-page cmdb-functional-page">
-      <div className="cmdb-new-tabs" role="tablist" aria-label="CMDB 台账">
+      <div className="cmdb-new-tabs" role="tablist" aria-label="Cmdb 台账">
         {tabs.map((item) => (
           <button type="button" role="tab" aria-selected={active === item.key} className={active === item.key ? 'active' : ''} key={item.key} onClick={() => selectTab(item.key)}>
             {item.label}
