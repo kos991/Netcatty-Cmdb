@@ -26,6 +26,8 @@ test('装配为原生 Cmdb 根标签和左侧八入口工作区', (t) => {
   let added = false
   let topTabs
   let activeChrome
+  let appView
+  let surface
   let workspace
   let workspaceState
   try {
@@ -38,6 +40,8 @@ test('装配为原生 Cmdb 根标签和左侧八入口工作区', (t) => {
     })
     topTabs = readFileSync(join(fixture, 'components', 'TopTabs.tsx'), 'utf8')
     activeChrome = readFileSync(join(fixture, 'application', 'app', 'AppActiveTabChrome.tsx'), 'utf8')
+    appView = readFileSync(join(fixture, 'application', 'app', 'AppView.tsx'), 'utf8')
+    surface = readFileSync(join(fixture, 'components', 'cmdb', 'CmdbSurface.tsx'), 'utf8')
     workspace = readFileSync(join(fixture, 'components', 'cmdb', 'CmdbWorkspace.jsx'), 'utf8')
     workspaceState = readFileSync(join(fixture, 'components', 'cmdb', 'cmdbWorkspaceState.js'), 'utf8')
   } finally {
@@ -48,12 +52,18 @@ test('装配为原生 Cmdb 根标签和左侧八入口工作区', (t) => {
   assert.match(topTabs, /tabId="cmdb"[\s\S]{0,160}label="Cmdb"/)
   assert.match(topTabs, /<Database size=\{14\} \/>/)
   assert.match(activeChrome, /if \(activeTabId === 'cmdb'\) return 'Cmdb';/)
-  assert.doesNotMatch(workspace, /ModuleTabs|cmdb-module-tabs/)
-  assert.match(workspace, /from 'lucide-react'/)
-  assert.match(workspace, /<aside[^>]+cmdb-workspace-sidebar/)
-  assert.match(workspace, /<nav[^>]+cmdb-workspace-nav/)
+  assert.match(appView, /import \{ CmdbSurface \} from '\.\.\/\.\.\/components\/cmdb\/CmdbSurface';/)
+  assert.doesNotMatch(appView, /import CmdbWorkspace/)
+  assert.match(surface, /from 'lucide-react'/)
+  assert.match(surface, /from '\.\.\/ui\/ripple'/)
+  assert.match(surface, /from '\.\.\/ui\/tooltip'/)
+  assert.match(surface, /data-section="cmdb-sidebar"/)
+  assert.match(surface, /data-section="cmdb-surface"/)
+  assert.match(surface, /<CmdbWorkspace[\s\S]+activeModule=\{activeModule\}[\s\S]+onModuleChange=\{setActiveModule\}/)
+  assert.match(workspace, /activeModule[\s\S]+onModuleChange/)
+  assert.doesNotMatch(workspace, /<aside|cmdb-workspace-sidebar|cmdb-workspace-collapse/)
   for (const icon of ['Search', 'Monitor', 'Server', 'AppWindow', 'Users', 'Network', 'ChartNoAxesCombined', 'Settings2']) {
-    assert.match(workspace, new RegExp(`\\b${icon}\\b`))
+    assert.match(surface, new RegExp(`\\b${icon}\\b`))
   }
   for (const key of ['search', 'assets', 'infrastructure', 'systems', 'people', 'ip', 'operations', 'config']) {
     assert.match(workspaceState, new RegExp(`key: '${key}'`))

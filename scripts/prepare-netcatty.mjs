@@ -62,6 +62,7 @@ cpSync(join(repositoryRoot, "web", "src"), join(target, "components", "cmdb"), {
   recursive: true,
   force: true,
 });
+cpSync(join(integrationRoot, "CmdbSurface.tsx"), join(target, "components", "cmdb", "CmdbSurface.tsx"));
 cpSync(join(integrationRoot, "electron", "cmdbService.cjs"), join(target, "electron", "cmdbService.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbService.test.cjs"), join(target, "electron", "cmdbService.test.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbBridge.cjs"), join(target, "electron", "bridges", "cmdbBridge.cjs"));
@@ -238,31 +239,8 @@ update("application/app/AppActiveTabChrome.tsx", (source) => replaceOnce(
 update("application/app/AppView.tsx", (source) => {
   let output = replaceOnce(
     source,
-    "import { activeTabStore, toEditorTabId, useIsEditorTabActive } from '../state/activeTabStore';",
-    "import { activeTabStore, toEditorTabId, useIsEditorTabActive, useIsTabActive } from '../state/activeTabStore';",
-    "application/app/AppView.tsx",
-  );
-  output = replaceOnce(
-    output,
     "import { VaultView } from '../../components/VaultView';",
-    "import { VaultView } from '../../components/VaultView';\nimport CmdbWorkspace from '../../components/cmdb/CmdbWorkspace';",
-    "application/app/AppView.tsx",
-  );
-  output = replaceOnce(
-    output,
-    "\n\n/** Plugin keybinding host with locally derived theme tokens and locale. */",
-    `
-
-const CmdbSurface = React.memo(() => {
-  const active = useIsTabActive('cmdb');
-  return (
-    <section className={active ? 'absolute inset-0 z-20 flex min-h-0' : 'hidden'} aria-hidden={!active}>
-      <CmdbWorkspace />
-    </section>
-  );
-});
-
-/** Plugin keybinding host with locally derived theme tokens and locale. */`,
+    "import { VaultView } from '../../components/VaultView';\nimport { CmdbSurface } from '../../components/cmdb/CmdbSurface';",
     "application/app/AppView.tsx",
   );
   return replaceOnce(
