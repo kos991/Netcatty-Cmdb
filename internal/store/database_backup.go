@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const projectSchemaVersion = "1"
+const projectSchemaVersion = "2"
 
 type MigrationError struct {
 	BackupPath string

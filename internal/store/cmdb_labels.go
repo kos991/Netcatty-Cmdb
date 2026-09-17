@@ -1,16 +1,18 @@
 package store
 
 import (
+	"database/sql"
+	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
 )
 
-// ============================ 编码与标签 ============================
-
-// CmdbLabel 编码注册表条目。资产信息通过 asset_id 关联 cmdb_assets，不重复存储。
 type CmdbLabel struct {
 	ID         int64  `json:"id"`
+	ProjectID  int64  `json:"project_id"`
+	SyncID     string `json:"sync_id"`
 	Code       string `json:"code"`
 	AssetID    int64  `json:"asset_id"`
 	AssetName  string `json:"asset_name"`
@@ -18,349 +20,416 @@ type CmdbLabel struct {
 	Department string `json:"department"`
 	Owner      string `json:"owner"`
 	AssetCode  string `json:"asset_code"`
-	Status     string `json:"status"` // 派生值：使用中 / 孤儿 / 已归档
+	Status     string `json:"status"`
 	Printed    int64  `json:"printed"`
 	PrintBatch string `json:"print_batch"`
 	CreatedAt  string `json:"created_at"`
 }
 
-const cmdbLabelSelect = `SELECT l.id, l.code, l.asset_id, IFNULL(a.name,''), IFNULL(a.sn,''),
-	IFNULL(a.department,''), IFNULL(a.owner,''), IFNULL(a.asset_code,''),
+const cmdbLabelSelect = `SELECT l.id,l.project_id,IFNULL(l.sync_id,''),l.code,l.asset_id,IFNULL(a.name,''),IFNULL(a.sn,''),
+	IFNULL(a.department,''),IFNULL(a.owner,''),IFNULL(a.asset_code,''),
 	CASE WHEN l.status='已归档' THEN '已归档' WHEN a.id IS NULL THEN '孤儿' ELSE '使用中' END,
-	l.printed, IFNULL(l.print_batch,''), IFNULL(l.created_at,'')
-	FROM cmdb_labels l LEFT JOIN cmdb_assets a ON a.id = l.asset_id`
+	l.printed,IFNULL(l.print_batch,''),IFNULL(l.created_at,'')
+	FROM cmdb_labels l LEFT JOIN cmdb_assets a ON a.id=l.asset_id AND a.project_id=l.project_id`
 
-// 页签条件与 nettopo 实测的「全部 / 使用中 / 孤儿 / 已归档」一致。
-func cmdbLabelTabClause(tab string) string {
+func scanCmdbLabel(row interface{ Scan(...interface{}) error }) (CmdbLabel, error) {
+	var v CmdbLabel
+	err := row.Scan(&v.ID, &v.ProjectID, &v.SyncID, &v.Code, &v.AssetID, &v.AssetName, &v.SN,
+		&v.Department, &v.Owner, &v.AssetCode, &v.Status, &v.Printed, &v.PrintBatch, &v.CreatedAt)
+	return v, err
+}
+
+func cmdbLabelTabPredicate(tab string) string {
 	switch tab {
 	case "使用中":
-		return " WHERE l.status = '使用中' AND a.id IS NOT NULL"
+		return "l.status='使用中' AND a.id IS NOT NULL"
 	case "孤儿":
-		return " WHERE l.status <> '已归档' AND a.id IS NULL"
+		return "l.status<>'已归档' AND a.id IS NULL"
 	case "已归档":
-		return " WHERE l.status = '已归档'"
+		return "l.status='已归档'"
 	default:
 		return ""
 	}
 }
 
 func (s *Store) QueryCmdbLabels(tab, keyword string, page, pageSize int) ([]CmdbLabel, int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.QueryCmdbLabelsForProject(scope, tab, keyword, page, pageSize)
+}
+
+func (s *Store) QueryCmdbLabelsForProject(scope ProjectScope, tab, keyword string, page, pageSize int) ([]CmdbLabel, int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, 0, err
+	}
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 || pageSize > 500 {
 		pageSize = 10
 	}
-	clause := cmdbLabelTabClause(tab)
-	var args []interface{}
-	if kw := strings.TrimSpace(keyword); kw != "" {
-		pat := "%" + kw + "%"
-		conn := " AND "
-		if clause == "" {
-			conn = " WHERE "
-		}
-		clause += conn + `(l.code LIKE ? OR IFNULL(a.name,'') LIKE ? OR IFNULL(a.sn,'') LIKE ?
-			OR IFNULL(a.department,'') LIKE ? OR IFNULL(a.owner,'') LIKE ? OR IFNULL(a.asset_code,'') LIKE ?)`
-		args = append(args, pat, pat, pat, pat, pat, pat)
+	where := []string{"l.project_id=?"}
+	args := []interface{}{scope.ProjectID}
+	if predicate := cmdbLabelTabPredicate(tab); predicate != "" {
+		where = append(where, predicate)
 	}
-
+	if keyword = strings.TrimSpace(keyword); keyword != "" {
+		pattern := "%" + keyword + "%"
+		where = append(where, `(l.code LIKE ? OR IFNULL(a.name,'') LIKE ? OR IFNULL(a.sn,'') LIKE ? OR IFNULL(a.department,'') LIKE ? OR IFNULL(a.owner,'') LIKE ? OR IFNULL(a.asset_code,'') LIKE ?)`)
+		args = append(args, pattern, pattern, pattern, pattern, pattern, pattern)
+	}
+	clause := " WHERE " + strings.Join(where, " AND ")
 	var total int
-	countSQL := `SELECT COUNT(*) FROM cmdb_labels l LEFT JOIN cmdb_assets a ON a.id = l.asset_id` + clause
-	if err := s.db.QueryRow(countSQL, args...).Scan(&total); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_labels l LEFT JOIN cmdb_assets a ON a.id=l.asset_id AND a.project_id=l.project_id`+clause, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := s.db.Query(cmdbLabelSelect+clause+" ORDER BY l.id DESC LIMIT ? OFFSET ?",
-		append(append([]interface{}{}, args...), pageSize, (page-1)*pageSize)...)
+	rows, err := s.db.Query(cmdbLabelSelect+clause+` ORDER BY l.id DESC LIMIT ? OFFSET ?`, append(append([]interface{}{}, args...), pageSize, (page-1)*pageSize)...)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 	list := make([]CmdbLabel, 0, pageSize)
 	for rows.Next() {
-		var v CmdbLabel
-		if err := rows.Scan(&v.ID, &v.Code, &v.AssetID, &v.AssetName, &v.SN, &v.Department,
-			&v.Owner, &v.AssetCode, &v.Status, &v.Printed, &v.PrintBatch, &v.CreatedAt); err != nil {
+		item, err := scanCmdbLabel(rows)
+		if err != nil {
 			return nil, 0, err
 		}
-		list = append(list, v)
+		list = append(list, item)
 	}
 	return list, total, rows.Err()
 }
 
-// QueryCmdbPrintedLabels 返回已打印的编码记录，用于「打印审计」。
 func (s *Store) QueryCmdbPrintedLabels(limit int) ([]CmdbLabel, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, err
+	}
+	return s.QueryCmdbPrintedLabelsForProject(scope, limit)
+}
+func (s *Store) QueryCmdbPrintedLabelsForProject(scope ProjectScope, limit int) ([]CmdbLabel, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
 	if limit < 1 || limit > 1000 {
 		limit = 200
 	}
-	rows, err := s.db.Query(cmdbLabelSelect+` WHERE l.printed = 1 ORDER BY l.updated_at DESC, l.id DESC LIMIT ?`, limit)
+	rows, err := s.db.Query(cmdbLabelSelect+` WHERE l.project_id=? AND l.printed=1 ORDER BY l.updated_at DESC,l.id DESC LIMIT ?`, scope.ProjectID, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	list := make([]CmdbLabel, 0, limit)
 	for rows.Next() {
-		var v CmdbLabel
-		if err := rows.Scan(&v.ID, &v.Code, &v.AssetID, &v.AssetName, &v.SN, &v.Department,
-			&v.Owner, &v.AssetCode, &v.Status, &v.Printed, &v.PrintBatch, &v.CreatedAt); err != nil {
+		item, err := scanCmdbLabel(rows)
+		if err != nil {
 			return nil, err
 		}
-		list = append(list, v)
+		list = append(list, item)
 	}
 	return list, rows.Err()
 }
 
 func (s *Store) CountOrphanCmdbLabels() (int, error) {
-	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_labels l
-		LEFT JOIN cmdb_assets a ON a.id = l.asset_id
-		WHERE l.status <> '已归档' AND a.id IS NULL`).Scan(&n)
-	return n, err
-}
-
-// LabelCodePrefix 读取编码规则中的前缀（存于 _meta，默认 ZC）。
-func (s *Store) LabelCodePrefix() (string, error) {
-	var v string
-	err := s.db.QueryRow(`SELECT v FROM _meta WHERE k='cmdb_label_prefix'`).Scan(&v)
+	scope, err := s.DefaultProjectScope()
 	if err != nil {
-		return "ZC", nil
+		return 0, err
 	}
-	if strings.TrimSpace(v) == "" {
-		return "ZC", nil
+	return s.CountOrphanCmdbLabelsForProject(scope)
+}
+func (s *Store) CountOrphanCmdbLabelsForProject(scope ProjectScope) (int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
 	}
-	return v, nil
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_labels l LEFT JOIN cmdb_assets a ON a.id=l.asset_id AND a.project_id=l.project_id WHERE l.project_id=? AND l.status<>'已归档' AND a.id IS NULL`, scope.ProjectID).Scan(&count)
+	return count, err
 }
 
+func labelPrefixMetaKey(projectID int64) string {
+	return fmt.Sprintf("cmdb_label_prefix:%d", projectID)
+}
+func (s *Store) LabelCodePrefix() (string, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return "ZC", err
+	}
+	return s.LabelCodePrefixForProject(scope)
+}
+func (s *Store) LabelCodePrefixForProject(scope ProjectScope) (string, error) {
+	project, err := s.ResolveProject(scope)
+	if err != nil {
+		return "ZC", err
+	}
+	var value string
+	err = s.db.QueryRow(`SELECT v FROM _meta WHERE k=?`, labelPrefixMetaKey(scope.ProjectID)).Scan(&value)
+	if err == nil && strings.TrimSpace(value) != "" {
+		return value, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "ZC", err
+	}
+	if project.Code == DefaultProjectCode {
+		err = s.db.QueryRow(`SELECT v FROM _meta WHERE k='cmdb_label_prefix'`).Scan(&value)
+		if err == nil && strings.TrimSpace(value) != "" {
+			return value, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "ZC", err
+		}
+	}
+	return "ZC", nil
+}
 func (s *Store) SaveLabelCodePrefix(prefix string) error {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.SaveLabelCodePrefixForProject(scope, prefix)
+}
+func (s *Store) SaveLabelCodePrefixForProject(scope ProjectScope, prefix string) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
 		return nil
 	}
-	_, err := s.db.Exec(`INSERT INTO _meta(k,v) VALUES('cmdb_label_prefix',?)
-		ON CONFLICT(k) DO UPDATE SET v=excluded.v`, prefix)
+	_, err := s.db.Exec(`INSERT INTO _meta(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`, labelPrefixMetaKey(scope.ProjectID), prefix)
 	return err
 }
 
-// GenerateCmdbLabels 为尚无编码的资产批量生成编码并登记，返回新增条数。
-// 资产已有 asset_code 时直接采用，否则用「前缀-资产ID」生成。
 func (s *Store) GenerateCmdbLabels(prefix string) (int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.GenerateCmdbLabelsForProject(scope, prefix)
+}
+func (s *Store) GenerateCmdbLabelsForProject(scope ProjectScope, prefix string) (int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
 		prefix = "ZC"
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	res, err := s.db.Exec(`
-		INSERT OR IGNORE INTO cmdb_labels (code, asset_id, status, created_at, updated_at)
-		SELECT CASE WHEN IFNULL(a.asset_code,'') <> '' THEN a.asset_code ELSE ? || '-' || a.id END,
-		       a.id, '使用中', ?, ?
-		FROM cmdb_assets a
-		WHERE NOT EXISTS (SELECT 1 FROM cmdb_labels l WHERE l.asset_id = a.id)`,
-		prefix, now, now)
+	res, err := s.db.Exec(`INSERT OR IGNORE INTO cmdb_labels(project_id,code,asset_id,status,created_at,updated_at)
+		SELECT a.project_id,CASE WHEN IFNULL(a.asset_code,'')<>'' THEN a.asset_code ELSE ?||'-'||a.id END,a.id,'使用中',?,?
+		FROM cmdb_assets a WHERE a.project_id=? AND NOT EXISTS(SELECT 1 FROM cmdb_labels l WHERE l.project_id=a.project_id AND l.asset_id=a.id)`, prefix, now, now, scope.ProjectID)
 	if err != nil {
 		return 0, err
 	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
+	count, _ := res.RowsAffected()
+	return int(count), nil
 }
 
-// RepairOrphanCmdbLabels 先按编码回填资产关联，仍无法关联的转为已归档，返回处理条数。
 func (s *Store) RepairOrphanCmdbLabels() (int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.RepairOrphanCmdbLabelsForProject(scope)
+}
+func (s *Store) RepairOrphanCmdbLabelsForProject(scope ProjectScope) (int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-
-	res, err := s.db.Exec(`
-		UPDATE cmdb_labels SET asset_id = (
-			SELECT a.id FROM cmdb_assets a WHERE a.asset_code = cmdb_labels.code LIMIT 1
-		), updated_at = ?
-		WHERE (asset_id = 0 OR asset_id NOT IN (SELECT id FROM cmdb_assets))
-		  AND EXISTS (SELECT 1 FROM cmdb_assets a WHERE a.asset_code = cmdb_labels.code)`, now)
+	res, err := s.db.Exec(`UPDATE cmdb_labels SET asset_id=(SELECT a.id FROM cmdb_assets a WHERE a.project_id=? AND a.asset_code=cmdb_labels.code LIMIT 1),updated_at=?
+		WHERE project_id=? AND (asset_id=0 OR asset_id NOT IN(SELECT id FROM cmdb_assets WHERE project_id=?)) AND EXISTS(SELECT 1 FROM cmdb_assets a WHERE a.project_id=? AND a.asset_code=cmdb_labels.code)`, scope.ProjectID, now, scope.ProjectID, scope.ProjectID, scope.ProjectID)
 	if err != nil {
 		return 0, err
 	}
 	linked, _ := res.RowsAffected()
-
-	res2, err := s.db.Exec(`
-		UPDATE cmdb_labels SET status = '已归档', updated_at = ?
-		WHERE status <> '已归档'
-		  AND (asset_id = 0 OR asset_id NOT IN (SELECT id FROM cmdb_assets))`, now)
+	res, err = s.db.Exec(`UPDATE cmdb_labels SET status='已归档',updated_at=? WHERE project_id=? AND status<>'已归档' AND (asset_id=0 OR asset_id NOT IN(SELECT id FROM cmdb_assets WHERE project_id=?))`, now, scope.ProjectID, scope.ProjectID)
 	if err != nil {
 		return 0, err
 	}
-	archived, _ := res2.RowsAffected()
-
+	archived, _ := res.RowsAffected()
 	return int(linked + archived), nil
 }
 
 func (s *Store) SetCmdbLabelStatus(id int64, status string) error {
-	now := time.Now().Format("2006-01-02 15:04:05")
-	_, err := s.db.Exec(`UPDATE cmdb_labels SET status=?, updated_at=? WHERE id=?`, status, now, id)
-	return err
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.SetCmdbLabelStatusForProject(scope, id, status)
 }
-
+func (s *Store) SetCmdbLabelStatusForProject(scope ProjectScope, id int64, status string) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`UPDATE cmdb_labels SET status=?,updated_at=? WHERE id=? AND project_id=?`, status, time.Now().Format("2006-01-02 15:04:05"), id, scope.ProjectID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("标签不属于当前项目: %w", ErrProjectScopedNotFound)
+	}
+	return nil
+}
 func (s *Store) DeleteCmdbLabel(id int64) error {
-	_, err := s.db.Exec(`DELETE FROM cmdb_labels WHERE id=?`, id)
-	return err
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.DeleteCmdbLabelForProject(scope, id)
+}
+func (s *Store) DeleteCmdbLabelForProject(scope ProjectScope, id int64) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`DELETE FROM cmdb_labels WHERE id=? AND project_id=?`, id, scope.ProjectID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("标签不属于当前项目: %w", ErrProjectScopedNotFound)
+	}
+	return nil
 }
 
-// MarkCmdbLabelsPrinted 记录一批标签的打印，返回更新条数。
 func (s *Store) MarkCmdbLabelsPrinted(ids []int64, batch string) (int, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	now := time.Now().Format("2006-01-02 15:04:05")
-	holders := make([]string, len(ids))
-	args := []interface{}{1, batch, now}
-	for i, id := range ids {
-		holders[i] = "?"
-		args = append(args, id)
-	}
-	q := `UPDATE cmdb_labels SET printed=?, print_batch=?, updated_at=? WHERE id IN (` +
-		strings.Join(holders, ",") + `)`
-	res, err := s.db.Exec(q, args...)
+	scope, err := s.DefaultProjectScope()
 	if err != nil {
 		return 0, err
 	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
+	return s.MarkCmdbLabelsPrintedForProject(scope, ids, batch)
 }
-
-// ============================ CMDB 仪表盘 ============================
+func (s *Store) MarkCmdbLabelsPrintedForProject(scope ProjectScope, ids []int64, batch string) (int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	holders := make([]string, len(ids))
+	checkArgs := []interface{}{scope.ProjectID}
+	for index, id := range ids {
+		holders[index] = "?"
+		checkArgs = append(checkArgs, id)
+	}
+	var owned int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_labels WHERE project_id=? AND id IN (`+strings.Join(holders, ",")+`)`, checkArgs...).Scan(&owned); err != nil {
+		return 0, err
+	}
+	if owned != len(ids) {
+		return 0, fmt.Errorf("批量标签包含不属于当前项目的记录: %w", ErrProjectScopedNotFound)
+	}
+	args := []interface{}{1, batch, time.Now().Format("2006-01-02 15:04:05"), scope.ProjectID}
+	args = append(args, checkArgs[1:]...)
+	res, err := s.db.Exec(`UPDATE cmdb_labels SET printed=?,print_batch=?,updated_at=? WHERE project_id=? AND id IN (`+strings.Join(holders, ",")+`)`, args...)
+	if err != nil {
+		return 0, err
+	}
+	count, _ := res.RowsAffected()
+	return int(count), nil
+}
 
 type CmdbCountItem struct {
 	Name  string `json:"name"`
 	Count int    `json:"count"`
 }
 
-// CmdbDashboardData 汇总仪表盘 8 个区块所需的真实数据。
 func (s *Store) CmdbDashboardData() (map[string]interface{}, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, err
+	}
+	return s.CmdbDashboardDataForProject(scope)
+}
+func (s *Store) CmdbDashboardDataForProject(scope ProjectScope) (map[string]interface{}, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
 	out := map[string]interface{}{}
-
 	var total int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_assets`).Scan(&total); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_assets WHERE project_id=?`, scope.ProjectID).Scan(&total); err != nil {
 		return nil, err
 	}
 	out["total"] = total
-
-	// 状态分布 + 健康率
 	statusCounts := map[string]int{}
-	rows, err := s.db.Query(`SELECT IFNULL(status,''), COUNT(*) FROM cmdb_assets GROUP BY status`)
+	rows, err := s.db.Query(`SELECT IFNULL(status,''),COUNT(*) FROM cmdb_assets WHERE project_id=? GROUP BY status`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var name string
-		var n int
-		if err := rows.Scan(&name, &n); err != nil {
+		var count int
+		if err := rows.Scan(&name, &count); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		statusCounts[name] = n
+		statusCounts[name] = count
 	}
 	rows.Close()
 	out["status_counts"] = statusCounts
-
 	online := statusCounts["在线"]
-	attentionCount := statusCounts["离线"] + statusCounts["故障"] + statusCounts["维护中"]
-	rate := 0.0
-	attentionRate := 0.0
+	attention := statusCounts["离线"] + statusCounts["故障"] + statusCounts["维护中"]
+	healthRate, attentionRate := 0.0, 0.0
 	if total > 0 {
-		rate = math.Round(float64(online)/float64(total)*1000) / 10
-		attentionRate = math.Round(float64(attentionCount)/float64(total)*1000) / 10
+		healthRate = math.Round(float64(online)/float64(total)*1000) / 10
+		attentionRate = math.Round(float64(attention)/float64(total)*1000) / 10
 	}
-	out["health_rate"] = rate
-	out["attention_rate"] = attentionRate
-	out["attention_count"] = attentionCount
-
-	// 最近新增资产
-	recent, _, err := s.QueryCmdbAssets(CmdbAssetQuery{Page: 1, PageSize: 5, SortBy: "", SortOrder: "desc"})
+	out["health_rate"], out["attention_rate"], out["attention_count"] = healthRate, attentionRate, attention
+	recent, _, err := s.QueryCmdbAssetsForProject(scope, CmdbAssetQuery{Page: 1, PageSize: 5, SortOrder: "desc"})
 	if err != nil {
 		return nil, err
 	}
 	out["recent_assets"] = recent
-
-	// 设备地理分布（仅有省份/城市的数据）
-	geo := make([]CmdbCountItem, 0, 8)
-	geoRows, err := s.db.Query(`SELECT CASE WHEN IFNULL(province,'') <> '' THEN province ELSE city END AS area,
-		COUNT(*) FROM cmdb_assets WHERE IFNULL(province,'') <> '' OR IFNULL(city,'') <> ''
-		GROUP BY area ORDER BY COUNT(*) DESC`)
+	collect := func(query string, args ...interface{}) ([]CmdbCountItem, error) {
+		result := []CmdbCountItem{}
+		rows, err := s.db.Query(query, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var item CmdbCountItem
+			if err := rows.Scan(&item.Name, &item.Count); err != nil {
+				return nil, err
+			}
+			result = append(result, item)
+		}
+		return result, rows.Err()
+	}
+	geo, err := collect(`SELECT CASE WHEN IFNULL(province,'')<>'' THEN province ELSE city END,COUNT(*) FROM cmdb_assets WHERE project_id=? AND (IFNULL(province,'')<>'' OR IFNULL(city,'')<>'') GROUP BY 1 ORDER BY COUNT(*) DESC`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-	for geoRows.Next() {
-		var item CmdbCountItem
-		if err := geoRows.Scan(&item.Name, &item.Count); err != nil {
-			geoRows.Close()
-			return nil, err
-		}
-		geo = append(geo, item)
-	}
-	geoRows.Close()
 	out["geo_dist"] = geo
-
-	// 设备分类分布
-	// 注意：别名不能叫 name，否则与 cmdb_assets.name 冲突（ambiguous column name）。
-	cats := make([]CmdbCountItem, 0, 8)
-	catRows, err := s.db.Query(`SELECT CASE WHEN IFNULL(c.name,'') = '' THEN '未分类' ELSE c.name END AS grp_name,
-		COUNT(*) FROM cmdb_assets a LEFT JOIN cmdb_device_categories c ON c.id = a.category_id
-		GROUP BY grp_name ORDER BY COUNT(*) DESC`)
+	categories, err := collect(`SELECT CASE WHEN IFNULL(c.name,'')='' THEN '未分类' ELSE c.name END,COUNT(*) FROM cmdb_assets a LEFT JOIN cmdb_device_categories c ON c.id=a.category_id AND c.project_id=a.project_id WHERE a.project_id=? GROUP BY 1 ORDER BY COUNT(*) DESC`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-	for catRows.Next() {
-		var item CmdbCountItem
-		if err := catRows.Scan(&item.Name, &item.Count); err != nil {
-			catRows.Close()
-			return nil, err
-		}
-		cats = append(cats, item)
-	}
-	catRows.Close()
-	out["category_dist"] = cats
-
-	// 部门资产分布
-	depts := make([]CmdbCountItem, 0, 16)
-	deptRows, err := s.db.Query(`SELECT CASE WHEN IFNULL(department,'') = '' THEN '未分配部门' ELSE department END AS grp_name,
-		COUNT(*) FROM cmdb_assets GROUP BY grp_name ORDER BY COUNT(*) DESC`)
+	out["category_dist"] = categories
+	departments, err := collect(`SELECT CASE WHEN IFNULL(department,'')='' THEN '未分配部门' ELSE department END,COUNT(*) FROM cmdb_assets WHERE project_id=? GROUP BY 1 ORDER BY COUNT(*) DESC`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-	for deptRows.Next() {
-		var item CmdbCountItem
-		if err := deptRows.Scan(&item.Name, &item.Count); err != nil {
-			deptRows.Close()
-			return nil, err
-		}
-		depts = append(depts, item)
-	}
-	deptRows.Close()
-	out["department_dist"] = depts
-
-	// 异常设备关注
-	abnormal, _, err := s.QueryCmdbAssets(CmdbAssetQuery{Status: "离线", Page: 1, PageSize: 5})
+	out["department_dist"] = departments
+	abnormal, _, err := s.QueryCmdbAssetsForProject(scope, CmdbAssetQuery{Status: "离线", Page: 1, PageSize: 5})
 	if err != nil {
 		return nil, err
 	}
-	faults, _, err := s.QueryCmdbAssets(CmdbAssetQuery{Status: "故障", Page: 1, PageSize: 5})
+	faults, _, err := s.QueryCmdbAssetsForProject(scope, CmdbAssetQuery{Status: "故障", Page: 1, PageSize: 5})
 	if err != nil {
 		return nil, err
 	}
 	out["abnormal_devices"] = append(abnormal, faults...)
-
-	// 即将过保（90 天内到期）
 	var expiring int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_assets
-		WHERE IFNULL(warranty_date,'') <> ''
-		  AND warranty_date >= date('now')
-		  AND warranty_date <= date('now','+90 day')`).Scan(&expiring); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_assets WHERE project_id=? AND IFNULL(warranty_date,'')<>'' AND warranty_date>=date('now') AND warranty_date<=date('now','+90 day')`, scope.ProjectID).Scan(&expiring); err != nil {
 		return nil, err
 	}
 	out["expiring_count"] = expiring
-
-	// 最新工单动态
-	orders, orderTotal, err := s.QueryCmdbWorkOrders(CmdbWorkOrderQuery{Page: 1, PageSize: 5})
+	orders, orderTotal, err := s.QueryCmdbWorkOrdersForProject(scope, CmdbWorkOrderQuery{Page: 1, PageSize: 5})
 	if err != nil {
 		return nil, err
 	}
-	out["recent_work_orders"] = orders
-	out["work_order_total"] = orderTotal
-
+	out["recent_work_orders"], out["work_order_total"] = orders, orderTotal
 	return out, nil
 }

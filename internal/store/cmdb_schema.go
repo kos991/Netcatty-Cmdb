@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS cmdb_orgs (
     created_at TEXT,
     updated_at TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_orgs_parent_name ON cmdb_orgs(parent_id, name);
 
 -- 业务分组（对应「分组」维度）
 CREATE TABLE IF NOT EXISTS cmdb_groups (
@@ -23,7 +22,6 @@ CREATE TABLE IF NOT EXISTS cmdb_groups (
     created_at TEXT,
     updated_at TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_groups_parent_name ON cmdb_groups(parent_id, name);
 
 -- 设备分类（对应「类型」维度，表单中「设备分类 *」的取值来源）
 CREATE TABLE IF NOT EXISTS cmdb_device_categories (
@@ -34,7 +32,6 @@ CREATE TABLE IF NOT EXISTS cmdb_device_categories (
     created_at TEXT,
     updated_at TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_categories_parent_name ON cmdb_device_categories(parent_id, name);
 
 -- 设备模型库（对应「配置中心 → 设备模型库」表格列）
 CREATE TABLE IF NOT EXISTS cmdb_device_models (
@@ -49,7 +46,6 @@ CREATE TABLE IF NOT EXISTS cmdb_device_models (
     created_at TEXT,
     updated_at TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_models_vendor_model ON cmdb_device_models(vendor, model);
 
 -- CMDB 资产主表（扩展 48 核心列 + custom_fields 动态 JSON 字典）
 CREATE TABLE IF NOT EXISTS cmdb_assets (
@@ -143,7 +139,6 @@ CREATE INDEX IF NOT EXISTS idx_cmdb_assets_org ON cmdb_assets(org_id);
 CREATE INDEX IF NOT EXISTS idx_cmdb_assets_status ON cmdb_assets(status);
 CREATE INDEX IF NOT EXISTS idx_cmdb_assets_owner ON cmdb_assets(owner);
 CREATE INDEX IF NOT EXISTS idx_cmdb_assets_owner_id ON cmdb_assets(owner_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_assets_source ON cmdb_assets(source_type, source_id) WHERE source_id > 0;
 
 -- 资产网络接口（对应表单「网络配置（多网卡）」与详情面板「端口与链路」）
 CREATE TABLE IF NOT EXISTS cmdb_asset_interfaces (
@@ -230,7 +225,6 @@ CREATE TABLE IF NOT EXISTS cmdb_labels (
     created_at TEXT,
     updated_at TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_labels_code ON cmdb_labels(code);
 CREATE INDEX IF NOT EXISTS idx_cmdb_labels_asset ON cmdb_labels(asset_id);
 CREATE INDEX IF NOT EXISTS idx_cmdb_labels_status ON cmdb_labels(status);
 
@@ -257,7 +251,7 @@ CREATE INDEX IF NOT EXISTS idx_cmdb_persons_code ON cmdb_persons(person_code);
 -- 自定义字段定义表（对应 /cmdb/custom-fields）
 CREATE TABLE IF NOT EXISTS cmdb_custom_fields (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    field_key TEXT NOT NULL UNIQUE,
+    field_key TEXT NOT NULL,
     field_name TEXT NOT NULL,
     field_type TEXT NOT NULL,
     options_json TEXT,
@@ -269,7 +263,6 @@ CREATE TABLE IF NOT EXISTS cmdb_custom_fields (
     created_at TEXT,
     updated_at TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_cf_key ON cmdb_custom_fields(field_key);
 CREATE INDEX IF NOT EXISTS idx_cmdb_cf_class ON cmdb_custom_fields(asset_class);
 `
 

@@ -177,10 +177,6 @@ func TestProjectScopeLegacyWriteThroughDoesNotCrossProject(t *testing.T) {
 			if err != nil {
 				t.Fatalf("创建项目 A 资产: %v", err)
 			}
-			// 旧唯一索引未包含 project_id；移除它以复现多项目同步后可能出现的相同来源键。
-			if _, err := s.db.Exec(`DROP INDEX idx_cmdb_assets_source`); err != nil {
-				t.Fatalf("准备跨项目同 source_id 场景: %v", err)
-			}
 			insertMappedCmdbAsset(t, s, projectA.ID, assetID, "A-OLD")
 			insertMappedCmdbAsset(t, s, projectB.ID, assetID, "B-OLD")
 

@@ -97,7 +97,7 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	customFieldsDDL := `
 	CREATE TABLE IF NOT EXISTS cmdb_custom_fields (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		field_key TEXT NOT NULL UNIQUE,
+		field_key TEXT NOT NULL,
 		field_name TEXT NOT NULL,
 		field_type TEXT NOT NULL,
 		options_json TEXT,
@@ -109,7 +109,6 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 		created_at TEXT,
 		updated_at TEXT
 	);
-	CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_cf_key ON cmdb_custom_fields(field_key);
 	CREATE INDEX IF NOT EXISTS idx_cmdb_cf_class ON cmdb_custom_fields(asset_class);
 	`
 	if _, err := db.Exec(customFieldsDDL); err != nil {

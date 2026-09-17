@@ -138,6 +138,36 @@ func TestFreshDatabaseDoesNotCreateMigrationBackup(t *testing.T) {
 	}
 }
 
+func TestOpenCreatesBackupForProjectSchemaV1Upgrade(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "project-v1.db")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE _meta SET v='1' WHERE k='project_schema_version'`); err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	upgraded, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := upgraded.Close(); err != nil {
+		t.Fatal(err)
+	}
+	backups, err := filepath.Glob(dbPath + ".backup-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("项目 schema v1 升级备份数=%d，期望 1: %v", len(backups), backups)
+	}
+}
+
 func TestMigrationFailureReturnsBackupPathAndClosesDatabase(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "broken.db")
 	createPreProjectDatabase(t, dbPath)

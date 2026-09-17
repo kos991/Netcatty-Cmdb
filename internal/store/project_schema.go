@@ -100,6 +100,12 @@ func MigrateProjectSchema(db *sql.DB) error {
 		"updated_at": "TEXT",
 		"deleted_at": "TEXT",
 	}
+	if err := addMissingColumns(tx, "cmdb_custom_fields", columns); err != nil {
+		return fmt.Errorf("add project columns to cmdb_custom_fields: %w", err)
+	}
+	if err := migrateLegacyCustomFieldUniqueConstraint(tx); err != nil {
+		return err
+	}
 	for _, table := range projectScopedTables {
 		if err := addMissingColumns(tx, table, columns); err != nil {
 			return fmt.Errorf("add project columns to %s: %w", table, err)
@@ -113,9 +119,93 @@ func MigrateProjectSchema(db *sql.DB) error {
 	`, projectSchemaVersion); err != nil {
 		return fmt.Errorf("record project schema version: %w", err)
 	}
+	if err := migrateProjectUniqueIndexes(tx); err != nil {
+		return err
+	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit project migration: %w", err)
+	}
+	return nil
+}
+
+func migrateLegacyCustomFieldUniqueConstraint(tx *sql.Tx) error {
+	var legacyConstraintCount int
+	if err := tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM pragma_index_list('cmdb_custom_fields') AS indexes
+		WHERE indexes.origin = 'u'
+		  AND EXISTS (
+			SELECT 1
+			FROM pragma_index_info(indexes.name) AS columns
+			WHERE columns.name = 'field_key'
+		  )
+	`).Scan(&legacyConstraintCount); err != nil {
+		return fmt.Errorf("inspect legacy custom field unique constraint: %w", err)
+	}
+	if legacyConstraintCount == 0 {
+		return nil
+	}
+
+	if _, err := tx.Exec(`
+		ALTER TABLE cmdb_custom_fields RENAME TO cmdb_custom_fields_legacy_unique;
+		CREATE TABLE cmdb_custom_fields (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			field_key TEXT NOT NULL,
+			field_name TEXT NOT NULL,
+			field_type TEXT NOT NULL,
+			options_json TEXT,
+			asset_class TEXT NOT NULL DEFAULT 'all',
+			required INTEGER NOT NULL DEFAULT 0,
+			show_in_list INTEGER NOT NULL DEFAULT 0,
+			export_excel INTEGER NOT NULL DEFAULT 1,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT,
+			updated_at TEXT,
+			project_id INTEGER,
+			sync_id TEXT,
+			revision INTEGER NOT NULL DEFAULT 1,
+			deleted_at TEXT
+		);
+		INSERT INTO cmdb_custom_fields (
+			id, field_key, field_name, field_type, options_json, asset_class,
+			required, show_in_list, export_excel, sort_order, created_at, updated_at,
+			project_id, sync_id, revision, deleted_at
+		)
+		SELECT
+			id, field_key, field_name, field_type, options_json, asset_class,
+			required, show_in_list, export_excel, sort_order, created_at, updated_at,
+			project_id, sync_id, revision, deleted_at
+		FROM cmdb_custom_fields_legacy_unique;
+		DROP TABLE cmdb_custom_fields_legacy_unique;
+		CREATE INDEX IF NOT EXISTS idx_cmdb_cf_class ON cmdb_custom_fields(asset_class);
+	`); err != nil {
+		return fmt.Errorf("remove legacy custom field unique constraint: %w", err)
+	}
+	return nil
+}
+
+func migrateProjectUniqueIndexes(tx *sql.Tx) error {
+	indexes := []struct {
+		drop   string
+		create string
+	}{
+		{drop: "idx_cmdb_orgs_parent_name", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_orgs_project_parent_name ON cmdb_orgs(project_id, parent_id, name) WHERE deleted_at IS NULL"},
+		{drop: "idx_cmdb_groups_parent_name", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_groups_project_parent_name ON cmdb_groups(project_id, parent_id, name) WHERE deleted_at IS NULL"},
+		{drop: "idx_cmdb_categories_parent_name", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_categories_project_parent_name ON cmdb_device_categories(project_id, parent_id, name) WHERE deleted_at IS NULL"},
+		{drop: "idx_cmdb_models_vendor_model", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_models_project_vendor_model ON cmdb_device_models(project_id, vendor, model) WHERE deleted_at IS NULL"},
+		{drop: "idx_cmdb_labels_code", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_labels_project_code ON cmdb_labels(project_id, code) WHERE deleted_at IS NULL"},
+		{drop: "idx_cmdb_assets_source", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_assets_project_source ON cmdb_assets(project_id, source_type, source_id) WHERE source_id > 0 AND deleted_at IS NULL"},
+		{drop: "idx_cmdb_cf_key", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_cf_project_key ON cmdb_custom_fields(project_id, field_key) WHERE deleted_at IS NULL"},
+		{drop: "idx_ip_subnets_name", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_ip_subnets_project_name ON ip_subnets(project_id, name) WHERE deleted_at IS NULL"},
+	}
+	for _, idx := range indexes {
+		if _, err := tx.Exec("DROP INDEX IF EXISTS " + idx.drop); err != nil {
+			return fmt.Errorf("drop %s: %w", idx.drop, err)
+		}
+		if _, err := tx.Exec(idx.create); err != nil {
+			return fmt.Errorf("create project unique index after %s: %w", idx.drop, err)
+		}
 	}
 	return nil
 }
