@@ -1,9 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import '@ant-design/v5-patch-for-react-19'
-import { Alert, Button, ConfigProvider, Skeleton, Tabs, theme } from 'antd'
+import { Alert, Button, ConfigProvider, Skeleton, Tabs, Tooltip, theme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import {
+  AppWindow,
+  ChartNoAxesCombined,
+  Database,
+  Monitor,
+  Network,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Server,
+  Settings2,
+  Users,
+} from 'lucide-react'
 import { api } from './api'
-import ModuleTabs from './components/ModuleTabs'
+import { cmdbApi } from './cmdb/cmdbApi'
 import { MODULES, panelKeyFor, resolveSearchTarget } from './cmdbWorkspaceState'
 import GlobalSearch from './modules/search/GlobalSearch'
 import AssetCenter from './AssetCenter'
@@ -19,6 +32,17 @@ import './cmdb/cmdb.css'
 import './cmdb/resource-ledger.css'
 import './modules/app-rebuild.css'
 import './cmdb-workspace.css'
+
+const MODULE_ICONS = {
+  Search,
+  Monitor,
+  Server,
+  AppWindow,
+  Users,
+  Network,
+  ChartNoAxesCombined,
+  Settings2,
+}
 
 function ModulePanel({ hidden, children }) {
   const panel = useRef(null)
@@ -37,6 +61,8 @@ export default function CmdbWorkspace() {
   const [targets, setTargets] = useState({})
   const [visited, setVisited] = useState(new Set(['search']))
   const [hostTheme, setHostTheme] = useState({})
+  const [projectName, setProjectName] = useState('默认项目')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const panelKey = panelKeyFor(module)
 
   const initialize = useCallback(async () => {
@@ -48,7 +74,9 @@ export default function CmdbWorkspace() {
         const status = await window.netcatty.cmdbStatus()
         if (!status?.available) throw new Error([status?.error || 'Cmdb 服务未启动', status?.logPath].filter(Boolean).join('；'))
       }
-      setMeta(await api.meta())
+      const [nextMeta, projects] = await Promise.all([api.meta(), cmdbApi.listProjects()])
+      setMeta(nextMeta)
+      setProjectName(projects.list?.[0]?.name || '默认项目')
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [])
@@ -120,9 +148,45 @@ export default function CmdbWorkspace() {
     ['config', <CmdbConfig />],
   ]
 
-  return <div ref={root} className="cmdb-workspace">
+  return <div ref={root} className={`cmdb-workspace${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
     <ConfigProvider locale={zhCN} theme={hostTheme} getPopupContainer={(trigger) => trigger?.closest('.cmdb-workspace') || root.current}>
-      <ModuleTabs items={MODULES} activeKey={module} onChange={setModule} label="Cmdb 模块" />
+      <aside className="cmdb-workspace-sidebar">
+        <header className="cmdb-workspace-project">
+          <span className="cmdb-workspace-mark" aria-hidden><Database size={17} /></span>
+          <span className="cmdb-workspace-project-copy">
+            <strong>Cmdb</strong>
+            <small title={projectName}>{projectName}</small>
+          </span>
+          <Tooltip title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} placement="right">
+            <button
+              type="button"
+              className="cmdb-workspace-collapse"
+              aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+              onClick={() => setSidebarCollapsed((value) => !value)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </button>
+          </Tooltip>
+        </header>
+        <nav className="cmdb-workspace-nav" aria-label="Cmdb 模块">
+          {MODULES.map((item) => {
+            const Icon = MODULE_ICONS[item.icon]
+            const button = <button
+              type="button"
+              className={module === item.key ? 'active' : ''}
+              aria-current={module === item.key ? 'page' : undefined}
+              aria-label={item.label}
+              onClick={() => setModule(item.key)}
+            >
+              <Icon size={17} strokeWidth={1.8} aria-hidden />
+              <span>{item.label}</span>
+            </button>
+            return sidebarCollapsed
+              ? <Tooltip key={item.key} title={item.label} placement="right">{button}</Tooltip>
+              : <React.Fragment key={item.key}>{button}</React.Fragment>
+          })}
+        </nav>
+      </aside>
       <main className="cmdb-workspace-content">
         {error ? <Alert type="error" showIcon message="Cmdb 服务不可用" description={error} action={<Button onClick={initialize} loading={loading}>重试</Button>} />
           : !meta ? <Skeleton active paragraph={{ rows: 8 }} />

@@ -3,8 +3,15 @@ import assert from 'node:assert/strict'
 import { MODULES, resolveSearchTarget, panelKeyFor, resolveIPFocus, buildPersonTree } from './cmdbWorkspaceState.js'
 
 test('固定八个 Cmdb 业务入口', () => {
-  assert.deepEqual(MODULES.map((item) => item.key), [
-    'search', 'assets', 'infrastructure', 'systems', 'people', 'ip', 'operations', 'config',
+  assert.deepEqual(MODULES.map(({ key, label, icon }) => ({ key, label, icon })), [
+    { key: 'search', label: '全局查询', icon: 'Search' },
+    { key: 'assets', label: '终端资产', icon: 'Monitor' },
+    { key: 'infrastructure', label: '基础设施', icon: 'Server' },
+    { key: 'systems', label: '业务系统', icon: 'AppWindow' },
+    { key: 'people', label: '组织与人员', icon: 'Users' },
+    { key: 'ip', label: 'IP 规划池', icon: 'Network' },
+    { key: 'operations', label: '统计与履历', icon: 'ChartNoAxesCombined' },
+    { key: 'config', label: '配置中心', icon: 'Settings2' },
   ])
 })
 

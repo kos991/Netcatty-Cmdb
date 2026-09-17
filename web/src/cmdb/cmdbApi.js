@@ -17,6 +17,9 @@ const put = (url, data) => req(url, { method: 'PUT', body: JSON.stringify(data |
 const del = (url) => req(url, { method: 'DELETE' })
 
 export const cmdbApi = {
+  // 项目上下文
+  listProjects: () => req('/api/cmdb/projects'),
+
   // 资源管理
   meta: () => req('/api/cmdb/meta'),
   listAssets: (params = {}) => req(`/api/cmdb/assets?${toQuery(params)}`),

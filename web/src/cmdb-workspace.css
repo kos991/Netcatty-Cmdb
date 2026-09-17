@@ -11,24 +11,98 @@
   --surface: var(--cmdb-surface);
   --canvas: var(--cmdb-background);
   min-width: 0;
+  min-height: 0;
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
   overflow: hidden;
   background: var(--cmdb-background);
   color: var(--cmdb-text);
-  font: 13px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+  font: 13px/1.5 inherit;
   letter-spacing: 0;
 }
 .cmdb-workspace *, .cmdb-workspace *::before, .cmdb-workspace *::after { box-sizing: border-box; }
-.cmdb-workspace .cmdb-module-tabs { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; min-height: 44px; margin: 0; padding: 0 16px; background: var(--cmdb-surface); border-bottom: 1px solid var(--cmdb-border); }
-.cmdb-workspace .cmdb-module-tabs button { flex: 0 0 auto; min-height: 44px; padding: 0 18px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--cmdb-muted); font: inherit; cursor: pointer; }
-.cmdb-workspace .cmdb-module-tabs button.active { color: var(--cmdb-primary); border-bottom-color: var(--cmdb-primary); font-weight: 600; }
-.cmdb-workspace .cmdb-module-tabs button:hover { background: var(--cmdb-subtle); }
-.cmdb-workspace .cmdb-submodule-tabs { min-height: 38px; padding-inline: 18px; }
-.cmdb-workspace .cmdb-submodule-tabs button { min-height: 38px; padding-inline: 16px; }
-.cmdb-workspace .cmdb-workspace-content { position: relative; flex: 1; min-height: 0; overflow: auto; min-width: 0; padding: 20px 24px 28px; }
+.cmdb-workspace.sidebar-collapsed { grid-template-columns: 56px minmax(0, 1fr); }
+.cmdb-workspace .cmdb-workspace-sidebar {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--cmdb-border);
+  background: var(--cmdb-surface);
+}
+.cmdb-workspace .cmdb-workspace-project {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 28px;
+  min-height: 58px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px 8px 12px;
+  border-bottom: 1px solid var(--cmdb-border);
+}
+.cmdb-workspace .cmdb-workspace-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--cmdb-border);
+  border-radius: 4px;
+  background: var(--cmdb-subtle);
+  color: var(--cmdb-primary);
+}
+.cmdb-workspace .cmdb-workspace-project-copy { display: grid; min-width: 0; gap: 1px; }
+.cmdb-workspace .cmdb-workspace-project-copy strong { color: var(--cmdb-text); font-size: 13px; font-weight: 600; }
+.cmdb-workspace .cmdb-workspace-project-copy small { overflow: hidden; color: var(--cmdb-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.cmdb-workspace .cmdb-workspace-collapse {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cmdb-muted);
+  cursor: pointer;
+}
+.cmdb-workspace .cmdb-workspace-collapse:hover { background: var(--cmdb-subtle); color: var(--cmdb-text); }
+.cmdb-workspace .cmdb-workspace-collapse:active { transform: translateY(1px); }
+.cmdb-workspace .cmdb-workspace-collapse:focus-visible,
+.cmdb-workspace .cmdb-workspace-nav button:focus-visible { outline: 2px solid var(--cmdb-primary); outline-offset: -2px; }
+.cmdb-workspace .cmdb-workspace-nav { display: grid; align-content: start; gap: 2px; min-height: 0; padding: 8px; overflow-y: auto; }
+.cmdb-workspace .cmdb-workspace-nav button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 9px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cmdb-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cmdb-workspace .cmdb-workspace-nav button > svg { justify-self: center; }
+.cmdb-workspace .cmdb-workspace-nav button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdb-workspace .cmdb-workspace-nav button:hover { background: var(--cmdb-subtle); color: var(--cmdb-text); }
+.cmdb-workspace .cmdb-workspace-nav button:active { transform: translateY(1px); }
+.cmdb-workspace .cmdb-workspace-nav button.active { background: var(--cmdb-subtle); color: var(--cmdb-primary); font-weight: 600; }
+.cmdb-workspace .cmdb-workspace-nav button.active::before { position: absolute; inset: 6px auto 6px 0; width: 2px; border-radius: 0 2px 2px 0; background: var(--cmdb-primary); content: ''; }
+.cmdb-workspace.sidebar-collapsed .cmdb-workspace-project { grid-template-columns: 1fr; justify-items: center; padding-inline: 8px; }
+.cmdb-workspace.sidebar-collapsed .cmdb-workspace-project-copy,
+.cmdb-workspace.sidebar-collapsed .cmdb-workspace-mark { display: none; }
+.cmdb-workspace.sidebar-collapsed .cmdb-workspace-nav { padding-inline: 7px; }
+.cmdb-workspace.sidebar-collapsed .cmdb-workspace-nav button { grid-template-columns: 1fr; justify-items: center; padding-inline: 7px; }
+.cmdb-workspace.sidebar-collapsed .cmdb-workspace-nav button > span { display: none; }
+.cmdb-workspace .cmdb-workspace-content { position: relative; min-width: 0; min-height: 0; overflow: auto; padding: 20px 24px 28px; }
 .cmdb-workspace .ant-drawer { position: absolute; }
 .cmdb-workspace .cmdb-module-panel .ant-modal-mask,
 .cmdb-workspace .cmdb-module-panel .ant-modal-wrap { position: absolute; }
@@ -78,9 +152,14 @@
 .cmdb-workspace .ip-page-v2 > .ant-row:first-child { padding: 0; border: 0; background: transparent; }
 .cmdb-workspace .cmdb-server-content > .ant-row, .cmdb-workspace .cmdb-query-toolbar { min-width: 0; }
 @media (max-width: 760px) {
+  .cmdb-workspace { grid-template-columns: 56px minmax(0, 1fr); }
+  .cmdb-workspace .cmdb-workspace-project { grid-template-columns: 1fr; justify-items: center; padding-inline: 8px; }
+  .cmdb-workspace .cmdb-workspace-project-copy,
+  .cmdb-workspace .cmdb-workspace-mark { display: none; }
+  .cmdb-workspace .cmdb-workspace-nav { padding-inline: 7px; }
+  .cmdb-workspace .cmdb-workspace-nav button { grid-template-columns: 1fr; justify-items: center; padding-inline: 7px; }
+  .cmdb-workspace .cmdb-workspace-nav button > span { display: none; }
   .cmdb-workspace .cmdb-workspace-content { padding: 14px 12px 20px; }
-  .cmdb-workspace .cmdb-module-tabs { padding-inline: 4px; }
-  .cmdb-workspace .cmdb-module-tabs button { padding-inline: 12px; }
   .cmdb-workspace .org-main-layout { flex-direction: column; }
   .cmdb-workspace .org-tree-pane { width: 100%; max-height: 180px; border-right: 0; border-bottom: 1px solid var(--cmdb-border); padding-bottom: 12px; }
   .cmdb-workspace .new-search-box { flex-wrap: wrap; }

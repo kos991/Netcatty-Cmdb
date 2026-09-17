@@ -71,9 +71,9 @@ const cmdbMainBlock = `let cmdbService = null;
 let cmdbStartupError = null;
 
 function normalizeCmdbStartupError(error) {
-  if (error instanceof Error) return error.message.trim() || "CMDB 服务启动失败";
+  if (error instanceof Error) return error.message.trim() || "Cmdb 服务启动失败";
   if (typeof error === "string" && error.trim()) return error.trim();
-  return "CMDB 服务启动失败";
+  return "Cmdb 服务启动失败";
 }
 
 function resolveCmdbExecutablePath() {
@@ -108,8 +108,8 @@ function resolveCmdbDatabasePath() {
 async function startCmdbForApp() {
   const executablePath = resolveCmdbExecutablePath();
   if (!executablePath) {
-    cmdbStartupError = "未找到 CMDB 服务可执行文件";
-    console.warn(\`[CMDB] \${cmdbStartupError}\`);
+    cmdbStartupError = "未找到 Cmdb 服务可执行文件";
+    console.warn(\`[Cmdb] \${cmdbStartupError}\`);
     return null;
   }
   try {
@@ -120,11 +120,11 @@ async function startCmdbForApp() {
       cwd: path.dirname(executablePath),
     });
     cmdbStartupError = null;
-    console.info(\`[CMDB] Service ready at \${cmdbService.baseUrl}\`);
+    console.info(\`[Cmdb] Service ready at \${cmdbService.baseUrl}\`);
     return cmdbService;
   } catch (error) {
     cmdbStartupError = normalizeCmdbStartupError(error);
-    console.error("[CMDB] Failed to start service:", error);
+    console.error("[Cmdb] Failed to start service:", error);
     cmdbService = null;
     return null;
   }
@@ -166,7 +166,7 @@ update("electron/main.cjs", (source) => {
         cmdbService = null;
       }
     } catch (err) {
-      console.warn("Error during CMDB cleanup:", err);
+      console.warn("Error during Cmdb cleanup:", err);
     }`,
     "electron/main.cjs",
   );
@@ -211,7 +211,7 @@ update("components/TopTabs.tsx", (source) => {
     "          {showSftpTab && (",
     `          <RootTopTab
             tabId="cmdb"
-            label="CMDB 资产管理"
+            label="Cmdb"
             icon={<Database size={14} />}
             className="rounded-t-md"
             compact={rootTabsCompact}
@@ -231,7 +231,7 @@ update("application/app/workTabSurface.ts", (source) => replaceOnce(
 update("application/app/AppActiveTabChrome.tsx", (source) => replaceOnce(
   source,
   "    if (activeTabId === 'sftp') return 'SFTP';",
-  "    if (activeTabId === 'sftp') return 'SFTP';\n    if (activeTabId === 'cmdb') return 'CMDB 资产管理';",
+  "    if (activeTabId === 'sftp') return 'SFTP';\n    if (activeTabId === 'cmdb') return 'Cmdb';",
   "application/app/AppActiveTabChrome.tsx",
 ));
 
@@ -343,4 +343,4 @@ update("package.json", (source) => {
   return `${JSON.stringify(pkg, null, 2)}\n`;
 });
 
-console.log(`Prepared Netcatty CMDB integration at ${target}`);
+console.log(`Prepared Netcatty Cmdb integration at ${target}`);

@@ -6,6 +6,7 @@
 .cmdb-workspace input,
 .cmdb-workspace textarea,
 .cmdb-workspace select {
+  font-family: inherit;
   letter-spacing: 0;
 }
 
@@ -1218,7 +1219,7 @@
   .cmdb-workspace .rack-grid { grid-template-columns: 1fr; }
 }
 
-/* 独立 CMDB：紧凑资源树 + 多类型资源清单，保留各业务台账自身页面 */
+/* Cmdb 紧凑资源树与多类型资源清单，保留各业务台账自身页面。 */
 .cmdb-workspace .cmdb-resource-page {
   min-width: 0;
   color: var(--cmdb-text);

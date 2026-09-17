@@ -1,12 +1,12 @@
 export const MODULES = [
-  { key: 'search', label: '全局查询' },
-  { key: 'assets', label: '终端资产' },
-  { key: 'infrastructure', label: '基础设施' },
-  { key: 'systems', label: '业务系统' },
-  { key: 'people', label: '组织与人员' },
-  { key: 'ip', label: 'IP 规划池' },
-  { key: 'operations', label: '统计与履历' },
-  { key: 'config', label: '配置中心' },
+  { key: 'search', label: '全局查询', icon: 'Search' },
+  { key: 'assets', label: '终端资产', icon: 'Monitor' },
+  { key: 'infrastructure', label: '基础设施', icon: 'Server' },
+  { key: 'systems', label: '业务系统', icon: 'AppWindow' },
+  { key: 'people', label: '组织与人员', icon: 'Users' },
+  { key: 'ip', label: 'IP 规划池', icon: 'Network' },
+  { key: 'operations', label: '统计与履历', icon: 'ChartNoAxesCombined' },
+  { key: 'config', label: '配置中心', icon: 'Settings2' },
 ]
 
 const SEARCH_TARGETS = {
