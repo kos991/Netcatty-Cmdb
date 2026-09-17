@@ -23,6 +23,13 @@ func TestProjectMigrationCreatesEmptyDefaultProject(t *testing.T) {
 	if project.Code != DefaultProjectCode || project.Name != DefaultProjectName || project.SyncID == "" {
 		t.Fatalf("默认项目异常: %+v", project)
 	}
+	var projectCount int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM cmdb_projects").Scan(&projectCount); err != nil {
+		t.Fatalf("查询项目数: %v", err)
+	}
+	if projectCount != 1 {
+		t.Fatalf("全新库项目数=%d，期望 1", projectCount)
+	}
 	for _, table := range projectScopedTables {
 		var count int
 		if err := s.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
