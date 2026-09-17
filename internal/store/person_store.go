@@ -1,6 +1,8 @@
 package store
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +11,8 @@ import (
 // Person 对应 cmdb_persons 表。
 type Person struct {
 	ID         int64  `json:"id"`
+	ProjectID  int64  `json:"project_id"`
+	SyncID     string `json:"sync_id"`
 	PersonCode string `json:"person_code"`
 	Name       string `json:"name"`
 	OrgName    string `json:"org_name"`
@@ -46,6 +50,17 @@ type PersonTransferReq struct {
 
 // ListPersons 分页查询人员列表，并统计名下资产数量。
 func (s *Store) ListPersons(q PersonQuery) ([]Person, int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.ListPersonsForProject(scope, q)
+}
+
+func (s *Store) ListPersonsForProject(scope ProjectScope, q PersonQuery) ([]Person, int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, 0, err
+	}
 	if q.Page < 1 {
 		q.Page = 1
 	}
@@ -53,8 +68,8 @@ func (s *Store) ListPersons(q PersonQuery) ([]Person, int, error) {
 		q.PageSize = 20
 	}
 
-	var where []string
-	var args []interface{}
+	where := []string{"p.project_id = ?"}
+	args := []interface{}{scope.ProjectID}
 
 	if kw := strings.TrimSpace(q.Keyword); kw != "" {
 		pat := "%" + kw + "%"
@@ -91,10 +106,10 @@ func (s *Store) ListPersons(q PersonQuery) ([]Person, int, error) {
 
 	offset := (q.Page - 1) * q.PageSize
 	query := fmt.Sprintf(`
-		SELECT p.id, IFNULL(p.person_code,''), p.name, IFNULL(p.org_name,''), IFNULL(p.group_name,''),
+		SELECT p.id, p.project_id, IFNULL(p.sync_id,''), IFNULL(p.person_code,''), p.name, IFNULL(p.org_name,''), IFNULL(p.group_name,''),
 		       p.department, IFNULL(p.title,''), IFNULL(p.phone,''), IFNULL(p.email,''),
 		       p.status, IFNULL(p.remark,''), IFNULL(p.created_at,''), IFNULL(p.updated_at,''),
-		       (SELECT COUNT(*) FROM cmdb_assets a WHERE a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name)) AS asset_count
+		       (SELECT COUNT(*) FROM cmdb_assets a WHERE a.project_id = p.project_id AND (a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name))) AS asset_count
 		FROM cmdb_persons p
 		%s
 		ORDER BY p.id DESC
@@ -111,7 +126,7 @@ func (s *Store) ListPersons(q PersonQuery) ([]Person, int, error) {
 	for rows.Next() {
 		var p Person
 		if err := rows.Scan(
-			&p.ID, &p.PersonCode, &p.Name, &p.OrgName, &p.GroupName,
+			&p.ID, &p.ProjectID, &p.SyncID, &p.PersonCode, &p.Name, &p.OrgName, &p.GroupName,
 			&p.Department, &p.Title, &p.Phone, &p.Email,
 			&p.Status, &p.Remark, &p.CreatedAt, &p.UpdatedAt,
 			&p.AssetCount,
@@ -126,21 +141,35 @@ func (s *Store) ListPersons(q PersonQuery) ([]Person, int, error) {
 
 // GetPerson 读取单个人员信息。
 func (s *Store) GetPerson(id int64) (*Person, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, err
+	}
+	return s.GetPersonForProject(scope, id)
+}
+
+func (s *Store) GetPersonForProject(scope ProjectScope, id int64) (*Person, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
 	var p Person
 	query := `
-		SELECT p.id, IFNULL(p.person_code,''), p.name, IFNULL(p.org_name,''), IFNULL(p.group_name,''),
+		SELECT p.id, p.project_id, IFNULL(p.sync_id,''), IFNULL(p.person_code,''), p.name, IFNULL(p.org_name,''), IFNULL(p.group_name,''),
 		       p.department, IFNULL(p.title,''), IFNULL(p.phone,''), IFNULL(p.email,''),
 		       p.status, IFNULL(p.remark,''), IFNULL(p.created_at,''), IFNULL(p.updated_at,''),
-		       (SELECT COUNT(*) FROM cmdb_assets a WHERE a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name)) AS asset_count
+		       (SELECT COUNT(*) FROM cmdb_assets a WHERE a.project_id = p.project_id AND (a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name))) AS asset_count
 		FROM cmdb_persons p
-		WHERE p.id = ?`
+		WHERE p.id = ? AND p.project_id = ?`
 
-	err := s.db.QueryRow(query, id).Scan(
-		&p.ID, &p.PersonCode, &p.Name, &p.OrgName, &p.GroupName,
+	err := s.db.QueryRow(query, id, scope.ProjectID).Scan(
+		&p.ID, &p.ProjectID, &p.SyncID, &p.PersonCode, &p.Name, &p.OrgName, &p.GroupName,
 		&p.Department, &p.Title, &p.Phone, &p.Email,
 		&p.Status, &p.Remark, &p.CreatedAt, &p.UpdatedAt,
 		&p.AssetCount,
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.Join(ErrProjectScopedNotFound, sql.ErrNoRows)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -149,6 +178,17 @@ func (s *Store) GetPerson(id int64) (*Person, error) {
 
 // CreatePerson 创建新人员。
 func (s *Store) CreatePerson(p *Person) (int64, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.CreatePersonForProject(scope, p)
+}
+
+func (s *Store) CreatePersonForProject(scope ProjectScope, p *Person) (int64, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
 	p.Name = strings.TrimSpace(p.Name)
 	p.Department = strings.TrimSpace(p.Department)
 	if p.Name == "" {
@@ -165,9 +205,9 @@ func (s *Store) CreatePerson(p *Person) (int64, error) {
 	p.UpdatedAt = now
 
 	res, err := s.db.Exec(`
-		INSERT INTO cmdb_persons (person_code, name, org_name, group_name, department, title, phone, email, status, remark, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.PersonCode, p.Name, p.OrgName, p.GroupName, p.Department, p.Title, p.Phone, p.Email, p.Status, p.Remark, p.CreatedAt, p.UpdatedAt,
+		INSERT INTO cmdb_persons (project_id, person_code, name, org_name, group_name, department, title, phone, email, status, remark, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		scope.ProjectID, p.PersonCode, p.Name, p.OrgName, p.GroupName, p.Department, p.Title, p.Phone, p.Email, p.Status, p.Remark, p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
 		return 0, err
@@ -177,11 +217,26 @@ func (s *Store) CreatePerson(p *Person) (int64, error) {
 		return 0, err
 	}
 	p.ID = newID
+	p.ProjectID = scope.ProjectID
+	if err := s.db.QueryRow("SELECT sync_id FROM cmdb_persons WHERE id = ? AND project_id = ?", newID, scope.ProjectID).Scan(&p.SyncID); err != nil {
+		return 0, err
+	}
 	return newID, nil
 }
 
 // UpdatePerson 更新人员信息。
 func (s *Store) UpdatePerson(p *Person) error {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.UpdatePersonForProject(scope, p)
+}
+
+func (s *Store) UpdatePersonForProject(scope ProjectScope, p *Person) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
 	p.Name = strings.TrimSpace(p.Name)
 	p.Department = strings.TrimSpace(p.Department)
 	if p.Name == "" {
@@ -199,8 +254,8 @@ func (s *Store) UpdatePerson(p *Person) error {
 	res, err := s.db.Exec(`
 		UPDATE cmdb_persons
 		SET person_code = ?, name = ?, org_name = ?, group_name = ?, department = ?, title = ?, phone = ?, email = ?, status = ?, remark = ?, updated_at = ?
-		WHERE id = ?`,
-		p.PersonCode, p.Name, p.OrgName, p.GroupName, p.Department, p.Title, p.Phone, p.Email, p.Status, p.Remark, p.UpdatedAt, p.ID,
+		WHERE id = ? AND project_id = ?`,
+		p.PersonCode, p.Name, p.OrgName, p.GroupName, p.Department, p.Title, p.Phone, p.Email, p.Status, p.Remark, p.UpdatedAt, p.ID, scope.ProjectID,
 	)
 	if err != nil {
 		return err
@@ -210,14 +265,31 @@ func (s *Store) UpdatePerson(p *Person) error {
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("人员不存在")
+		return fmt.Errorf("人员不属于当前项目: %w", ErrProjectScopedNotFound)
 	}
+	p.ProjectID = scope.ProjectID
 	return nil
 }
 
 // DeletePerson 删除人员。
 func (s *Store) DeletePerson(id int64) error {
-	res, err := s.db.Exec("DELETE FROM cmdb_persons WHERE id = ?", id)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.DeletePersonForProject(scope, id)
+}
+
+func (s *Store) DeletePersonForProject(scope ProjectScope, id int64) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec("DELETE FROM cmdb_persons WHERE id = ? AND project_id = ?", id, scope.ProjectID)
 	if err != nil {
 		return err
 	}
@@ -226,22 +298,35 @@ func (s *Store) DeletePerson(id int64) error {
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("人员不存在")
+		return fmt.Errorf("人员不属于当前项目: %w", ErrProjectScopedNotFound)
 	}
 	// 将名下绑定了该 owner_id 的资产解除 owner_id 绑定（保留 owner 姓名字符串）
-	_, _ = s.db.Exec("UPDATE cmdb_assets SET owner_id = 0 WHERE owner_id = ?", id)
-	return nil
+	if _, err := tx.Exec("UPDATE cmdb_assets SET owner_id = 0 WHERE owner_id = ? AND project_id = ?", id, scope.ProjectID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // GetPersonAssets 穿透查询指定人员名下的所有资产（PC、服务器、虚拟机等）。
 func (s *Store) GetPersonAssets(personID int64) (*Person, []CmdbAsset, error) {
-	person, err := s.GetPerson(personID)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, nil, err
+	}
+	return s.GetPersonAssetsForProject(scope, personID)
+}
+
+func (s *Store) GetPersonAssetsForProject(scope ProjectScope, personID int64) (*Person, []CmdbAsset, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, nil, err
+	}
+	person, err := s.GetPersonForProject(scope, personID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("人员不存在: %w", err)
 	}
 
-	query := cmdbAssetSelect + " WHERE (a.owner_id = ? OR (a.owner_id = 0 AND a.owner = ?)) ORDER BY a.id DESC"
-	rows, err := s.db.Query(query, person.ID, person.Name)
+	query := cmdbAssetSelect + " WHERE a.project_id = ? AND (a.owner_id = ? OR (a.owner_id = 0 AND a.owner = ?)) ORDER BY a.id DESC"
+	rows, err := s.db.Query(query, scope.ProjectID, person.ID, person.Name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -258,7 +343,10 @@ func (s *Store) GetPersonAssets(personID int64) (*Person, []CmdbAsset, error) {
 	rows.Close()
 
 	for i := range assets {
-		ifaces, _ := s.getAssetInterfaces(assets[i].ID)
+		ifaces, err := s.getAssetInterfacesForProject(scope, assets[i].ID)
+		if err != nil {
+			return nil, nil, err
+		}
 		assets[i].Interfaces = ifaces
 	}
 	if assets == nil {
@@ -270,6 +358,17 @@ func (s *Store) GetPersonAssets(personID int64) (*Person, []CmdbAsset, error) {
 
 // TransferPersonAssets 一键批量交接人员名下的资产到新人员。
 func (s *Store) TransferPersonAssets(req PersonTransferReq) (int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.TransferPersonAssetsForProject(scope, req)
+}
+
+func (s *Store) TransferPersonAssetsForProject(scope ProjectScope, req PersonTransferReq) (int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
 	if req.FromPersonID <= 0 || req.ToPersonID <= 0 {
 		return 0, fmt.Errorf("必须指定移交人与接收人")
 	}
@@ -277,11 +376,11 @@ func (s *Store) TransferPersonAssets(req PersonTransferReq) (int, error) {
 		return 0, fmt.Errorf("移交人与接收人不能为同一人")
 	}
 
-	fromPerson, err := s.GetPerson(req.FromPersonID)
+	fromPerson, err := s.GetPersonForProject(scope, req.FromPersonID)
 	if err != nil {
 		return 0, fmt.Errorf("移交人不存在: %w", err)
 	}
-	toPerson, err := s.GetPerson(req.ToPersonID)
+	toPerson, err := s.GetPersonForProject(scope, req.ToPersonID)
 	if err != nil {
 		return 0, fmt.Errorf("接收人不存在: %w", err)
 	}
@@ -303,7 +402,7 @@ func (s *Store) TransferPersonAssets(req PersonTransferReq) (int, error) {
 		}
 	} else {
 		// 未指定具体资产列表，交接移交人名下的全部资产
-		rows, err := s.db.Query("SELECT id FROM cmdb_assets WHERE owner_id = ? OR (owner_id = 0 AND owner = ?)", fromPerson.ID, fromPerson.Name)
+		rows, err := s.db.Query("SELECT id FROM cmdb_assets WHERE project_id = ? AND (owner_id = ? OR (owner_id = 0 AND owner = ?))", scope.ProjectID, fromPerson.ID, fromPerson.Name)
 		if err != nil {
 			return 0, err
 		}
@@ -333,19 +432,30 @@ func (s *Store) TransferPersonAssets(req PersonTransferReq) (int, error) {
 	for _, assetID := range targetIDs {
 		var oldOwner, oldDept, oldRoom, boxSN, srcType string
 		var srcID int64
+		assetRelations := &CmdbAsset{ID: assetID}
 		err := tx.QueryRow(`
-			SELECT IFNULL(owner,''), IFNULL(department,''), IFNULL(room,''), IFNULL(box_sn,''), IFNULL(source_type,'manual'), IFNULL(source_id,0)
-			FROM cmdb_assets WHERE id = ?`, assetID).Scan(&oldOwner, &oldDept, &oldRoom, &boxSN, &srcType, &srcID)
+			SELECT IFNULL(owner,''), IFNULL(department,''), IFNULL(room,''), IFNULL(box_sn,''), IFNULL(source_type,'manual'), IFNULL(source_id,0),
+			       category_id, model_id, org_id, group_id, owner_id
+			FROM cmdb_assets WHERE id = ? AND project_id = ?`, assetID, scope.ProjectID).Scan(
+			&oldOwner, &oldDept, &oldRoom, &boxSN, &srcType, &srcID,
+			&assetRelations.CategoryID, &assetRelations.ModelID, &assetRelations.OrgID, &assetRelations.GroupID, &assetRelations.OwnerID,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("资产 %d 不属于当前项目: %w", assetID, ErrProjectScopedNotFound)
+		}
 		if err != nil {
-			continue // 该资产不存在则跳过
+			return 0, err
+		}
+		if err := validateCmdbAssetRelations(tx, scope.ProjectID, assetRelations); err != nil {
+			return 0, err
 		}
 
 		// 更新 cmdb_assets
 		_, err = tx.Exec(`
 			UPDATE cmdb_assets
 			SET owner_id = ?, owner = ?, department = ?, organization = ?, updated_at = ?
-			WHERE id = ?`,
-			toPerson.ID, toPerson.Name, toPerson.Department, toPerson.OrgName, now, assetID,
+			WHERE id = ? AND project_id = ?`,
+			toPerson.ID, toPerson.Name, toPerson.Department, toPerson.OrgName, now, assetID, scope.ProjectID,
 		)
 		if err != nil {
 			return 0, err
@@ -354,20 +464,26 @@ func (s *Store) TransferPersonAssets(req PersonTransferReq) (int, error) {
 		// 记录 asset_logs
 		fromLoc := strings.TrimSpace(oldDept + " " + oldRoom)
 		toLoc := strings.TrimSpace(toPerson.Department)
-		_, _ = tx.Exec(`
-			INSERT INTO asset_logs(asset_id, log_type, from_user, to_user, from_location, to_location, old_sn, new_sn, operator, description, log_time)
-			VALUES(?, '调换使用人', ?, ?, ?, ?, '', '', ?, ?, ?)`,
-			assetID, oldOwner, toPerson.Name, fromLoc, toLoc, operator, remark, now,
-		)
+		if _, err := tx.Exec(`
+			INSERT INTO asset_logs(project_id, asset_id, log_type, from_user, to_user, from_location, to_location, old_sn, new_sn, operator, description, log_time)
+			VALUES(?, ?, '调换使用人', ?, ?, ?, ?, '', '', ?, ?, ?)`,
+			scope.ProjectID, assetID, oldOwner, toPerson.Name, fromLoc, toLoc, operator, remark, now,
+		); err != nil {
+			return 0, err
+		}
 
 		// 同步写穿到旧源台账
 		if srcID > 0 {
 			if srcType == "legacy_asset" {
-				_, _ = tx.Exec("UPDATE assets SET user_name = ?, department = ?, updated_at = ? WHERE id = ?",
-					toPerson.Name, toPerson.Department, now, srcID)
+				if _, err := tx.Exec("UPDATE assets SET user_name = ?, department = ?, updated_at = ? WHERE id = ? AND project_id = ?",
+					toPerson.Name, toPerson.Department, now, srcID, scope.ProjectID); err != nil {
+					return 0, err
+				}
 			} else if srcType == "legacy_server" {
-				_, _ = tx.Exec("UPDATE servers SET admin_user = ?, updated_at = ? WHERE id = ?",
-					toPerson.Name, now, srcID)
+				if _, err := tx.Exec("UPDATE servers SET admin_user = ?, updated_at = ? WHERE id = ? AND project_id = ?",
+					toPerson.Name, now, srcID, scope.ProjectID); err != nil {
+					return 0, err
+				}
 			}
 		}
 
@@ -382,12 +498,25 @@ func (s *Store) TransferPersonAssets(req PersonTransferReq) (int, error) {
 
 // getAssetInterfaces 辅助读取资产的网卡接口。
 func (s *Store) getAssetInterfaces(assetID int64) ([]CmdbAssetInterface, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, err
+	}
+	return s.getAssetInterfacesForProject(scope, assetID)
+}
+
+func (s *Store) getAssetInterfacesForProject(scope ProjectScope, assetID int64) ([]CmdbAssetInterface, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(`
 		SELECT id, asset_id, IFNULL(asset_name,''), IFNULL(name,''), IFNULL(if_name,''),
 		       IFNULL(ip,''), IFNULL(mask,''), IFNULL(gateway,''), IFNULL(mac,''),
 		       IFNULL(network_zone,''), IFNULL(net_zone,''), is_primary, vlan_id, IFNULL(remark,'')
-		FROM cmdb_asset_interfaces
-		WHERE asset_id = ? ORDER BY is_primary DESC, id ASC`, assetID)
+		FROM cmdb_asset_interfaces i
+		WHERE i.asset_id = ? AND i.project_id = ?
+		  AND EXISTS (SELECT 1 FROM cmdb_assets a WHERE a.id = i.asset_id AND a.project_id = ?)
+		ORDER BY is_primary DESC, id ASC`, assetID, scope.ProjectID, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -422,4 +551,3 @@ func (s *Store) getAssetInterfaces(assetID int64) ([]CmdbAssetInterface, error) 
 	}
 	return ifaces, rows.Err()
 }
-
