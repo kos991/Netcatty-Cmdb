@@ -563,6 +563,17 @@ func (s *Store) ReleaseIPForProject(scope ProjectScope, id int64) error {
 // ipOwner 返回占用该 IP 的资产编号与使用人（没有则返回空串）。
 // 专网段按 IP 匹配；外网段额外用备注中的盒子地址匹配资产的 terminal_ip。
 func (s *Store) ipOwner(e IPEntry) (string, string, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return "", "", err
+	}
+	return s.ipOwnerForProject(scope, e)
+}
+
+func (s *Store) ipOwnerForProject(scope ProjectScope, e IPEntry) (string, string, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return "", "", err
+	}
 	cands := []string{}
 	if strings.TrimSpace(e.IP) != "" {
 		cands = append(cands, e.IP)
@@ -580,11 +591,11 @@ func (s *Store) ipOwner(e IPEntry) (string, string, error) {
 		args = append(args, c)
 	}
 	inClause := strings.Join(holders, ",")
-	args = append(args, args...)
+	args = append([]interface{}{scope.ProjectID}, append(args, args...)...)
 
 	var code, user string
 	err := s.db.QueryRow(`SELECT IFNULL(asset_code,''), IFNULL(user_name,'') FROM assets
-		WHERE ip IN (`+inClause+`) OR terminal_ip IN (`+inClause+`) LIMIT 1`, args...).Scan(&code, &user)
+		WHERE project_id=? AND (ip IN (`+inClause+`) OR terminal_ip IN (`+inClause+`)) LIMIT 1`, args...).Scan(&code, &user)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", "", nil
@@ -598,12 +609,23 @@ func (s *Store) ipOwner(e IPEntry) (string, string, error) {
 // 若该 IP 正被资产占用且未强制删除，则拒绝——删除不会动资产，
 // 但会让「资产台账」与「IP 池」不一致，必须先由用户确认。
 func (s *Store) DeleteIPEntry(id int64, force bool) error {
-	cur, err := s.GetIPEntry(id)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.DeleteIPEntryForProject(scope, id, force)
+}
+
+func (s *Store) DeleteIPEntryForProject(scope ProjectScope, id int64, force bool) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	cur, err := s.GetIPEntryForProject(scope, id)
 	if err != nil {
 		return fmt.Errorf("IP 条目不存在")
 	}
 	if !force {
-		code, user, err := s.ipOwner(*cur)
+		code, user, err := s.ipOwnerForProject(scope, *cur)
 		if err != nil {
 			return err
 		}
@@ -615,7 +637,7 @@ func (s *Store) DeleteIPEntry(id int64, force bool) error {
 			return fmt.Errorf("该 IP 正被资产 %s 占用；删除只移除 IP 池记录、不会改动资产，会造成两边台账不一致。请改用「释放」，或先在资产中调整 IP 后再删除", who)
 		}
 	}
-	res, err := s.db.Exec(`DELETE FROM ip_pool WHERE id=?`, id)
+	res, err := s.db.Exec(`DELETE FROM ip_pool WHERE id=? AND project_id=?`, id, scope.ProjectID)
 	if err != nil {
 		return err
 	}
@@ -627,11 +649,22 @@ func (s *Store) DeleteIPEntry(id int64, force bool) error {
 
 // IPEntryOwner 供接口层判断某个 IP 当前被哪台资产占用。
 func (s *Store) IPEntryOwner(id int64) (string, string, error) {
-	cur, err := s.GetIPEntry(id)
+	scope, err := s.DefaultProjectScope()
 	if err != nil {
 		return "", "", err
 	}
-	return s.ipOwner(*cur)
+	return s.IPEntryOwnerForProject(scope, id)
+}
+
+func (s *Store) IPEntryOwnerForProject(scope ProjectScope, id int64) (string, string, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return "", "", err
+	}
+	cur, err := s.GetIPEntryForProject(scope, id)
+	if err != nil {
+		return "", "", err
+	}
+	return s.ipOwnerForProject(scope, *cur)
 }
 
 // AllIPEntries 返回当前筛选条件下的全部条目（用于导出，不受分页限制）。

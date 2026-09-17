@@ -108,3 +108,142 @@ func TestProjectScopeProjectCRUDAndValidation(t *testing.T) {
 		t.Fatal("已删除项目不得解析")
 	}
 }
+
+// 此测试会在旧资产操作写穿其他项目同 source_id 的 CMDB 记录时失败。
+func TestProjectScopeLegacyWriteThroughDoesNotCrossProject(t *testing.T) {
+	tests := []struct {
+		name  string
+		asset Asset
+		run   func(t *testing.T, s *Store, scope ProjectScope, id int64)
+		check func(t *testing.T, s *Store, projectID, sourceID int64)
+	}{
+		{
+			name:  "注销",
+			asset: Asset{AssetCode: "A-delete", Status: "在用"},
+			run: func(t *testing.T, s *Store, scope ProjectScope, id int64) {
+				t.Helper()
+				if err := s.DeleteAssetForProject(scope, id, "测试注销", "测试"); err != nil {
+					t.Fatalf("注销失败: %v", err)
+				}
+			},
+			check: func(t *testing.T, s *Store, projectID, sourceID int64) {
+				t.Helper()
+				assertMappedCmdbAsset(t, s, projectID, sourceID, "在库", "原使用人", "原部门", "原房间", "B-OLD")
+			},
+		},
+		{
+			name:  "调换使用人",
+			asset: Asset{AssetCode: "A-transfer", UserName: "原使用人", Department: "原部门", Room: "原房间", Status: "在用"},
+			run: func(t *testing.T, s *Store, scope ProjectScope, id int64) {
+				t.Helper()
+				if err := s.TransferUserForProject(scope, id, TransferReq{ToUser: "新使用人", ToDepartment: "新部门", ToRoom: "新房间"}); err != nil {
+					t.Fatalf("调换失败: %v", err)
+				}
+			},
+			check: func(t *testing.T, s *Store, projectID, sourceID int64) {
+				t.Helper()
+				assertMappedCmdbAsset(t, s, projectID, sourceID, "在库", "原使用人", "原部门", "原房间", "B-OLD")
+			},
+		},
+		{
+			name:  "维修换件",
+			asset: Asset{AssetCode: "A-maintenance", BoxSN: "A-OLD", Status: "在用"},
+			run: func(t *testing.T, s *Store, scope ProjectScope, id int64) {
+				t.Helper()
+				if err := s.MaintenanceForProject(scope, id, MaintenanceReq{PartType: "box", OldSN: "A-OLD", NewSN: "A-NEW"}); err != nil {
+					t.Fatalf("维修失败: %v", err)
+				}
+			},
+			check: func(t *testing.T, s *Store, projectID, sourceID int64) {
+				t.Helper()
+				assertMappedCmdbAsset(t, s, projectID, sourceID, "在库", "原使用人", "原部门", "原房间", "B-OLD")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newCmdbTestStore(t)
+			projectA, err := s.CreateCmdbProject(&CmdbProject{Code: "write-a-" + tt.name, Name: "项目 A"})
+			if err != nil {
+				t.Fatalf("创建项目 A: %v", err)
+			}
+			projectB, err := s.CreateCmdbProject(&CmdbProject{Code: "write-b-" + tt.name, Name: "项目 B"})
+			if err != nil {
+				t.Fatalf("创建项目 B: %v", err)
+			}
+			scopeA := ProjectScope{ProjectID: projectA.ID}
+			assetID, err := s.CreateAssetForProject(scopeA, &tt.asset, "测试")
+			if err != nil {
+				t.Fatalf("创建项目 A 资产: %v", err)
+			}
+			// 旧唯一索引未包含 project_id；移除它以复现多项目同步后可能出现的相同来源键。
+			if _, err := s.db.Exec(`DROP INDEX idx_cmdb_assets_source`); err != nil {
+				t.Fatalf("准备跨项目同 source_id 场景: %v", err)
+			}
+			insertMappedCmdbAsset(t, s, projectA.ID, assetID, "A-OLD")
+			insertMappedCmdbAsset(t, s, projectB.ID, assetID, "B-OLD")
+
+			tt.run(t, s, scopeA, assetID)
+			tt.check(t, s, projectB.ID, assetID)
+		})
+	}
+}
+
+// 此测试会在 IP 归属或删除把另一项目同 IP 资产当作当前项目占用时失败。
+func TestProjectScopeIPOwnerAndDeleteIsolation(t *testing.T) {
+	s := newCmdbTestStore(t)
+	projectA, err := s.CreateCmdbProject(&CmdbProject{Code: "ip-owner-a", Name: "项目 A"})
+	if err != nil {
+		t.Fatalf("创建项目 A: %v", err)
+	}
+	projectB, err := s.CreateCmdbProject(&CmdbProject{Code: "ip-owner-b", Name: "项目 B"})
+	if err != nil {
+		t.Fatalf("创建项目 B: %v", err)
+	}
+	scopeA := ProjectScope{ProjectID: projectA.ID}
+	scopeB := ProjectScope{ProjectID: projectB.ID}
+	ipAID, err := s.CreateIPEntryForProject(scopeA, &IPEntry{Subnet: "测试", IP: "10.10.10.10"})
+	if err != nil {
+		t.Fatalf("创建项目 A IP: %v", err)
+	}
+	ipBID, err := s.CreateIPEntryForProject(scopeB, &IPEntry{Subnet: "测试", IP: "10.10.10.10"})
+	if err != nil {
+		t.Fatalf("创建项目 B IP: %v", err)
+	}
+	if _, err := s.CreateAssetForProject(scopeB, &Asset{AssetCode: "B-IP-ASSET", IP: "10.10.10.10", Status: "在用"}, "测试"); err != nil {
+		t.Fatalf("创建项目 B 占用资产: %v", err)
+	}
+	code, user, err := s.IPEntryOwnerForProject(scopeA, ipAID)
+	if err != nil || code != "" || user != "" {
+		t.Fatalf("项目 A 不得读取项目 B IP 占用资产: code=%q user=%q err=%v", code, user, err)
+	}
+	if err := s.DeleteIPEntryForProject(scopeA, ipAID, false); err != nil {
+		t.Fatalf("项目 B 占用不得阻止删除项目 A IP: %v", err)
+	}
+	if _, err := s.GetIPEntryForProject(scopeB, ipBID); err != nil {
+		t.Fatalf("删除项目 A IP 不得删除项目 B IP: %v", err)
+	}
+}
+
+func insertMappedCmdbAsset(t *testing.T, s *Store, projectID, sourceID int64, boxSN string) {
+	t.Helper()
+	if _, err := s.db.Exec(`INSERT INTO cmdb_assets
+		(project_id, name, status, owner, department, room, sn, box_sn, source_type, source_id)
+		VALUES (?, '映射资产', '在库', '原使用人', '原部门', '原房间', ?, ?, 'legacy_asset', ?)`, projectID, boxSN, boxSN, sourceID); err != nil {
+		t.Fatalf("创建映射 CMDB 资产: %v", err)
+	}
+}
+
+func assertMappedCmdbAsset(t *testing.T, s *Store, projectID, sourceID int64, wantStatus, wantOwner, wantDepartment, wantRoom, wantBoxSN string) {
+	t.Helper()
+	var status, owner, department, room, boxSN string
+	if err := s.db.QueryRow(`SELECT status, owner, department, room, box_sn
+		FROM cmdb_assets WHERE project_id=? AND source_type='legacy_asset' AND source_id=?`, projectID, sourceID).
+		Scan(&status, &owner, &department, &room, &boxSN); err != nil {
+		t.Fatalf("读取项目 B 映射 CMDB 资产: %v", err)
+	}
+	if status != wantStatus || owner != wantOwner || department != wantDepartment || room != wantRoom || boxSN != wantBoxSN {
+		t.Fatalf("项目 B 映射 CMDB 资产被跨项目修改: status=%q owner=%q department=%q room=%q boxSN=%q", status, owner, department, room, boxSN)
+	}
+}

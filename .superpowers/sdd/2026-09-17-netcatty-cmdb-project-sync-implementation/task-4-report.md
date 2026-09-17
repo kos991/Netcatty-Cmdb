@@ -117,3 +117,48 @@ git diff --check
 - 未修改 HTTP handler、正式安装目录、前端或发布配置；Store 没有保存可变“当前项目”。
 - 剩余阶段 B 需要让 HTTP `X-Cmdb-Project` 解析后只调用显式 `ForProject` API；阶段 C 继续覆盖 CMDB 主数据、导入导出、分类、自定义字段、子网和同步链路。
 - 旧 IP 删除/归属查询与 IP 规范化仍保留默认项目兼容实现，待阶段 C 统一覆盖其余 Store 链路，避免在本阶段扩大到导入、子网和同步模块。
+
+---
+
+## 阶段 4A 修复轮 1（2026-09-17）
+
+### 修复内容
+
+- `DeleteAssetForProject`、`TransferUserForProject` 与 `MaintenanceForProject` 写穿 `cmdb_assets` 时均追加 `project_id=?`，避免同一 `source_id` 影响其他项目映射记录。
+- 新增 `DeleteIPEntryForProject`、`IPEntryOwnerForProject`、`ipOwnerForProject`；旧无 scope 方法只解析默认项目后转调。IP 条目读取、占用资产查询和删除均使用 scope 的 `project_id`。
+- `project_scope_test.go` 增加跨项目同 `source_id` 的注销、调换、维修写穿隔离测试，以及同 IP 的归属/删除隔离测试。为了复现多项目同步后同来源键的历史数据，测试临时移除不含 `project_id` 的旧唯一索引。
+
+### TDD 与验证
+
+先新增测试执行：
+
+```powershell
+go test ./internal/store -run 'TestProjectScope(LegacyWriteThroughDoesNotCrossProject|IPOwnerAndDeleteIsolation)' -count=1
+```
+
+RED：因 `IPEntryOwnerForProject` 与 `DeleteIPEntryForProject` 尚不存在而构建失败。补齐最小实现后，测试首次暴露旧 `idx_cmdb_assets_source` 全局唯一索引不允许相同来源键；测试中移除该旧索引以覆盖真实跨项目写穿风险。
+
+最终实际执行：
+
+```powershell
+gofmt -w internal/store/legacy_store.go internal/store/ip_pool.go internal/store/project_scope_test.go
+go test ./internal/store -run 'TestProjectScope(LegacyWriteThroughDoesNotCrossProject|IPOwnerAndDeleteIsolation)' -count=1
+# ok   czfy-assets/internal/store  0.473s
+
+go test ./internal/store -run TestProjectScope -count=1
+# ok   czfy-assets/internal/store  0.694s
+
+go test -count=1 ./...
+# ok   czfy-assets                0.204s
+# ok   czfy-assets/internal       2.143s
+# ok   czfy-assets/internal/store 9.169s
+# ?    czfy-assets/tools/extract  [no test files]
+
+git diff --check
+# 通过；无空白错误
+```
+
+### 自审与剩余范围
+
+- 本轮只修复阶段 4A 已修改的旧业务 Store 链路，未触及阶段 B/C 的 HTTP、CMDB 新模块、导入导出、子网或同步文件。
+- 全局 `idx_cmdb_assets_source` 仍是未纳入本轮的既有 schema 约束；本轮 Store 写穿已不再依赖该约束来阻止跨项目修改。

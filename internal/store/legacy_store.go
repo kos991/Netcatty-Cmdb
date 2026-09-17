@@ -374,7 +374,7 @@ func (s *Store) DeleteAssetForProject(scope ProjectScope, id int64, reason, oper
 		scope.ProjectID, id, asset.UserName, formatAssetLocation(asset.Department, asset.Room), operator, reason, now); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE cmdb_assets SET status='报废', updated_at=? WHERE source_type='legacy_asset' AND source_id=?`, now, id); err != nil {
+	if _, err := tx.Exec(`UPDATE cmdb_assets SET status='报废', updated_at=? WHERE project_id=? AND source_type='legacy_asset' AND source_id=?`, now, scope.ProjectID, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -443,7 +443,7 @@ func (s *Store) TransferUserForProject(scope ProjectScope, id int64, req Transfe
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE cmdb_assets SET owner=?, department=?, room=?, updated_at=?
-		WHERE source_type='legacy_asset' AND source_id=?`, toUser, department, room, logTime, id); err != nil {
+		WHERE project_id=? AND source_type='legacy_asset' AND source_id=?`, toUser, department, room, logTime, scope.ProjectID, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -553,13 +553,13 @@ func (s *Store) MaintenanceForProject(scope ProjectScope, id int64, req Maintena
 	switch partType {
 	case "box":
 		_, err = tx.Exec(`UPDATE cmdb_assets SET sn=?, box_sn=?, status=?, updated_at=?
-			WHERE source_type='legacy_asset' AND source_id=?`, newSN, newSN, mappedStatus, logTime, id)
+			WHERE project_id=? AND source_type='legacy_asset' AND source_id=?`, newSN, newSN, mappedStatus, logTime, scope.ProjectID, id)
 	case "display":
 		_, err = tx.Exec(`UPDATE cmdb_assets SET display_sn=?, status=?, updated_at=?
-			WHERE source_type='legacy_asset' AND source_id=?`, newSN, mappedStatus, logTime, id)
+			WHERE project_id=? AND source_type='legacy_asset' AND source_id=?`, newSN, mappedStatus, logTime, scope.ProjectID, id)
 	default:
 		_, err = tx.Exec(`UPDATE cmdb_assets SET status=?, updated_at=?
-			WHERE source_type='legacy_asset' AND source_id=?`, mappedStatus, logTime, id)
+			WHERE project_id=? AND source_type='legacy_asset' AND source_id=?`, mappedStatus, logTime, scope.ProjectID, id)
 	}
 	if err != nil {
 		return err
