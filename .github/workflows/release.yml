@@ -41,6 +41,8 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "release-assets/cmdb-server-${version}-darwin-arm64" .
           cd release-assets
           sha256sum * > SHA256SUMS.txt
+      - name: Check CMDB server release data
+        run: node scripts/check-release-data.mjs release-assets
       - uses: actions/upload-artifact@v4
         with:
           name: cmdb-server-binaries
@@ -71,6 +73,7 @@ jobs:
           npm.cmd --prefix web run build
           New-Item -ItemType Directory -Force build | Out-Null
           go build -trimpath -ldflags="-s -w" -o build/cmdb-server.exe .
+          node scripts/check-release-data.mjs build/cmdb-server.exe
       - name: Checkout and integrate Netcatty
         shell: pwsh
         run: |
@@ -96,6 +99,9 @@ jobs:
         run: |
           npm.cmd run build
           npx.cmd electron-builder --config electron-builder.config.cjs --win portable --x64 --publish=never
+      - name: Check Portable release data
+        shell: pwsh
+        run: node scripts/check-release-data.mjs build/netcatty/release
       - uses: actions/upload-artifact@v4
         with:
           name: netcatty-cmdb-windows

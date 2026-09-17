@@ -33,7 +33,9 @@ jobs:
       - name: Run Go tests
         run: go test -race -count=1 ./...
       - name: Build CMDB server
-        run: mkdir -p build && go build -trimpath -o build/cmdb-server .
+        run: mkdir -p build && go build -trimpath -o build/cmdb-server.exe .
+      - name: Check CMDB release data
+        run: node scripts/check-release-data.mjs build/cmdb-server.exe
 
   tools:
     name: Probes and CLI
