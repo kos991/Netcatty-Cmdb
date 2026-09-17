@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,8 +48,8 @@ func NeedsProjectMigration(db *sql.DB) (bool, error) {
 }
 
 func BackupDatabase(db *sql.DB, dbPath string) (string, error) {
-	cleanPath := strings.SplitN(dbPath, "?", 2)[0]
-	if cleanPath == "" || cleanPath == ":memory:" {
+	cleanPath, ok := databaseFilePath(dbPath)
+	if !ok {
 		return "", errors.New("数据库路径不支持安全备份")
 	}
 	absolutePath, err := filepath.Abs(cleanPath)
@@ -64,10 +65,48 @@ func BackupDatabase(db *sql.DB, dbPath string) (string, error) {
 }
 
 func existingDatabaseFile(path string) bool {
-	cleanPath := strings.SplitN(path, "?", 2)[0]
-	if cleanPath == "" || cleanPath == ":memory:" {
+	cleanPath, ok := databaseFilePath(path)
+	if !ok {
 		return false
 	}
 	info, err := os.Stat(cleanPath)
 	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
+func databaseFilePath(dsn string) (string, bool) {
+	if !strings.HasPrefix(dsn, "file:") {
+		path := strings.SplitN(dsn, "?", 2)[0]
+		return databasePathIsFile(path)
+	}
+
+	uri, err := url.Parse(dsn)
+	if err != nil || uri.Query().Get("mode") == "memory" {
+		return "", false
+	}
+	var path string
+	if uri.Opaque != "" {
+		path, err = url.PathUnescape(uri.Opaque)
+		if err != nil {
+			return "", false
+		}
+	} else if uri.Host != "" {
+		path = "//" + uri.Host + uri.Path
+	} else {
+		path = uri.Path
+	}
+	path = filepath.FromSlash(path)
+	if strings.HasPrefix(path, string(filepath.Separator)) {
+		withoutLeadingSeparator := strings.TrimPrefix(path, string(filepath.Separator))
+		if filepath.VolumeName(withoutLeadingSeparator) != "" {
+			path = withoutLeadingSeparator
+		}
+	}
+	return databasePathIsFile(path)
+}
+
+func databasePathIsFile(path string) (string, bool) {
+	if path == "" || path == ":memory:" {
+		return "", false
+	}
+	return path, true
 }

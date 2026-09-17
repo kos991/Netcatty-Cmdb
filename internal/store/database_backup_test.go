@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -58,6 +59,69 @@ func TestOpenCreatesReadableBackupBeforeProjectMigration(t *testing.T) {
 	backups, _ = filepath.Glob(dbPath + ".backup-*")
 	if len(backups) != 1 {
 		t.Fatalf("无需迁移时重复备份: %v", backups)
+	}
+}
+
+func TestOpenCreatesBackupBeforeProjectMigrationForFileURI(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy-uri.db")
+	createPreProjectDatabase(t, dbPath)
+
+	uri := "file:" + filepath.ToSlash(dbPath) + "?mode=rwc"
+	s, err := Open(uri)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	backups, err := filepath.Glob(dbPath + ".backup-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("URI 旧库备份数=%d，期望=1: %v", len(backups), backups)
+	}
+	backup, err := sql.Open("sqlite", backups[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backup.Close()
+	columns, err := getTableColumns(backup, "assets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if columns["project_id"] {
+		t.Fatal("URI 旧库备份发生在项目迁移之后")
+	}
+}
+
+func TestDatabaseFilePathHandlesSQLiteURIs(t *testing.T) {
+	absoluteURIPath := filepath.FromSlash("/C:/cmdb/legacy.db")
+	if runtime.GOOS == "windows" {
+		absoluteURIPath = filepath.FromSlash("C:/cmdb/legacy.db")
+	}
+	tests := []struct {
+		name  string
+		input string
+		want  string
+		ok    bool
+	}{
+		{name: "普通路径含查询参数", input: "legacy.db?cache=shared", want: "legacy.db", ok: true},
+		{name: "相对 file URI", input: "file:legacy.db?mode=rwc", want: "legacy.db", ok: true},
+		{name: "相对目录 file URI", input: "file:data/legacy.db?mode=rwc", want: filepath.Join("data", "legacy.db"), ok: true},
+		{name: "Windows 盘符 file URI", input: "file:C:/cmdb/legacy.db?mode=rwc", want: filepath.FromSlash("C:/cmdb/legacy.db"), ok: true},
+		{name: "绝对 file URI", input: "file:///C:/cmdb/legacy.db?mode=rwc", want: absoluteURIPath, ok: true},
+		{name: "共享内存 URI", input: "file::memory:?cache=shared", want: "", ok: false},
+		{name: "mode memory URI", input: "file:cmdb?mode=memory&cache=shared", want: "", ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := databaseFilePath(tt.input)
+			if ok != tt.ok || got != tt.want {
+				t.Fatalf("databaseFilePath(%q) = (%q, %t), want (%q, %t)", tt.input, got, ok, tt.want, tt.ok)
+			}
+		})
 	}
 }
 
