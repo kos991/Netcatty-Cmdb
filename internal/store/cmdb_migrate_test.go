@@ -122,4 +122,10 @@ func TestStoreOpenRunsMigration(t *testing.T) {
 	if _, err := st.db.Exec("SELECT id, field_key, field_name FROM cmdb_custom_fields LIMIT 1"); err != nil {
 		t.Fatalf("cmdb_custom_fields not properly created: %v", err)
 	}
+	if _, err := st.DefaultProject(); err != nil {
+		t.Fatalf("default project not created after migrations: %v", err)
+	}
+	if _, err := st.db.Exec("SELECT project_id, sync_id, revision, updated_at, deleted_at FROM cmdb_assets LIMIT 1"); err != nil {
+		t.Fatalf("cmdb_assets project metadata not created: %v", err)
+	}
 }
