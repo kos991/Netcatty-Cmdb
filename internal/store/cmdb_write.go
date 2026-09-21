@@ -148,7 +148,7 @@ func verifyLegacyWrite(asset *CmdbAsset, result sql.Result, err error) error {
 }
 
 // writeThroughToLegacy 把可映射字段反向写回源台账。
-func writeThroughToLegacy(tx *sql.Tx, asset *CmdbAsset, ch CmdbAssetChanges) error {
+func writeThroughToLegacy(tx *sql.Tx, projectID int64, asset *CmdbAsset, ch CmdbAssetChanges) error {
 	if asset.SourceID <= 0 {
 		return nil // 纯 CMDB 记录，没有源台账
 	}
@@ -185,8 +185,8 @@ func writeThroughToLegacy(tx *sql.Tx, asset *CmdbAsset, ch CmdbAssetChanges) err
 		if len(sets) == 0 {
 			return nil
 		}
-		args = append(args, now, asset.SourceID)
-		result, err := tx.Exec("UPDATE assets SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
+		args = append(args, now, asset.SourceID, projectID)
+		result, err := tx.Exec("UPDATE assets SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ? AND project_id = ?", args...)
 		return verifyLegacyWrite(asset, result, err)
 
 	case "legacy_server":
@@ -208,9 +208,66 @@ func writeThroughToLegacy(tx *sql.Tx, asset *CmdbAsset, ch CmdbAssetChanges) err
 		if len(sets) == 0 {
 			return nil
 		}
-		args = append(args, now, asset.SourceID)
-		result, err := tx.Exec("UPDATE servers SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ?", args...)
+		args = append(args, now, asset.SourceID, projectID)
+		result, err := tx.Exec("UPDATE servers SET "+strings.Join(sets, ", ")+", updated_at = ? WHERE id = ? AND project_id = ?", args...)
 		return verifyLegacyWrite(asset, result, err)
+	}
+	return nil
+}
+
+type cmdbRelationQuerier interface {
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+func validateCmdbRelation(q cmdbRelationQuerier, projectID int64, table, label string, id int64) error {
+	if id == 0 {
+		return nil
+	}
+	var exists int
+	err := q.QueryRow("SELECT 1 FROM "+table+" WHERE id = ? AND project_id = ? AND deleted_at IS NULL", id, projectID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%s %d 不属于当前项目", label, id)
+	}
+	return err
+}
+
+func validateCmdbAssetRelations(q cmdbRelationQuerier, projectID int64, a *CmdbAsset) error {
+	relations := []struct {
+		table string
+		label string
+		id    int64
+	}{
+		{table: "cmdb_device_categories", label: "分类", id: a.CategoryID},
+		{table: "cmdb_device_models", label: "型号", id: a.ModelID},
+		{table: "cmdb_orgs", label: "组织", id: a.OrgID},
+		{table: "cmdb_groups", label: "分组", id: a.GroupID},
+		{table: "cmdb_persons", label: "人员", id: a.OwnerID},
+	}
+	for _, relation := range relations {
+		if err := validateCmdbRelation(q, projectID, relation.table, relation.label, relation.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCmdbAssetChangesRelations(q cmdbRelationQuerier, projectID int64, ch CmdbAssetChanges) error {
+	relations := []struct {
+		table string
+		label string
+		id    *int64
+	}{
+		{table: "cmdb_device_categories", label: "分类", id: ch.CategoryID},
+		{table: "cmdb_orgs", label: "组织", id: ch.OrgID},
+		{table: "cmdb_groups", label: "分组", id: ch.GroupID},
+		{table: "cmdb_persons", label: "人员", id: ch.OwnerID},
+	}
+	for _, relation := range relations {
+		if relation.id != nil {
+			if err := validateCmdbRelation(q, projectID, relation.table, relation.label, *relation.id); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -234,6 +291,17 @@ func (s *Store) BackfillLegacyAssetOwner() (int, error) {
 
 // ApplyCmdbAssetChanges 对一批 CMDB 资产应用变更，返回实际处理的条数。
 func (s *Store) ApplyCmdbAssetChanges(ids []int64, ch CmdbAssetChanges) (int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.ApplyCmdbAssetChangesForProject(scope, ids, ch)
+}
+
+func (s *Store) ApplyCmdbAssetChangesForProject(scope ProjectScope, ids []int64, ch CmdbAssetChanges) (int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
 	if len(ids) == 0 {
 		return 0, fmt.Errorf("请先选择要操作的资产")
 	}
@@ -245,6 +313,9 @@ func (s *Store) ApplyCmdbAssetChanges(ids []int64, ch CmdbAssetChanges) (int, er
 		return 0, err
 	}
 	defer tx.Rollback()
+	if err := validateCmdbAssetChangesRelations(tx, scope.ProjectID, ch); err != nil {
+		return 0, err
+	}
 
 	if ch.Owner != nil && ch.OwnerID == nil {
 		ownerID := int64(0)
@@ -252,7 +323,7 @@ func (s *Store) ApplyCmdbAssetChanges(ids []int64, ch CmdbAssetChanges) (int, er
 	}
 	if ch.OwnerID != nil && *ch.OwnerID != 0 {
 		var owner, department string
-		err := tx.QueryRow("SELECT name, department FROM cmdb_persons WHERE id = ?", *ch.OwnerID).Scan(&owner, &department)
+		err := tx.QueryRow("SELECT name, department FROM cmdb_persons WHERE id = ? AND project_id = ?", *ch.OwnerID, scope.ProjectID).Scan(&owner, &department)
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, fmt.Errorf("人员 %d 不存在", *ch.OwnerID)
 		}
@@ -274,18 +345,37 @@ func (s *Store) ApplyCmdbAssetChanges(ids []int64, ch CmdbAssetChanges) (int, er
 
 	for _, id := range ids {
 		cur := &CmdbAsset{ID: id}
-		err := tx.QueryRow("SELECT source_type, source_id FROM cmdb_assets WHERE id = ?", id).Scan(&cur.SourceType, &cur.SourceID)
+		err := tx.QueryRow(`SELECT source_type, source_id, category_id, model_id, org_id, group_id, owner_id
+			FROM cmdb_assets WHERE id = ? AND project_id = ?`, id, scope.ProjectID).Scan(
+			&cur.SourceType, &cur.SourceID, &cur.CategoryID, &cur.ModelID, &cur.OrgID, &cur.GroupID, &cur.OwnerID,
+		)
 		if errors.Is(err, sql.ErrNoRows) {
-			return 0, fmt.Errorf("资产 %d 不存在", id)
+			return 0, fmt.Errorf("资产 %d 不属于当前项目: %w", id, ErrProjectScopedNotFound)
 		}
 		if err != nil {
 			return 0, err
 		}
-		q := "UPDATE cmdb_assets SET " + setClause + ", updated_at = ? WHERE id = ?"
-		if _, err := tx.Exec(q, append(append([]interface{}{}, args...), now, id)...); err != nil {
+		effectiveRelations := *cur
+		if ch.CategoryID != nil {
+			effectiveRelations.CategoryID = *ch.CategoryID
+		}
+		if ch.OrgID != nil {
+			effectiveRelations.OrgID = *ch.OrgID
+		}
+		if ch.GroupID != nil {
+			effectiveRelations.GroupID = *ch.GroupID
+		}
+		if ch.OwnerID != nil {
+			effectiveRelations.OwnerID = *ch.OwnerID
+		}
+		if err := validateCmdbAssetRelations(tx, scope.ProjectID, &effectiveRelations); err != nil {
 			return 0, err
 		}
-		if err := writeThroughToLegacy(tx, cur, ch); err != nil {
+		q := "UPDATE cmdb_assets SET " + setClause + ", updated_at = ? WHERE id = ? AND project_id = ?"
+		if _, err := tx.Exec(q, append(append([]interface{}{}, args...), now, id, scope.ProjectID)...); err != nil {
+			return 0, err
+		}
+		if err := writeThroughToLegacy(tx, scope.ProjectID, cur, ch); err != nil {
 			return 0, err
 		}
 	}
@@ -297,24 +387,45 @@ func (s *Store) ApplyCmdbAssetChanges(ids []int64, ch CmdbAssetChanges) (int, er
 
 // ArchiveCmdbAssets 批量归档：把状态置为「报废」，并同步回源台账。
 func (s *Store) ArchiveCmdbAssets(ids []int64) (int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.ArchiveCmdbAssetsForProject(scope, ids)
+}
+
+func (s *Store) ArchiveCmdbAssetsForProject(scope ProjectScope, ids []int64) (int, error) {
 	status := "报废"
-	return s.ApplyCmdbAssetChanges(ids, CmdbAssetChanges{Status: &status})
+	return s.ApplyCmdbAssetChangesForProject(scope, ids, CmdbAssetChanges{Status: &status})
 }
 
 // CloneCmdbAssets 批量克隆：复制为新记录（编号/SN/管理IP/MAC 清空，来源标记为 manual），
 // 并一并复制网络接口。
 func (s *Store) CloneCmdbAssets(ids []int64) (int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.CloneCmdbAssetsForProject(scope, ids)
+}
+
+func (s *Store) CloneCmdbAssetsForProject(scope ProjectScope, ids []int64) (int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
 	if len(ids) == 0 {
 		return 0, fmt.Errorf("请先选择要克隆的资产")
 	}
 	cloned := 0
 	for _, id := range ids {
-		src, ifaces, err := s.GetCmdbAsset(id)
+		src, ifaces, err := s.GetCmdbAssetForProject(scope, id)
 		if err != nil {
 			return cloned, fmt.Errorf("资产 %d 不存在", id)
 		}
 		cp := *src
 		cp.ID = 0
+		cp.ProjectID = 0
+		cp.SyncID = ""
 		cp.Name = src.Name + "-副本"
 		cp.AssetCode = ""
 		cp.SN = ""
@@ -337,7 +448,7 @@ func (s *Store) CloneCmdbAssets(ids []int64) (int, error) {
 		}
 		cp.Interfaces = clonedIfaces
 
-		_, err = s.CreateCmdbAssetManual(&cp)
+		_, err = s.CreateCmdbAssetManualForProject(scope, &cp)
 		if err != nil {
 			return cloned, err
 		}
@@ -349,7 +460,7 @@ func (s *Store) CloneCmdbAssets(ids []int64) (int, error) {
 // linkInterfacesToIPPool 负责资产多网卡接口与 ip_pool 的联动：
 // 1. 对于解绑（原接口中有，现接口中没有）的 IP，若在 ip_pool 且在用，自动释放为空闲；
 // 2. 对于新绑定（现接口中有）的 IP，若在 ip_pool 中存在且处于空闲状态，自动占位更新为已分配并在用；
-func linkInterfacesToIPPool(tx *sql.Tx, assetID int64, assetName, owner, dept, room string, oldIfaces, newIfaces []CmdbAssetInterface) error {
+func linkInterfacesToIPPool(tx *sql.Tx, projectID, assetID int64, assetName, owner, dept, room string, oldIfaces, newIfaces []CmdbAssetInterface) error {
 	oldIPs := make(map[string]bool)
 	for _, it := range oldIfaces {
 		ip := strings.TrimSpace(it.IP)
@@ -372,7 +483,7 @@ func linkInterfacesToIPPool(tx *sql.Tx, assetID int64, assetName, owner, dept, r
 			_, err := tx.Exec(`
 				UPDATE ip_pool
 				SET status = '空闲', department = '', account = '', room = '', remark = ''
-				WHERE ip = ? AND status = '在用'`, ip)
+				WHERE project_id = ? AND ip = ? AND status = '在用'`, projectID, ip)
 			if err != nil {
 				return err
 			}
@@ -383,7 +494,7 @@ func linkInterfacesToIPPool(tx *sql.Tx, assetID int64, assetName, owner, dept, r
 	for ip, iface := range newIPs {
 		var poolID int64
 		var poolStatus string
-		err := tx.QueryRow("SELECT id, IFNULL(status,'') FROM ip_pool WHERE ip = ?", ip).Scan(&poolID, &poolStatus)
+		err := tx.QueryRow("SELECT id, IFNULL(status,'') FROM ip_pool WHERE project_id = ? AND ip = ?", projectID, ip).Scan(&poolID, &poolStatus)
 		if err != nil {
 			// IP 不在 ip_pool 中，跳过联动
 			continue
@@ -397,7 +508,7 @@ func linkInterfacesToIPPool(tx *sql.Tx, assetID int64, assetName, owner, dept, r
 			_, err := tx.Exec(`
 				UPDATE ip_pool
 				SET status = '在用', department = ?, account = ?, room = ?, remark = ?
-				WHERE id = ?`, dept, owner, room, remark, poolID)
+				WHERE id = ? AND project_id = ?`, dept, owner, room, remark, poolID, projectID)
 			if err != nil {
 				return err
 			}
@@ -409,6 +520,20 @@ func linkInterfacesToIPPool(tx *sql.Tx, assetID int64, assetName, owner, dept, r
 
 // CreateCmdbAssetManual 手工新增一条 CMDB 资产记录（支持全部 48+ 项字段、多网卡接口与 IP 池联动）。
 func (s *Store) CreateCmdbAssetManual(a *CmdbAsset) (int64, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.CreateCmdbAssetManualForProject(scope, a)
+}
+
+func (s *Store) CreateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset) (int64, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
+	if err := validateCmdbAssetRelations(s.db, scope.ProjectID, a); err != nil {
+		return 0, err
+	}
 	a.Name = strings.TrimSpace(a.Name)
 	if a.Name == "" {
 		return 0, fmt.Errorf("设备名称不能为空")
@@ -504,7 +629,7 @@ func (s *Store) CreateCmdbAssetManual(a *CmdbAsset) (int64, error) {
 
 	query := `
 		INSERT INTO cmdb_assets (
-			asset_code, name, status, asset_class, category_id, model_id, sn, vendor, model, tags,
+			project_id, asset_code, name, status, asset_class, category_id, model_id, sn, vendor, model, tags,
 			org_id, group_id, department, owner, data_center, floor, cabinet_name, cabinet_row,
 			cabinet_col, start_u, height_u, province, city, district, longitude, latitude, address,
 			mgmt_ip, mac, port_count, rated_power_w, max_power_w, power_type, redundant_power,
@@ -514,10 +639,10 @@ func (s *Store) CreateCmdbAssetManual(a *CmdbAsset) (int64, error) {
 			region, zone, vcpu, memory_mb, instance_type, public_ip, box_sn, display_sn, cpu_info,
 			disk_info, mgmt_url, biz_ip, rack_unit, security_software, net_type, admin_user, room,
 			owner_id, custom_fields, created_at, updated_at)
-		VALUES (` + strings.TrimRight(strings.Repeat("?,", 78), ",") + `)`
+		VALUES (` + strings.TrimRight(strings.Repeat("?,", 79), ",") + `)`
 
 	res, err := tx.Exec(query,
-		a.AssetCode, a.Name, a.Status, a.AssetClass, a.CategoryID, a.ModelID, a.SN, a.Vendor, a.Model, a.Tags,
+		scope.ProjectID, a.AssetCode, a.Name, a.Status, a.AssetClass, a.CategoryID, a.ModelID, a.SN, a.Vendor, a.Model, a.Tags,
 		a.OrgID, a.GroupID, a.Department, a.Owner, a.DataCenter, a.Floor, a.CabinetName, a.CabinetRow,
 		a.CabinetCol, a.StartU, a.HeightU, a.Province, a.City, a.District, a.Longitude, a.Latitude, a.Address,
 		a.MgmtIP, a.MAC, a.PortCount, a.RatedPowerW, a.MaxPowerW, a.PowerType, a.RedundantPower,
@@ -535,6 +660,10 @@ func (s *Store) CreateCmdbAssetManual(a *CmdbAsset) (int64, error) {
 		return 0, err
 	}
 	a.ID = newID
+	a.ProjectID = scope.ProjectID
+	if err := tx.QueryRow("SELECT sync_id FROM cmdb_assets WHERE id = ? AND project_id = ?", newID, scope.ProjectID).Scan(&a.SyncID); err != nil {
+		return 0, err
+	}
 
 	// 插入多网卡接口
 	for _, iface := range a.Interfaces {
@@ -548,10 +677,10 @@ func (s *Store) CreateCmdbAssetManual(a *CmdbAsset) (int64, error) {
 		}
 		_, err := tx.Exec(`
 			INSERT INTO cmdb_asset_interfaces (
-				asset_id, asset_name, name, if_name, ip, mask, gateway, mac,
+				project_id, asset_id, asset_name, name, if_name, ip, mask, gateway, mac,
 				network_zone, net_zone, is_primary, vlan_id, remark, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			newID, a.Name, ifaceName, ifaceName, iface.IP, iface.Mask, iface.Gateway, iface.MAC,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			scope.ProjectID, newID, a.Name, ifaceName, ifaceName, iface.IP, iface.Mask, iface.Gateway, iface.MAC,
 			netZone, netZone, iface.IsPrimary, iface.VlanID, iface.Remark, now, now,
 		)
 		if err != nil {
@@ -560,7 +689,7 @@ func (s *Store) CreateCmdbAssetManual(a *CmdbAsset) (int64, error) {
 	}
 
 	// 联动 IP 池
-	if err := linkInterfacesToIPPool(tx, newID, a.Name, a.Owner, a.Department, a.Room, nil, a.Interfaces); err != nil {
+	if err := linkInterfacesToIPPool(tx, scope.ProjectID, newID, a.Name, a.Owner, a.Department, a.Room, nil, a.Interfaces); err != nil {
 		return 0, err
 	}
 
@@ -572,13 +701,29 @@ func (s *Store) CreateCmdbAssetManual(a *CmdbAsset) (int64, error) {
 
 // UpdateCmdbAssetManual 手工更新 CMDB 资产记录（支持全量 48+ 字段、多网卡与 IP 池联动更新）。
 func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.UpdateCmdbAssetManualForProject(scope, a)
+}
+
+func (s *Store) UpdateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
 	if a.ID <= 0 {
 		return fmt.Errorf("无效的资产 ID")
 	}
-	cur, oldIfaces, err := s.GetCmdbAsset(a.ID)
+	cur, oldIfaces, err := s.GetCmdbAssetForProject(scope, a.ID)
 	if err != nil {
-		return fmt.Errorf("资产不存在")
+		return fmt.Errorf("资产不属于当前项目: %w", err)
 	}
+	if err := validateCmdbAssetRelations(s.db, scope.ProjectID, a); err != nil {
+		return err
+	}
+	a.ProjectID = scope.ProjectID
+	a.SyncID = cur.SyncID
 	if strings.TrimSpace(a.Name) == "" {
 		a.Name = cur.Name
 	}
@@ -682,7 +827,7 @@ func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
 			public_ip = ?, box_sn = ?, display_sn = ?, cpu_info = ?, disk_info = ?,
 			mgmt_url = ?, biz_ip = ?, rack_unit = ?, security_software = ?, net_type = ?,
 			admin_user = ?, room = ?, owner_id = ?, custom_fields = ?, updated_at = ?
-		WHERE id = ?`,
+		WHERE id = ? AND project_id = ?`,
 		a.AssetCode, a.Name, a.Status, a.AssetClass, a.CategoryID, a.ModelID,
 		a.SN, a.Vendor, a.Model, a.Tags, a.OrgID, a.GroupID, a.Department,
 		a.Owner, a.DataCenter, a.Floor, a.CabinetName, a.CabinetRow,
@@ -696,7 +841,7 @@ func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
 		a.Provider, a.Region, a.Zone, a.VCPU, a.MemoryMB, a.InstanceType,
 		a.PublicIP, a.BoxSN, a.DisplaySN, a.CPUInfo, a.DiskInfo,
 		a.MgmtURL, a.BizIP, a.RackUnit, a.SecuritySoftware, a.NetType,
-		a.AdminUser, a.Room, a.OwnerID, a.CustomFieldsJSON, now, a.ID,
+		a.AdminUser, a.Room, a.OwnerID, a.CustomFieldsJSON, now, a.ID, scope.ProjectID,
 	)
 	if err != nil {
 		return err
@@ -704,7 +849,7 @@ func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
 
 	// 重新配置多网卡接口
 	if a.Interfaces != nil {
-		if _, err := tx.Exec("DELETE FROM cmdb_asset_interfaces WHERE asset_id = ?", a.ID); err != nil {
+		if _, err := tx.Exec("DELETE FROM cmdb_asset_interfaces WHERE asset_id = ? AND project_id = ?", a.ID, scope.ProjectID); err != nil {
 			return err
 		}
 		for _, iface := range a.Interfaces {
@@ -718,10 +863,10 @@ func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
 			}
 			_, err := tx.Exec(`
 				INSERT INTO cmdb_asset_interfaces (
-					asset_id, asset_name, name, if_name, ip, mask, gateway, mac,
+					project_id, asset_id, asset_name, name, if_name, ip, mask, gateway, mac,
 					network_zone, net_zone, is_primary, vlan_id, remark, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				a.ID, a.Name, ifaceName, ifaceName, iface.IP, iface.Mask, iface.Gateway, iface.MAC,
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				scope.ProjectID, a.ID, a.Name, ifaceName, ifaceName, iface.IP, iface.Mask, iface.Gateway, iface.MAC,
 				netZone, netZone, iface.IsPrimary, iface.VlanID, iface.Remark, now, now,
 			)
 			if err != nil {
@@ -730,7 +875,7 @@ func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
 		}
 
 		// 联动 IP 池
-		if err := linkInterfacesToIPPool(tx, a.ID, a.Name, a.Owner, a.Department, a.Room, oldIfaces, a.Interfaces); err != nil {
+		if err := linkInterfacesToIPPool(tx, scope.ProjectID, a.ID, a.Name, a.Owner, a.Department, a.Room, oldIfaces, a.Interfaces); err != nil {
 			return err
 		}
 	}
@@ -744,7 +889,7 @@ func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
 			CabinetName: &a.CabinetName,
 			Remark:      &a.Remark,
 		}
-		if err := writeThroughToLegacy(tx, cur, ch); err != nil {
+		if err := writeThroughToLegacy(tx, scope.ProjectID, cur, ch); err != nil {
 			return err
 		}
 	}
@@ -756,14 +901,25 @@ func (s *Store) UpdateCmdbAssetManual(a *CmdbAsset) error {
 // 由旧台账映射而来的记录不允许删除——删掉后下次同步会重新出现，属于无效且误导的操作。
 // 同时释放其名下绑定的网卡 IP。
 func (s *Store) DeleteCmdbAsset(id int64) error {
-	cur, ifaces, err := s.GetCmdbAsset(id)
+	scope, err := s.DefaultProjectScope()
 	if err != nil {
-		return fmt.Errorf("资产不存在")
+		return err
+	}
+	return s.DeleteCmdbAssetForProject(scope, id)
+}
+
+func (s *Store) DeleteCmdbAssetForProject(scope ProjectScope, id int64) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	cur, ifaces, err := s.GetCmdbAssetForProject(scope, id)
+	if err != nil {
+		return fmt.Errorf("资产不属于当前项目: %w", err)
 	}
 	if cur.SourceID > 0 {
-		src := "云桌面终端台账"
+		src := "终端资产台账"
 		if cur.SourceType == "legacy_server" {
-			src = "物理服务器与应用"
+			src = "基础设施与业务系统"
 		}
 		return fmt.Errorf("该记录由「%s」映射而来，删除后下次同步会重新出现；如需停用请改为「归档」，或到源台账中注销", src)
 	}
@@ -775,14 +931,14 @@ func (s *Store) DeleteCmdbAsset(id int64) error {
 	defer tx.Rollback()
 
 	// 释放多网卡在 IP 池中的占用
-	if err := linkInterfacesToIPPool(tx, id, cur.Name, cur.Owner, cur.Department, cur.Room, ifaces, nil); err != nil {
+	if err := linkInterfacesToIPPool(tx, scope.ProjectID, id, cur.Name, cur.Owner, cur.Department, cur.Room, ifaces, nil); err != nil {
 		return err
 	}
 
-	if _, err := tx.Exec(`DELETE FROM cmdb_asset_interfaces WHERE asset_id = ?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM cmdb_asset_interfaces WHERE asset_id = ? AND project_id = ?`, id, scope.ProjectID); err != nil {
 		return err
 	}
-	res, err := tx.Exec(`DELETE FROM cmdb_assets WHERE id = ?`, id)
+	res, err := tx.Exec(`DELETE FROM cmdb_assets WHERE id = ? AND project_id = ?`, id, scope.ProjectID)
 	if err != nil {
 		return err
 	}

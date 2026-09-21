@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,10 +26,108 @@ func createLegacyAsset(t *testing.T, s *Store, a Asset) int64 {
 	return id
 }
 
+func TestImportAssetsForProjectRollsBackOnIPConflict(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.ImportAssetsForProject(scope, []Asset{
+		{AssetCode: "IMPORT-1", DeviceType: "台式电脑", IP: "10.20.30.80", Status: "在用"},
+		{AssetCode: "IMPORT-2", DeviceType: "台式电脑", IP: "10.20.30.80", Status: "在用"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "已关联其他资产") {
+		t.Fatalf("expected IP conflict, got %v", err)
+	}
+	assets, err := s.AllAssetsForProject(scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 0 {
+		t.Fatalf("partial import was not rolled back: %#v", assets)
+	}
+}
+
 func mustLegacyExec(t *testing.T, s *Store, query string, args ...interface{}) {
 	t.Helper()
 	if _, err := s.db.Exec(query, args...); err != nil {
 		t.Fatalf("准备测试数据失败: %v", err)
+	}
+}
+
+func TestLegacyAssetDeviceTypeRoundTripAndMaintenanceInheritance(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	id := createLegacyAsset(t, s, Asset{
+		AssetCode: "TYPE-1", DeviceType: "云桌面终端", BoxSN: "BOX-OLD", Status: "在用",
+	})
+
+	asset, _, err := s.GetAsset(id)
+	if err != nil {
+		t.Fatalf("读取设备类型失败: %v", err)
+	}
+	if asset.DeviceType != "云桌面终端" {
+		t.Fatalf("新增后设备类型未保存: %+v", asset)
+	}
+	asset.DeviceType = "台式电脑"
+	if err := s.UpdateAsset(asset, "测试"); err != nil {
+		t.Fatalf("更新设备类型失败: %v", err)
+	}
+	updated, _, err := s.GetAsset(id)
+	if err != nil || updated.DeviceType != "台式电脑" {
+		t.Fatalf("更新后设备类型未保存: asset=%+v err=%v", updated, err)
+	}
+
+	if err := s.Maintenance(id, MaintenanceReq{
+		PartType: "box", OldSN: "BOX-OLD", NewSN: "BOX-NEW",
+		NewStatus: "在用", MarkOldAs: "故障待修入库",
+	}); err != nil {
+		t.Fatalf("维修换件失败: %v", err)
+	}
+	var oldPartType string
+	if err := s.db.QueryRow(`SELECT IFNULL(device_type,'') FROM assets WHERE id <> ?`, id).Scan(&oldPartType); err != nil {
+		t.Fatalf("读取旧件设备类型失败: %v", err)
+	}
+	if oldPartType != "台式电脑" {
+		t.Fatalf("维修旧件未继承设备类型: %q", oldPartType)
+	}
+}
+
+func TestLegacyAssetDeviceTypeMigrationBackfillsExistingRows(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy_device_type.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("创建旧数据库失败: %v", err)
+	}
+	_, err = db.Exec(`
+		CREATE TABLE assets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			project_id INTEGER DEFAULT 1,
+			asset_code TEXT, box_sn TEXT, display_sn TEXT, user_name TEXT,
+			department TEXT, room TEXT, ip TEXT, terminal_ip TEXT,
+			security_software TEXT, status TEXT, net_type TEXT, remark TEXT,
+			created_at TEXT, updated_at TEXT
+		);
+		INSERT INTO assets (project_id, asset_code, box_sn, status) VALUES (1, 'OLD-1', 'BOX-1', '在用');
+	`)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("准备旧数据库失败: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("关闭旧数据库失败: %v", err)
+	}
+
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("迁移旧数据库失败: %v", err)
+	}
+	defer s.Close()
+	var deviceType string
+	if err := s.db.QueryRow(`SELECT IFNULL(device_type,'') FROM assets WHERE asset_code='OLD-1'`).Scan(&deviceType); err != nil {
+		t.Fatalf("读取迁移结果失败: %v", err)
+	}
+	if deviceType != "" {
+		t.Fatalf("旧终端资产类型未知时不应臆造分类，实际 %q", deviceType)
 	}
 }
 
@@ -261,21 +360,21 @@ func TestLegacyAssetTransferUpdatesLedgerLogAndMappedRecord(t *testing.T) {
 }
 
 func TestLegacyAssetMaintenanceUpdatesPartsInventoryLogAndMappedRecord(t *testing.T) {
-	t.Run("盒子换件并将旧件待修入库", func(t *testing.T) {
+	t.Run("终端主机换件并将旧件待修入库", func(t *testing.T) {
 		s := newLegacyAssetTestStore(t)
 		id := createLegacyAsset(t, s, Asset{AssetCode: "FIX-BOX", BoxSN: "BOX-OLD", DisplaySN: "DISPLAY-KEEP", UserName: "张三", Department: "执行局", Room: "201", Status: "在用"})
 		if _, err := s.SyncLegacyToCmdb(); err != nil {
 			t.Fatalf("准备 CMDB 映射失败: %v", err)
 		}
-		req := MaintenanceReq{MaintenanceType: "更换云桌面盒子", PartType: "box", OldSN: "BOX-OLD", NewSN: "BOX-NEW", NewStatus: "在用", MarkOldAs: "故障待修入库", Date: "2026-09-16 11:00:00", Operator: "维修员", Description: "盒子无法启动"}
+		req := MaintenanceReq{MaintenanceType: "更换终端主机", PartType: "box", OldSN: "BOX-OLD", NewSN: "BOX-NEW", NewStatus: "在用", MarkOldAs: "故障待修入库", Date: "2026-09-16 11:00:00", Operator: "维修员", Description: "终端主机无法启动"}
 		if err := s.Maintenance(id, req); err != nil {
-			t.Fatalf("盒子换件失败: %v", err)
+			t.Fatalf("终端主机换件失败: %v", err)
 		}
 		asset, logs, _ := s.GetAsset(id)
 		if asset.BoxSN != "BOX-NEW" || asset.DisplaySN != "DISPLAY-KEEP" || asset.Status != "在用" {
-			t.Fatalf("盒子换件误改或漏改字段: %+v", asset)
+			t.Fatalf("终端主机换件误改或漏改字段: %+v", asset)
 		}
-		if len(logs) != 1 || logs[0].LogType != "设备维修更换" || logs[0].OldSN != "BOX-OLD" || logs[0].NewSN != "BOX-NEW" || logs[0].Operator != "维修员" || logs[0].Description != "盒子无法启动" || logs[0].LogTime != req.Date {
+		if len(logs) != 1 || logs[0].LogType != "设备维修更换" || logs[0].OldSN != "BOX-OLD" || logs[0].NewSN != "BOX-NEW" || logs[0].Operator != "维修员" || logs[0].Description != "终端主机无法启动" || logs[0].LogTime != req.Date {
 			t.Fatalf("维修履历不完整: %+v", logs)
 		}
 		var oldPart Asset
@@ -283,14 +382,14 @@ func TestLegacyAssetMaintenanceUpdatesPartsInventoryLogAndMappedRecord(t *testin
 			t.Fatalf("旧件未入库: %v", err)
 		}
 		if oldPart.BoxSN != "BOX-OLD" || oldPart.DisplaySN != "" || oldPart.Status != "维修中" || !strings.Contains(oldPart.Remark, "FIX-BOX") {
-			t.Fatalf("旧盒子仓库记录不可追溯: %+v", oldPart)
+			t.Fatalf("旧终端主机仓库记录不可追溯: %+v", oldPart)
 		}
 		var sn, boxSN, status string
 		if err := s.db.QueryRow(`SELECT sn, box_sn, status FROM cmdb_assets WHERE source_type='legacy_asset' AND source_id=?`, id).Scan(&sn, &boxSN, &status); err != nil {
 			t.Fatalf("读取 CMDB 映射失败: %v", err)
 		}
 		if sn != "BOX-NEW" || boxSN != "BOX-NEW" || status != "在线" {
-			t.Fatalf("CMDB 盒子 SN/状态未同步: sn=%q box_sn=%q status=%q", sn, boxSN, status)
+			t.Fatalf("Cmdb 终端主机 SN/状态未同步: sn=%q box_sn=%q status=%q", sn, boxSN, status)
 		}
 	})
 

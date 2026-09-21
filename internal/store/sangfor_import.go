@@ -5,7 +5,6 @@ import (
 	"io"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -161,97 +160,17 @@ func parseSangfor(r io.Reader) ([]sangforServer, []sangforApp, int, error) {
 }
 
 func (s *Store) PreviewSangforImport(r io.Reader) (*SangforImportPreview, error) {
-	servers, apps, secrets, err := parseSangfor(r)
+	scope, err := s.DefaultProjectScope()
 	if err != nil {
 		return nil, err
 	}
-	p := &SangforImportPreview{HiddenSecrets: secrets}
-	for _, srv := range servers {
-		var id int64
-		err := s.db.QueryRow("SELECT id FROM servers WHERE device_name=? AND location=? LIMIT 1", srv.Name, srv.Location).Scan(&id)
-		action := "新增"
-		if err == nil {
-			action = "更新"
-		}
-		p.Items = append(p.Items, SangforImportItem{Kind: "服务器", Name: srv.Name, Detail: srv.Location, Action: action})
-		if action == "新增" {
-			p.ServersCreated++
-		} else {
-			p.ServersUpdated++
-		}
-	}
-	for _, app := range apps {
-		var id int64
-		err := s.db.QueryRow("SELECT id FROM server_apps WHERE app_name=? AND access_url=? LIMIT 1", app.Name, app.IP).Scan(&id)
-		action := "新增"
-		if err == nil {
-			action = "更新"
-		}
-		p.Items = append(p.Items, SangforImportItem{Kind: "应用", Name: app.Name, Detail: app.IP, Action: action})
-		if action == "新增" {
-			p.AppsCreated++
-		} else {
-			p.AppsUpdated++
-		}
-	}
-	return p, nil
+	return s.PreviewSangforImportForProject(scope, r)
 }
 
 func (s *Store) CommitSangforImport(r io.Reader) (*SangforImportPreview, error) {
-	servers, apps, secrets, err := parseSangfor(r)
+	scope, err := s.DefaultProjectScope()
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	p := &SangforImportPreview{HiddenSecrets: secrets}
-	now := time.Now().Format("2006-01-02 15:04:05")
-	serverIDs := map[string]int64{}
-	for _, srv := range servers {
-		var id int64
-		err := tx.QueryRow("SELECT id FROM servers WHERE device_name=? AND location=? LIMIT 1", srv.Name, srv.Location).Scan(&id)
-		if err == nil {
-			_, err = tx.Exec("UPDATE servers SET remark=CASE WHEN remark='' THEN ? ELSE remark || ' ' || ? END, updated_at=? WHERE id=?", srv.Remark, srv.Remark, now, id)
-			p.ServersUpdated++
-		} else {
-			res, e := tx.Exec("INSERT INTO servers(device_name, location, brand_model, status, remark, created_at, updated_at) VALUES(?,?,?,?,?,?,?)", srv.Name, srv.Location, "深信服设备", "运行中", srv.Remark, now, now)
-			if e != nil {
-				return nil, e
-			}
-			id, err = res.LastInsertId()
-			p.ServersCreated++
-		}
-		if err != nil {
-			return nil, err
-		}
-		serverIDs[srv.Name] = id
-	}
-	for _, app := range apps {
-		serverID := int64(0)
-		for name, id := range serverIDs {
-			if strings.Contains(strings.ToLower(app.Name), strings.ToLower(name)) || strings.Contains(strings.ToLower(name), strings.ToLower(app.Name)) {
-				serverID = id
-				break
-			}
-		}
-		var id int64
-		err := tx.QueryRow("SELECT id FROM server_apps WHERE app_name=? AND access_url=? LIMIT 1", app.Name, app.IP).Scan(&id)
-		if err == nil {
-			_, err = tx.Exec("UPDATE server_apps SET remark=?, updated_at=? WHERE id=?", app.Remark, now, id)
-			p.AppsUpdated++
-		} else {
-			_, err = tx.Exec("INSERT INTO server_apps(server_id, app_name, app_type, access_url, status, remark, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?)", serverID, app.Name, "基础支撑", app.IP, "正常运行", app.Remark, now, now)
-			p.AppsCreated++
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return p, nil
+	return s.CommitSangforImportForProject(scope, r)
 }

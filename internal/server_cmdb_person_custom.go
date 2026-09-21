@@ -11,6 +11,7 @@ import (
 
 // handleListPersons 处理 GET /api/cmdb/persons
 func (s *Server) handleListPersons(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("page_size"))
@@ -31,7 +32,7 @@ func (s *Server) handleListPersons(w http.ResponseWriter, r *http.Request) {
 		PageSize:   pageSize,
 	}
 
-	list, total, err := s.Store.ListPersons(query)
+	list, total, err := s.Store.ListPersonsForProject(scope, query)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -44,12 +45,13 @@ func (s *Server) handleListPersons(w http.ResponseWriter, r *http.Request) {
 
 // handleCreatePerson 处理 POST /api/cmdb/persons
 func (s *Server) handleCreatePerson(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.Person
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.CreatePerson(&body)
+	id, err := s.Store.CreatePersonForProject(scope, &body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -59,6 +61,7 @@ func (s *Server) handleCreatePerson(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdatePerson 处理 PUT /api/cmdb/persons/{id}
 func (s *Server) handleUpdatePerson(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的人员 ID")
@@ -70,7 +73,7 @@ func (s *Server) handleUpdatePerson(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.ID = id
-	if err := s.Store.UpdatePerson(&body); err != nil {
+	if err := s.Store.UpdatePersonForProject(scope, &body); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -79,12 +82,13 @@ func (s *Server) handleUpdatePerson(w http.ResponseWriter, r *http.Request) {
 
 // handleDeletePerson 处理 DELETE /api/cmdb/persons/{id}
 func (s *Server) handleDeletePerson(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的人员 ID")
 		return
 	}
-	if err := s.Store.DeletePerson(id); err != nil {
+	if err := s.Store.DeletePersonForProject(scope, id); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -93,12 +97,13 @@ func (s *Server) handleDeletePerson(w http.ResponseWriter, r *http.Request) {
 
 // handleGetPersonAssets 处理 GET /api/cmdb/persons/{id}/assets
 func (s *Server) handleGetPersonAssets(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的人员 ID")
 		return
 	}
-	person, assets, err := s.Store.GetPersonAssets(id)
+	person, assets, err := s.Store.GetPersonAssetsForProject(scope, id)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -112,12 +117,13 @@ func (s *Server) handleGetPersonAssets(w http.ResponseWriter, r *http.Request) {
 
 // handleTransferPersonAssets 处理 POST /api/cmdb/persons/transfer
 func (s *Server) handleTransferPersonAssets(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.PersonTransferReq
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	transferred, err := s.Store.TransferPersonAssets(body)
+	transferred, err := s.Store.TransferPersonAssetsForProject(scope, body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -130,8 +136,9 @@ func (s *Server) handleTransferPersonAssets(w http.ResponseWriter, r *http.Reque
 
 // handleListCustomFields 处理 GET /api/cmdb/custom-fields
 func (s *Server) handleListCustomFields(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	assetClass := r.URL.Query().Get("asset_class")
-	list, err := s.Store.ListCustomFields(assetClass)
+	list, err := s.Store.ListCustomFieldsForProject(scope, assetClass)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -144,12 +151,13 @@ func (s *Server) handleListCustomFields(w http.ResponseWriter, r *http.Request) 
 
 // handleSaveCustomField 处理 POST /api/cmdb/custom-fields
 func (s *Server) handleSaveCustomField(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.CustomField
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.SaveCustomField(&body)
+	id, err := s.Store.SaveCustomFieldForProject(scope, &body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -159,12 +167,13 @@ func (s *Server) handleSaveCustomField(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteCustomField 处理 DELETE /api/cmdb/custom-fields/{id}
 func (s *Server) handleDeleteCustomField(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的字段 ID")
 		return
 	}
-	if err := s.Store.DeleteCustomField(id); err != nil {
+	if err := s.Store.DeleteCustomFieldForProject(scope, id); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}

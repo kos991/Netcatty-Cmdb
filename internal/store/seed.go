@@ -21,14 +21,15 @@ func (s *Store) ImportSeedV2(seed *SeedV2) error {
 	defer tx.Rollback()
 
 	// 1. Assets
-	stmtAsset, err := tx.Prepare(`INSERT INTO assets (asset_code, box_sn, display_sn, user_name, department, room, ip, terminal_ip, security_software, status, net_type, remark, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmtAsset, err := tx.Prepare(`INSERT INTO assets (asset_code, device_type, box_sn, display_sn, user_name, department, room, ip, terminal_ip, security_software, status, net_type, remark, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmtAsset.Close()
 	for _, a := range seed.Assets {
-		_, _ = stmtAsset.Exec(a.AssetCode, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark, a.CreatedAt, a.UpdatedAt)
+		normalizeLegacyAssetForWrite(&a)
+		_, _ = stmtAsset.Exec(a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark, a.CreatedAt, a.UpdatedAt)
 	}
 
 	// 2. Asset Logs

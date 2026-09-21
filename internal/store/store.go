@@ -13,6 +13,7 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
+	existingDatabase := existingDatabaseFile(path)
 	// modernc.org/sqlite: 启用 WAL 模式、外键约束与忙碌重试超时
 	dsn := path
 	if !strings.Contains(dsn, "?") {
@@ -26,6 +27,14 @@ func Open(path string) (*Store, error) {
 
 	// SQLite 单文件读写：限制最大打开连接数，避免高并发锁冲突
 	db.SetMaxOpenConns(1)
+	backupPath := ""
+	fail := func(err error) (*Store, error) {
+		_ = db.Close()
+		if backupPath != "" {
+			return nil, &MigrationError{BackupPath: backupPath, Err: err}
+		}
+		return nil, err
+	}
 
 	// 显式执行 PRAGMA，确保连接配置生效
 	pragmas := []string{
@@ -35,20 +44,38 @@ func Open(path string) (*Store, error) {
 	}
 	for _, p := range pragmas {
 		if _, err := db.Exec(p); err != nil {
-			return nil, fmt.Errorf("pragma %s: %w", p, err)
+			return fail(fmt.Errorf("pragma %s: %w", p, err))
+		}
+	}
+	if existingDatabase {
+		needsMigration, err := NeedsProjectMigration(db)
+		if err != nil {
+			return fail(err)
+		}
+		if needsMigration {
+			backupPath, err = BackupDatabase(db, path)
+			if err != nil {
+				return fail(fmt.Errorf("创建迁移安全备份失败: %w", err))
+			}
 		}
 	}
 
 	s := &Store{db: db}
 	if err := s.InitSchema(); err != nil {
-		return nil, err
-	}
-	// 先执行全量扩展迁移，确保已有旧表已被平滑补充 owner_id、custom_fields 等列
-	if err := MigrateCMDBFullSchema(s.db); err != nil {
-		return nil, fmt.Errorf("migrate cmdb full schema: %w", err)
+		return fail(err)
 	}
 	if err := s.InitCmdbSchema(); err != nil {
-		return nil, fmt.Errorf("init cmdb schema: %w", err)
+		return fail(fmt.Errorf("init cmdb schema: %w", err))
+	}
+	// 建表后再执行扩展迁移，旧表补列与全新表初始化走同一顺序。
+	if err := MigrateCMDBFullSchema(s.db); err != nil {
+		return fail(fmt.Errorf("migrate cmdb full schema: %w", err))
+	}
+	if err := s.InitConfigSchema(); err != nil {
+		return fail(err)
+	}
+	if err := MigrateProjectSchema(s.db); err != nil {
+		return fail(fmt.Errorf("migrate project schema: %w", err))
 	}
 	return s, nil
 }
@@ -67,6 +94,7 @@ func (s *Store) InitSchema() error {
 	CREATE TABLE IF NOT EXISTS assets (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		asset_code TEXT,
+		device_type TEXT,
 		box_sn TEXT,
 		display_sn TEXT,
 		user_name TEXT,
@@ -161,6 +189,9 @@ func (s *Store) InitSchema() error {
 	`
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("init schema: %w", err)
+	}
+	if err := addMissingColumns(s.db, "assets", map[string]string{"device_type": "TEXT DEFAULT ''"}); err != nil {
+		return fmt.Errorf("migrate assets device_type: %w", err)
 	}
 	serverAppColumns := map[string]string{
 		"server_id":     "INTEGER",

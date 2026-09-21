@@ -1,24 +1,25 @@
 export const MODULES = [
-  { key: 'search', label: '全局查询' },
-  { key: 'assets', label: '终端资产' },
-  { key: 'infrastructure', label: '基础设施资源' },
-  { key: 'systems', label: '业务系统' },
-  { key: 'base', label: '基础管理' },
-  { key: 'operations', label: '运维分析' },
+  { key: 'assets', label: '设备资产', icon: 'Monitor' },
+  { key: 'people', label: '组织架构', icon: 'Users' },
+  { key: 'ip', label: 'IPAM/IP', icon: 'Network' },
+  { key: 'operations', label: '统计与履历', icon: 'ChartNoAxesCombined' },
+  { key: 'config', label: '配置中心', icon: 'Settings2' },
 ]
 
-export const SUBMODULES = {
-  base: [{ key: 'people', label: '组织与人员' }, { key: 'ip', label: 'IP 规划池' }],
-  operations: [{ key: 'dashboard', label: '统计概览' }, { key: 'audit', label: '运维履历' }],
+const SEARCH_TARGETS = {
+  assets: { module: 'assets', assetTab: 'terminals' },
+  cmdb_assets: { module: 'assets', assetTab: 'infrastructure' },
+  server_apps: { module: 'assets', assetTab: 'systems' },
+  servers: { module: 'assets', assetTab: 'systems' },
+  persons: { module: 'people' },
+  asset_logs: { module: 'operations' },
+  ip_pool: { module: 'ip' },
 }
 
-const SEARCH_TARGETS = {
-  assets: { module: 'assets' },
-  cmdb_assets: { module: 'infrastructure' },
-  server_apps: { module: 'systems' },
-  persons: { module: 'base', submodule: 'people' },
-  asset_logs: { module: 'operations', submodule: 'audit' },
-  ip_pool: { module: 'base', submodule: 'ip' },
+const DEVICE_ASSET_TABLES = new Set(['assets', 'cmdb_assets', 'server_apps'])
+
+export function filterDeviceAssetResults(results) {
+  return (results || []).filter((item) => DEVICE_ASSET_TABLES.has(item?.tableKey))
 }
 
 export function resolveSearchTarget(result) {
@@ -26,8 +27,8 @@ export function resolveSearchTarget(result) {
   return target ? { ...target, focusTarget: result } : null
 }
 
-export function panelKeyFor(module, baseTab, operationsTab) {
-  return module === 'base' ? `base:${baseTab}` : module === 'operations' ? `operations:${operationsTab}` : module
+export function panelKeyFor(module) {
+  return module
 }
 
 export function resolveIPFocus(target, consumedTarget, subnets, entries, entryLoad) {

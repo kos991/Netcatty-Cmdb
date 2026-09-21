@@ -6,6 +6,7 @@
 .cmdb-workspace input,
 .cmdb-workspace textarea,
 .cmdb-workspace select {
+  font-family: inherit;
   letter-spacing: 0;
 }
 
@@ -1218,7 +1219,7 @@
   .cmdb-workspace .rack-grid { grid-template-columns: 1fr; }
 }
 
-/* 独立 CMDB：紧凑资源树 + 多类型资源清单，保留各业务台账自身页面 */
+/* Cmdb 紧凑资源树与多类型资源清单，保留各业务台账自身页面。 */
 .cmdb-workspace .cmdb-resource-page {
   min-width: 0;
   color: var(--cmdb-text);
@@ -1927,6 +1928,66 @@
   font-size: 12px;
 }
 
+.cmdb-workspace .cmdb-context-card {
+  border-color: var(--cmdb-border);
+  background: var(--cmdb-subtle);
+  color: var(--cmdb-text);
+}
+
+.cmdb-workspace .cmdb-context-card-warning {
+  border-color: var(--cmdb-border);
+}
+
+.cmdb-workspace .cmdb-muted-inline {
+  margin-top: 4px;
+  color: var(--cmdb-muted);
+  font-size: 12px;
+}
+
+.cmdb-workspace .cmdb-history-event {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--cmdb-border);
+  border-radius: 4px;
+  background: var(--cmdb-subtle);
+  color: var(--cmdb-text);
+}
+
+.cmdb-workspace .cmdb-original-value {
+  color: var(--cmdb-muted);
+}
+
+.cmdb-workspace .cmdb-history-description {
+  margin-top: 6px;
+  color: var(--cmdb-text);
+}
+
+.cmdb-workspace .cmdb-readonly-field {
+  border-color: var(--cmdb-border);
+  background: var(--cmdb-subtle);
+  color: var(--cmdb-muted);
+}
+
+.cmdb-workspace .cmdb-form-grid {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.cmdb-workspace .cmdb-form-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cmdb-workspace .cmdb-form-grid-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cmdb-workspace .cmdb-form-grid .ant-form-item,
+.cmdb-workspace .cmdb-form-grid .ant-select {
+  min-width: 0;
+  width: 100%;
+}
+
 .cmdb-workspace .cmdb-link {
   padding: 0;
   font-weight: 600;
@@ -1953,6 +2014,13 @@
   .cmdb-workspace .cmdb-sidebar-divider,
   .cmdb-workspace .cmdb-sidebar-hint {
     display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .cmdb-workspace .cmdb-form-grid-two,
+  .cmdb-workspace .cmdb-form-grid-three {
+    grid-template-columns: 1fr;
   }
 }
 

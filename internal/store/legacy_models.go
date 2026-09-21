@@ -4,7 +4,9 @@ package store
 
 type Asset struct {
 	ID               int64  `json:"id"`
+	ProjectID        int64  `json:"project_id"`
 	AssetCode        string `json:"asset_code"`
+	DeviceType       string `json:"device_type"`
 	BoxSN            string `json:"box_sn"`
 	DisplaySN        string `json:"display_sn"`
 	UserName         string `json:"user_name"`
@@ -21,31 +23,33 @@ type Asset struct {
 }
 
 type PhysicalServer struct {
-	ID               int64  `json:"id"`
-	AssetCode        string `json:"asset_code"`
-	DeviceName       string `json:"device_name"`
-	BrandModel       string `json:"brand_model"`
-	SerialNumber     string `json:"serial_number"`
-	Location         string `json:"location"`
-	RackUnit         string `json:"rack_unit"`
-	CPUInfo          string `json:"cpu_info"`
-	MemoryInfo       string `json:"memory_info"`
-	DiskInfo         string `json:"disk_info"`
-	MgmtIP           string `json:"mgmt_ip"`
-	MgmtURL          string `json:"mgmt_url"`
-	BizIP            string `json:"biz_ip"`
-	OSType           string `json:"os_type"`
-	AdminUser        string `json:"admin_user"`
-	Status           string `json:"status"`
-	PurchaseDate     string `json:"purchase_date"`
-	WarrantyDate     string `json:"warranty_date"`
-	Remark           string `json:"remark"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
+	ID           int64  `json:"id"`
+	ProjectID    int64  `json:"project_id"`
+	AssetCode    string `json:"asset_code"`
+	DeviceName   string `json:"device_name"`
+	BrandModel   string `json:"brand_model"`
+	SerialNumber string `json:"serial_number"`
+	Location     string `json:"location"`
+	RackUnit     string `json:"rack_unit"`
+	CPUInfo      string `json:"cpu_info"`
+	MemoryInfo   string `json:"memory_info"`
+	DiskInfo     string `json:"disk_info"`
+	MgmtIP       string `json:"mgmt_ip"`
+	MgmtURL      string `json:"mgmt_url"`
+	BizIP        string `json:"biz_ip"`
+	OSType       string `json:"os_type"`
+	AdminUser    string `json:"admin_user"`
+	Status       string `json:"status"`
+	PurchaseDate string `json:"purchase_date"`
+	WarrantyDate string `json:"warranty_date"`
+	Remark       string `json:"remark"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
 }
 
 type ServerApp struct {
 	ID           int64  `json:"id"`
+	ProjectID    int64  `json:"project_id"`
 	ServerID     int64  `json:"server_id"`
 	AppName      string `json:"app_name"`
 	AppType      string `json:"app_type"`
@@ -66,6 +70,7 @@ type ServerApp struct {
 
 type AssetLog struct {
 	ID           int64  `json:"id"`
+	ProjectID    int64  `json:"project_id"`
 	AssetID      int64  `json:"asset_id"`
 	LogType      string `json:"log_type"`
 	FromUser     string `json:"from_user"`
@@ -84,6 +89,7 @@ type SearchResult struct {
 	Group      string                 `json:"group"`
 	TableKey   string                 `json:"tableKey"`
 	ID         int64                  `json:"id"`
+	ProjectID  int64                  `json:"project_id"`
 	Title      string                 `json:"title"`
 	Subtitle   string                 `json:"subtitle"`
 	Tag        string                 `json:"tag"`
@@ -121,6 +127,7 @@ type MaintenanceReq struct {
 
 type IPEntry struct {
 	ID         int64  `json:"id"`
+	ProjectID  int64  `json:"project_id"`
 	Subnet     string `json:"subnet"`
 	IP         string `json:"ip"`
 	Department string `json:"department"`

@@ -144,6 +144,82 @@ func TestGetPersonAssets(t *testing.T) {
 	}
 }
 
+func TestPersonAssetsIncludeTerminalLedgerWithoutDuplicateMirror(t *testing.T) {
+	s := newPersonTestStore(t)
+
+	fromID, err := s.CreatePerson(&Person{Name: "周明", Department: "技术科", Status: "在职"})
+	if err != nil {
+		t.Fatalf("创建人员失败: %v", err)
+	}
+	toID, err := s.CreatePerson(&Person{Name: "吴敏", Department: "办公室", Status: "在职"})
+	if err != nil {
+		t.Fatalf("创建接收人失败: %v", err)
+	}
+
+	mappedLegacyID, err := s.CreateAsset(&Asset{AssetCode: "PC-001", DeviceType: "台式电脑", UserName: "周明", Department: "技术科", IP: "172.16.1.10", Status: "在用"}, "测试员")
+	if err != nil {
+		t.Fatalf("创建待映射终端资产失败: %v", err)
+	}
+	if _, err := s.SyncLegacyToCmdb(); err != nil {
+		t.Fatalf("同步终端资产镜像失败: %v", err)
+	}
+	unmappedLegacyID, err := s.CreateAsset(&Asset{AssetCode: "NB-002", DeviceType: "笔记本", UserName: "周明", Department: "技术科", IP: "172.16.1.11", Status: "在用"}, "测试员")
+	if err != nil {
+		t.Fatalf("创建未映射终端资产失败: %v", err)
+	}
+	if _, err := s.CreateAsset(&Asset{AssetCode: "PC-NO-OWNER", DeviceType: "台式电脑", Department: "技术科", Status: "闲置"}, "测试员"); err != nil {
+		t.Fatalf("创建同部门无使用人资产失败: %v", err)
+	}
+	if _, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "核心交换机", AssetClass: "physical", OwnerID: fromID, Owner: "周明", Department: "技术科"}); err != nil {
+		t.Fatalf("创建原生 CMDB 资产失败: %v", err)
+	}
+
+	people, _, err := s.ListPersons(PersonQuery{Keyword: "周明", Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatalf("查询人员列表失败: %v", err)
+	}
+	if len(people) != 1 || people[0].AssetCount != 3 {
+		t.Fatalf("资产数应合并两条终端资产和一条原生资产，且镜像不重复计数: %+v", people)
+	}
+
+	person, assets, err := s.GetPersonAssets(fromID)
+	if err != nil {
+		t.Fatalf("查询人员名下资产失败: %v", err)
+	}
+	if person.AssetCount != 3 || len(assets) != 3 {
+		t.Fatalf("人员资产详情数量应为 3: person=%+v assets=%+v", person, assets)
+	}
+	legacyCount := 0
+	for _, asset := range assets {
+		if asset.SourceType == "legacy_asset" {
+			legacyCount++
+			if asset.SourceID == unmappedLegacyID && asset.ID >= 0 {
+				t.Fatalf("未映射终端资产应使用负 ID 区分交接来源: %+v", asset)
+			}
+		}
+	}
+	if legacyCount != 2 {
+		t.Fatalf("终端资产详情应恰好返回 2 条，实际 %d: %+v", legacyCount, assets)
+	}
+
+	transferred, err := s.TransferPersonAssets(PersonTransferReq{FromPersonID: fromID, ToPersonID: toID, Operator: "测试员"})
+	if err != nil {
+		t.Fatalf("交接混合来源资产失败: %v", err)
+	}
+	if transferred != 3 {
+		t.Fatalf("应交接 3 条资产，实际 %d", transferred)
+	}
+	for _, legacyID := range []int64{mappedLegacyID, unmappedLegacyID} {
+		var owner, department string
+		if err := s.db.QueryRow("SELECT user_name, department FROM assets WHERE id=?", legacyID).Scan(&owner, &department); err != nil {
+			t.Fatalf("读取终端资产 %d 失败: %v", legacyID, err)
+		}
+		if owner != "吴敏" || department != "办公室" {
+			t.Fatalf("终端资产 %d 未同步交接结果: owner=%q department=%q", legacyID, owner, department)
+		}
+	}
+}
+
 func TestTransferPersonAssets(t *testing.T) {
 	s := newPersonTestStore(t)
 

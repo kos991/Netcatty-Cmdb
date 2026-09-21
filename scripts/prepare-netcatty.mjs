@@ -53,15 +53,17 @@ function assertContainsOnce(relativePath, anchor) {
 [
   ["components/TopTabs.tsx", "{/* Fixed left tabs: Vaults and SFTP */}"],
   ["application/app/AppView.tsx", "<AppVaultThemeSurface VaultViewContainer={VaultViewContainer}>"],
+  ["application/app/AppHandlers.ts", "export function handleGlobalHotkeyKeyDownImpl"],
   ["application/app/workTabSurface.ts", "return activeTabId === 'vault' || activeTabId === 'sftp';"],
   ["electron/preload/api.cjs", "function createPreloadApi"],
   ["global.d.ts", "interface NetcattyBridge {"],
 ].forEach(([file, anchor]) => assertContainsOnce(file, anchor));
 
-cpSync(join(repositoryRoot, "web", "src"), join(target, "components", "cmdb"), {
+cpSync(join(integrationRoot, "cmdb"), join(target, "components", "cmdb"), {
   recursive: true,
   force: true,
 });
+cpSync(join(integrationRoot, "CmdbSurface.tsx"), join(target, "components", "cmdb", "CmdbSurface.tsx"));
 cpSync(join(integrationRoot, "electron", "cmdbService.cjs"), join(target, "electron", "cmdbService.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbService.test.cjs"), join(target, "electron", "cmdbService.test.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbBridge.cjs"), join(target, "electron", "bridges", "cmdbBridge.cjs"));
@@ -71,9 +73,9 @@ const cmdbMainBlock = `let cmdbService = null;
 let cmdbStartupError = null;
 
 function normalizeCmdbStartupError(error) {
-  if (error instanceof Error) return error.message.trim() || "CMDB 服务启动失败";
+  if (error instanceof Error) return error.message.trim() || "Cmdb 服务启动失败";
   if (typeof error === "string" && error.trim()) return error.trim();
-  return "CMDB 服务启动失败";
+  return "Cmdb 服务启动失败";
 }
 
 function resolveCmdbExecutablePath() {
@@ -108,8 +110,8 @@ function resolveCmdbDatabasePath() {
 async function startCmdbForApp() {
   const executablePath = resolveCmdbExecutablePath();
   if (!executablePath) {
-    cmdbStartupError = "未找到 CMDB 服务可执行文件";
-    console.warn(\`[CMDB] \${cmdbStartupError}\`);
+    cmdbStartupError = "未找到 Cmdb 服务可执行文件";
+    console.warn(\`[Cmdb] \${cmdbStartupError}\`);
     return null;
   }
   try {
@@ -120,11 +122,11 @@ async function startCmdbForApp() {
       cwd: path.dirname(executablePath),
     });
     cmdbStartupError = null;
-    console.info(\`[CMDB] Service ready at \${cmdbService.baseUrl}\`);
+    console.info(\`[Cmdb] Service ready at \${cmdbService.baseUrl}\`);
     return cmdbService;
   } catch (error) {
     cmdbStartupError = normalizeCmdbStartupError(error);
-    console.error("[CMDB] Failed to start service:", error);
+    console.error("[Cmdb] Failed to start service:", error);
     cmdbService = null;
     return null;
   }
@@ -166,7 +168,7 @@ update("electron/main.cjs", (source) => {
         cmdbService = null;
       }
     } catch (err) {
-      console.warn("Error during CMDB cleanup:", err);
+      console.warn("Error during Cmdb cleanup:", err);
     }`,
     "electron/main.cjs",
   );
@@ -211,7 +213,7 @@ update("components/TopTabs.tsx", (source) => {
     "          {showSftpTab && (",
     `          <RootTopTab
             tabId="cmdb"
-            label="CMDB 资产管理"
+            label="Cmdb"
             icon={<Database size={14} />}
             className="rounded-t-md"
             compact={rootTabsCompact}
@@ -231,38 +233,15 @@ update("application/app/workTabSurface.ts", (source) => replaceOnce(
 update("application/app/AppActiveTabChrome.tsx", (source) => replaceOnce(
   source,
   "    if (activeTabId === 'sftp') return 'SFTP';",
-  "    if (activeTabId === 'sftp') return 'SFTP';\n    if (activeTabId === 'cmdb') return 'CMDB 资产管理';",
+  "    if (activeTabId === 'sftp') return 'SFTP';\n    if (activeTabId === 'cmdb') return 'Cmdb';",
   "application/app/AppActiveTabChrome.tsx",
 ));
 
 update("application/app/AppView.tsx", (source) => {
   let output = replaceOnce(
     source,
-    "import { activeTabStore, toEditorTabId, useIsEditorTabActive } from '../state/activeTabStore';",
-    "import { activeTabStore, toEditorTabId, useIsEditorTabActive, useIsTabActive } from '../state/activeTabStore';",
-    "application/app/AppView.tsx",
-  );
-  output = replaceOnce(
-    output,
     "import { VaultView } from '../../components/VaultView';",
-    "import { VaultView } from '../../components/VaultView';\nimport CmdbWorkspace from '../../components/cmdb/CmdbWorkspace';",
-    "application/app/AppView.tsx",
-  );
-  output = replaceOnce(
-    output,
-    "\n\n/** Plugin keybinding host with locally derived theme tokens and locale. */",
-    `
-
-const CmdbSurface = React.memo(() => {
-  const active = useIsTabActive('cmdb');
-  return (
-    <section className={active ? 'absolute inset-0 z-20 flex min-h-0' : 'hidden'} aria-hidden={!active}>
-      <CmdbWorkspace />
-    </section>
-  );
-});
-
-/** Plugin keybinding host with locally derived theme tokens and locale. */`,
+    "import { VaultView } from '../../components/VaultView';\nimport { CmdbSurface } from '../../components/cmdb/CmdbSurface';",
     "application/app/AppView.tsx",
   );
   return replaceOnce(
@@ -272,6 +251,26 @@ const CmdbSurface = React.memo(() => {
     "application/app/AppView.tsx",
   );
 });
+
+update("application/app/AppHandlers.ts", (source) => replaceOnce(
+  source,
+  `export function handleGlobalHotkeyKeyDownImpl(getCtx: AppContextGetter, e: KeyboardEvent) {
+  const { HOTKEY_DEBUG, closeTabKeyStr, executeHotkeyAction, hotkeyScheme, keyBindings, matchesKeyBinding } = getCtx();
+{`,
+  `export function handleGlobalHotkeyKeyDownImpl(getCtx: AppContextGetter, e: KeyboardEvent) {
+  const { HOTKEY_DEBUG, closeTabKeyStr, executeHotkeyAction, hotkeyScheme, keyBindings, matchesKeyBinding } = getCtx();
+{
+    const visibleCmdb = document.querySelector<HTMLElement>('[data-section="cmdb-view"]');
+    const isCmdbSearchHotkey = Boolean(
+      visibleCmdb?.getClientRects().length
+      && (e.ctrlKey || e.metaKey)
+      && !e.altKey
+      && !e.shiftKey
+      && e.key.toLowerCase() === 'k',
+    );
+    if (isCmdbSearchHotkey) return;`,
+  "application/app/AppHandlers.ts",
+));
 
 update("electron/preload/api.cjs", (source) => replaceOnce(
   source,
@@ -329,18 +328,26 @@ update("electron-builder.config.cjs", (source) => {
   );
 });
 
-update("package.json", (source) => {
-  const pkg = JSON.parse(source);
-  pkg.dependencies = {
-    ...pkg.dependencies,
-    "@ant-design/icons": "^5.5.1",
-    "@ant-design/v5-patch-for-react-19": "^1.0.3",
-    antd: "^5.21.6",
-    dayjs: "^1.11.13",
-  };
-  pkg.scripts["build:plugin-packages"] = pkg.scripts["build:plugin-packages"]
-    .replace(" && npm run build --workspace @netcatty/cmdb-plugin", "");
-  return `${JSON.stringify(pkg, null, 2)}\n`;
-});
+update("eslint.config.js", (source) => replaceOnce(
+  source,
+  'export default [',
+  `export default [
+  {
+    files: ["components/cmdb/**/*.{js,jsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: globals.browser,
+    },
+    plugins: { "react-hooks": reactHooks, "unused-imports": unusedImports },
+    rules: {
+      "no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "error",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+    },
+  },`,
+  "eslint.config.js",
+));
 
-console.log(`Prepared Netcatty CMDB integration at ${target}`);
+console.log(`Prepared Netcatty Cmdb integration at ${target}`);

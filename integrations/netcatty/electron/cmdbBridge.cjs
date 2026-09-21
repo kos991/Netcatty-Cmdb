@@ -7,6 +7,7 @@ const { basename } = require("node:path");
 const CMDB_REQUEST_TIMEOUT_MS = 30_000;
 const API_ORIGIN = "http://cmdb.invalid";
 const IMPORT_PATHS = new Set([
+  "/api/import/assets",
   "/api/import/sangfor",
   "/api/cmdb/assets/import",
 ]);

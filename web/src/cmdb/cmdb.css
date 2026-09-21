@@ -23,7 +23,7 @@
 }
 
 .cmdb-workspace .cmdb-workspace-v2 {
-  min-height: calc(100vh - 100px);
+  min-height: 0;
 }
 
 .cmdb-workspace .cmdb-head-v2 {

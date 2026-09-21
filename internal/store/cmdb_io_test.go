@@ -85,6 +85,16 @@ func TestCmdbImportTemplateRoundTrip(t *testing.T) {
 	if total != 1 || list[0].Name != "测试交换机" || list[0].SourceType != "manual" {
 		t.Fatalf("导入结果不正确: %+v", list)
 	}
+	// 旧模板没有设备类型；导入后的未分类记录也必须能在原生基础设施中查到和导出。
+	query := CmdbAssetQuery{ResourceScope: "infrastructure", OSType: "Linux", Page: 1, PageSize: 20}
+	visible, count, err := s.QueryCmdbAssets(query)
+	if err != nil || count != 1 || len(visible) != 1 || visible[0].ID != list[0].ID {
+		t.Fatalf("基础设施未显示刚导入的记录: total=%d list=%+v err=%v", count, visible, err)
+	}
+	exported, err := s.AllCmdbAssets(query)
+	if err != nil || len(exported) != 1 || exported[0].ID != list[0].ID {
+		t.Fatalf("基础设施导出遗漏导入记录: list=%+v err=%v", exported, err)
+	}
 }
 
 func TestCmdbImportValidatesRows(t *testing.T) {

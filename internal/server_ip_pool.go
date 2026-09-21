@@ -14,7 +14,8 @@ import (
 
 // ---- IP 池网段汇总 ----
 func (s *Server) handleIPPoolSummary(w http.ResponseWriter, r *http.Request) {
-	data, err := s.Store.IPPoolSummaryData()
+	scope := requestProjectScope(r)
+	data, err := s.Store.IPPoolSummaryDataForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -22,9 +23,23 @@ func (s *Server) handleIPPoolSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, data)
 }
 
+func (s *Server) handleIPPoolVisualization(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+	list, total, err := s.Store.VisualizeIPSubnetForProject(scope, q.Get("subnet"), page, pageSize)
+	if err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"list": list, "total": total, "page": page, "page_size": pageSize})
+}
+
 // ---- 网段管理（子网定义：名称 / 类别 / 网段 / 网关 / VLAN / 用途）----
 func (s *Server) handleListIPSubnets(w http.ResponseWriter, r *http.Request) {
-	list, err := s.Store.ListIPSubnets()
+	scope := requestProjectScope(r)
+	list, err := s.Store.ListIPSubnetsForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -40,12 +55,13 @@ func (s *Server) handleListIPSubnets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateIPSubnet(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.IPSubnet
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.CreateIPSubnet(&body)
+	id, err := s.Store.CreateIPSubnetForProject(scope, &body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -54,6 +70,7 @@ func (s *Server) handleCreateIPSubnet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateIPSubnet(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, 400, "无效的网段 ID")
@@ -65,7 +82,7 @@ func (s *Server) handleUpdateIPSubnet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.ID = id
-	if err := s.Store.UpdateIPSubnet(&body); err != nil {
+	if err := s.Store.UpdateIPSubnetForProject(scope, &body); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -73,12 +90,13 @@ func (s *Server) handleUpdateIPSubnet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteIPSubnet(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, 400, "无效的网段 ID")
 		return
 	}
-	if err := s.Store.DeleteIPSubnet(id); err != nil {
+	if err := s.Store.DeleteIPSubnetForProject(scope, id); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -87,12 +105,13 @@ func (s *Server) handleDeleteIPSubnet(w http.ResponseWriter, r *http.Request) {
 
 // ---- IP 条目写操作 ----
 func (s *Server) handleCreateIPEntry(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.IPEntry
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.CreateIPEntry(&body)
+	id, err := s.Store.CreateIPEntryForProject(scope, &body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -101,6 +120,7 @@ func (s *Server) handleCreateIPEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateIPEntry(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, 400, "无效的 IP 条目 ID")
@@ -112,7 +132,7 @@ func (s *Server) handleUpdateIPEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.ID = id
-	if err := s.Store.UpdateIPEntry(&body); err != nil {
+	if err := s.Store.UpdateIPEntryForProject(scope, &body); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -120,6 +140,7 @@ func (s *Server) handleUpdateIPEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteIPEntry(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, 400, "无效的 IP 条目 ID")
@@ -127,21 +148,24 @@ func (s *Server) handleDeleteIPEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	// force=1 表示用户已确认「该 IP 正被资产占用，仍要强制删除池记录」
 	force := r.URL.Query().Get("force") == "1"
-	if err := s.Store.DeleteIPEntry(id, force); err != nil {
+	if err := s.Store.DeleteIPEntryForProject(scope, id, force); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]string{"ok": "1"})
 }
 
-// handleAllocateIP 分配 IP：占用该地址并登记使用人 / 部门 / 房间。
+// handleAllocateIP 优先关联到指定资产；旧请求仍可按人员 / 部门 / 房间登记。
 func (s *Server) handleAllocateIP(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, 400, "无效的 IP 条目 ID")
 		return
 	}
 	var body struct {
+		AssetID    int64  `json:"asset_id"`
+		IPField    string `json:"ip_field"`
 		Department string `json:"department"`
 		Account    string `json:"account"`
 		Room       string `json:"room"`
@@ -151,7 +175,12 @@ func (s *Server) handleAllocateIP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	if err := s.Store.AllocateIP(id, body.Department, body.Account, body.Room, body.Remark); err != nil {
+	if body.AssetID > 0 {
+		err = s.Store.AllocateIPToAssetForProject(scope, id, body.AssetID, body.IPField, body.Remark)
+	} else {
+		err = s.Store.AllocateIPForProject(scope, id, body.Department, body.Account, body.Room, body.Remark)
+	}
+	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -160,12 +189,13 @@ func (s *Server) handleAllocateIP(w http.ResponseWriter, r *http.Request) {
 
 // handleReleaseIP 释放 IP：置回空闲并清空占用信息。
 func (s *Server) handleReleaseIP(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, 400, "无效的 IP 条目 ID")
 		return
 	}
-	if err := s.Store.ReleaseIP(id); err != nil {
+	if err := s.Store.ReleaseIPForProject(scope, id); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -174,7 +204,8 @@ func (s *Server) handleReleaseIP(w http.ResponseWriter, r *http.Request) {
 
 // handleNormalizeIPPool 规范化历史遗留的复合 IP 值（幂等）。
 func (s *Server) handleNormalizeIPPool(w http.ResponseWriter, r *http.Request) {
-	n, err := s.Store.NormalizeIPPoolIPs()
+	scope := requestProjectScope(r)
+	n, err := s.Store.NormalizeIPPoolIPsForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -190,8 +221,9 @@ func ipRowValues(e store.IPEntry) []string {
 
 // handleExportIPPool 按当前筛选导出全部匹配记录（不受当前页限制）。
 func (s *Server) handleExportIPPool(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	q := r.URL.Query()
-	list, err := s.Store.AllIPEntries(store.IPEntryQuery{
+	list, err := s.Store.AllIPEntriesForProject(scope, store.IPEntryQuery{
 		Subnet:  q.Get("subnet"),
 		Status:  q.Get("status"),
 		Keyword: q.Get("keyword"),

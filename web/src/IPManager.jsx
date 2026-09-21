@@ -138,7 +138,7 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
     try {
       await api.exportIPPool({ subnet, status, keyword })
     } catch (e) {
-      message.error('导出 IP 规划失败: ' + e.message)
+      message.error('导出 IPAM/IP 失败: ' + e.message)
     }
   }
 
@@ -336,7 +336,7 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
     modal.confirm({
       getContainer: false,
       title: `确认删除 ${entry.ip}？`,
-      content: '删除会把该条目从 IP 规划池中移除，与「释放」不同。',
+      content: '删除会把该条目从 IPAM/IP 中移除，与「释放」不同。',
       okText: '删除',
       okType: 'danger',
       cancelText: '取消',
@@ -752,7 +752,7 @@ export default function IPManager({ meta, focusTarget, onNavigate }) {
             <Input placeholder="如 张三 / 诉服达1" allowClear />
           </Form.Item>
           <Form.Item name="department" label="归属部门">
-            <Input placeholder="如 立案庭" allowClear />
+            <Input placeholder="如 信息技术部" allowClear />
           </Form.Item>
           <Form.Item name="room" label="房间 / 位置">
             <Input placeholder="如 302" allowClear />

@@ -25,14 +25,14 @@ export const api = {
   transferUser: (id, data) => req(`/api/assets/${id}/transfer`, { method: 'POST', body: JSON.stringify(data) }),
   maintenance: (id, data) => req(`/api/assets/${id}/maintenance`, { method: 'POST', body: JSON.stringify(data) }),
 
-  // 物理服务器
+  // 基础设施
   getServers: (params = {}) => req(`/api/servers?${toQuery(params)}`),
   getServer: (id) => req(`/api/servers/${id}`),
   createServer: (data) => req('/api/servers', { method: 'POST', body: JSON.stringify(data) }),
   updateServer: (id, data) => req(`/api/servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteServer: (id) => req(`/api/servers/${id}`, { method: 'DELETE' }),
 
-  // 系统应用与中间件
+  // 业务系统与中间件
   getServerApps: (serverId) => req(`/api/servers/${serverId}/apps`),
   createServerApp: (serverId, data) => req(`/api/servers/${serverId}/apps`, { method: 'POST', body: JSON.stringify(data) }),
   updateApp: (id, data) => req(`/api/apps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -42,7 +42,7 @@ export const api = {
   // 履历流水
   getLogs: (params = {}) => req(`/api/logs?${toQuery(params)}`),
 
-  // IP 规划池
+  // IPAM/IP
   getIPPool: (params = {}) => req(`/api/ip_pool?${toQuery(params)}`),
   getIPPoolSummary: () => req('/api/ip_pool/summary'),
 
@@ -63,7 +63,7 @@ export const api = {
 
   getStats: () => req('/api/stats'),
   exportAssets: (params = {}) =>
-    exportFile(`/api/export/assets?${toQuery(params)}`, 'czfy_assets.xlsx'),
+    exportFile(`/api/export/assets?${toQuery(params)}`, 'terminal_assets.xlsx'),
   downloadTemplateUrl: () => '/api/template/assets',
   search: (q, limit = 20) => req(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   importSangfor: (file, commit = false, token) =>

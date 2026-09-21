@@ -316,7 +316,7 @@ export default function CmdbWorkOrders() {
       >
         <Form form={form} layout="vertical">
           <Form.Item name="subject" label="维护主题" rules={[{ required: true, message: '维护主题不能为空' }]}>
-            <Input placeholder="如 更换 302 室云桌面盒子" allowClear />
+            <Input placeholder="如 更换 302 室终端主机" allowClear />
           </Form.Item>
           <Form.Item name="priority" label="优先级">
             <Select options={PRIORITIES.map((v) => ({ value: v, label: v }))} />

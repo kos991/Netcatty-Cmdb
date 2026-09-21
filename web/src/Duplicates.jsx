@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Table, Typography, Spin, Tag } from 'antd'
 import { api } from './api'
 
-const tableNameMap = { hezi: '盒子登记', xianshi: '显示器登记' }
+const tableNameMap = { hezi: '终端主机登记', xianshi: '显示器登记' }
 
 export default function Duplicates() {
   const [dups, setDups] = useState(null)
@@ -46,7 +46,7 @@ export default function Duplicates() {
   return (
     <div>
       <Typography.Paragraph type="secondary">
-        统计「盒子登记.SN」与「显示器登记.显示器SN」中出现超过一次的设备编号。
+        统计“终端主机登记.SN”与“显示器登记.显示器 SN”中出现超过一次的设备编号。
       </Typography.Paragraph>
       <Table
         rowKey="sn"

@@ -17,6 +17,9 @@ const put = (url, data) => req(url, { method: 'PUT', body: JSON.stringify(data |
 const del = (url) => req(url, { method: 'DELETE' })
 
 export const cmdbApi = {
+  // 项目上下文
+  listProjects: () => req('/api/cmdb/projects'),
+
   // 资源管理
   meta: () => req('/api/cmdb/meta'),
   listAssets: (params = {}) => req(`/api/cmdb/assets?${toQuery(params)}`),
@@ -43,6 +46,14 @@ export const cmdbApi = {
   deletePerson: (id) => del(`/api/cmdb/persons/${id}`),
   getPersonAssets: (id) => req(`/api/cmdb/persons/${id}/assets`),
   transferPersonAssets: (d) => post('/api/cmdb/persons/transfer', d),
+
+  // 统一配置目录
+  getOrgTree: () => req('/api/cmdb/config/org-tree'),
+  moveOrgNode: (d) => post('/api/cmdb/config/org-tree/move', d),
+  listConfig: (kind) => req(`/api/cmdb/config/${kind}`),
+  createConfig: (kind, d) => post(`/api/cmdb/config/${kind}`, d),
+  updateConfig: (kind, id, d) => put(`/api/cmdb/config/${kind}/${id}`, d),
+  deleteConfig: (kind, id) => del(`/api/cmdb/config/${kind}/${id}`),
 
   // 自定义字段
   listCustomFields: () => req('/api/cmdb/custom-fields'),
@@ -81,7 +92,7 @@ export const cmdbApi = {
   getLabelRule: () => req('/api/cmdb/labels/rule'),
   saveLabelRule: (prefix) => put('/api/cmdb/labels/rule', { prefix }),
 
-  // 配置中心（设备模型库）
+  // 设备模型库兼容接口
   listModels: (p = {}) => req(`/api/cmdb/models?${toQuery(p)}`),
   createModel: (d) => post('/api/cmdb/models', d),
   updateModel: (id, d) => put(`/api/cmdb/models/${id}`, d),

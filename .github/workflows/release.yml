@@ -17,13 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - name: Verify release version
         run: node scripts/check-version.mjs --tag "${GITHUB_REF_NAME}"
-      - name: Build frontend
-        working-directory: web
-        run: npm ci && npm run build
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -41,6 +36,8 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "release-assets/cmdb-server-${version}-darwin-arm64" .
           cd release-assets
           sha256sum * > SHA256SUMS.txt
+      - name: Check CMDB server release data
+        run: node scripts/check-release-data.mjs release-assets
       - uses: actions/upload-artifact@v4
         with:
           name: cmdb-server-binaries
@@ -67,10 +64,9 @@ jobs:
       - name: Build embedded CMDB server
         shell: pwsh
         run: |
-          npm.cmd --prefix web ci
-          npm.cmd --prefix web run build
           New-Item -ItemType Directory -Force build | Out-Null
           go build -trimpath -ldflags="-s -w" -o build/cmdb-server.exe .
+          node scripts/check-release-data.mjs build/cmdb-server.exe
       - name: Checkout and integrate Netcatty
         shell: pwsh
         run: |
@@ -95,7 +91,11 @@ jobs:
           NETCATTY_CMDB_SERVER_SOURCE: ${{ github.workspace }}\build\cmdb-server.exe
         run: |
           npm.cmd run build
+          node ..\..\scripts\check-release-data.mjs ..\cmdb-server.exe .
           npx.cmd electron-builder --config electron-builder.config.cjs --win portable --x64 --publish=never
+      - name: Check Portable release data
+        shell: pwsh
+        run: node scripts/check-release-data.mjs build/netcatty/release
       - uses: actions/upload-artifact@v4
         with:
           name: netcatty-cmdb-windows

@@ -1,7 +1,9 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -9,54 +11,56 @@ import (
 
 // CmdbAsset 对应 cmdb_assets 表，涵盖全部 48+ 主字段及 custom_fields 字典与 interfaces 数组。
 type CmdbAsset struct {
-	ID               int64                  `json:"id"`
-	AssetCode        string                 `json:"asset_code"`
-	Name             string                 `json:"name"`
-	Status           string                 `json:"status"`
-	AssetClass       string                 `json:"asset_class"`
-	CategoryID       int64                  `json:"category_id"`
-	CategoryName     string                 `json:"category_name"`
-	ModelID          int64                  `json:"model_id"`
-	SN               string                 `json:"sn"`
-	Vendor           string                 `json:"vendor"`
-	Model            string                 `json:"model"`
-	Tags             string                 `json:"tags"`
-	OrgID            int64                  `json:"org_id"`
-	OrgName          string                 `json:"org_name"`
-	GroupID          int64                  `json:"group_id"`
-	GroupName        string                 `json:"group_name"`
-	Department       string                 `json:"department"`
-	Owner            string                 `json:"owner"`
-	DataCenter       string                 `json:"data_center"`
-	Floor            string                 `json:"floor"`
-	CabinetName      string                 `json:"cabinet_name"`
-	CabinetRow       string                 `json:"cabinet_row"`
-	CabinetCol       int64                  `json:"cabinet_col"`
-	StartU           int64                  `json:"start_u"`
-	HeightU          int64                  `json:"height_u"`
-	Province         string                 `json:"province"`
-	City             string                 `json:"city"`
-	District         string                 `json:"district"`
-	Longitude        float64                `json:"longitude"`
-	Latitude         float64                `json:"latitude"`
-	Address          string                 `json:"address"`
-	MgmtIP           string                 `json:"mgmt_ip"`
-	MAC              string                 `json:"mac"`
-	PortCount        int64                  `json:"port_count"`
-	RatedPowerW      int64                  `json:"rated_power_w"`
-	MaxPowerW        int64                  `json:"max_power_w"`
-	PowerType        string                 `json:"power_type"`
-	RedundantPower   int64                  `json:"redundant_power"`
-	WeightKG         float64                `json:"weight_kg"`
-	OSType           string                 `json:"os_type"`
-	OSVersion        string                 `json:"os_version"`
-	InstallDate      string                 `json:"install_date"`
-	WarrantyDate     string                 `json:"warranty_date"`
-	Remark           string                 `json:"remark"`
-	SourceType       string                 `json:"source_type"`
-	SourceID         int64                  `json:"source_id"`
-	CreatedAt        string                 `json:"created_at"`
-	UpdatedAt        string                 `json:"updated_at"`
+	ID             int64   `json:"id"`
+	ProjectID      int64   `json:"project_id"`
+	SyncID         string  `json:"sync_id"`
+	AssetCode      string  `json:"asset_code"`
+	Name           string  `json:"name"`
+	Status         string  `json:"status"`
+	AssetClass     string  `json:"asset_class"`
+	CategoryID     int64   `json:"category_id"`
+	CategoryName   string  `json:"category_name"`
+	ModelID        int64   `json:"model_id"`
+	SN             string  `json:"sn"`
+	Vendor         string  `json:"vendor"`
+	Model          string  `json:"model"`
+	Tags           string  `json:"tags"`
+	OrgID          int64   `json:"org_id"`
+	OrgName        string  `json:"org_name"`
+	GroupID        int64   `json:"group_id"`
+	GroupName      string  `json:"group_name"`
+	Department     string  `json:"department"`
+	Owner          string  `json:"owner"`
+	DataCenter     string  `json:"data_center"`
+	Floor          string  `json:"floor"`
+	CabinetName    string  `json:"cabinet_name"`
+	CabinetRow     string  `json:"cabinet_row"`
+	CabinetCol     int64   `json:"cabinet_col"`
+	StartU         int64   `json:"start_u"`
+	HeightU        int64   `json:"height_u"`
+	Province       string  `json:"province"`
+	City           string  `json:"city"`
+	District       string  `json:"district"`
+	Longitude      float64 `json:"longitude"`
+	Latitude       float64 `json:"latitude"`
+	Address        string  `json:"address"`
+	MgmtIP         string  `json:"mgmt_ip"`
+	MAC            string  `json:"mac"`
+	PortCount      int64   `json:"port_count"`
+	RatedPowerW    int64   `json:"rated_power_w"`
+	MaxPowerW      int64   `json:"max_power_w"`
+	PowerType      string  `json:"power_type"`
+	RedundantPower int64   `json:"redundant_power"`
+	WeightKG       float64 `json:"weight_kg"`
+	OSType         string  `json:"os_type"`
+	OSVersion      string  `json:"os_version"`
+	InstallDate    string  `json:"install_date"`
+	WarrantyDate   string  `json:"warranty_date"`
+	Remark         string  `json:"remark"`
+	SourceType     string  `json:"source_type"`
+	SourceID       int64   `json:"source_id"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
 
 	// 48+ 扩展字段与规范对齐字段
 	DeviceType       string                 `json:"device_type"`
@@ -116,25 +120,25 @@ type CmdbAssetInterface struct {
 
 // CmdbAssetQuery 是资源列表的查询条件。
 type CmdbAssetQuery struct {
-	Keyword    string
-	CategoryID int64
-	OrgID      int64
-	GroupID    int64
-	Department string
-	Owner      string
-	OwnerID    int64
-	Status     string
-	AssetClass string
-	DeviceType string
-	OSType     string
-	OSVersion  string
-	MgmtIP     string
-	SourceType string
+	Keyword       string
+	CategoryID    int64
+	OrgID         int64
+	GroupID       int64
+	Department    string
+	Owner         string
+	OwnerID       int64
+	Status        string
+	AssetClass    string
+	DeviceType    string
+	OSType        string
+	OSVersion     string
+	MgmtIP        string
+	SourceType    string
 	ResourceScope string
-	Page       int
-	PageSize   int
-	SortBy     string
-	SortOrder  string
+	Page          int
+	PageSize      int
+	SortBy        string
+	SortOrder     string
 }
 
 // 只有白名单内的字段允许出现在 ORDER BY 中，防止 SQL 注入。
@@ -153,7 +157,7 @@ var cmdbSortWhitelist = map[string]string{
 }
 
 const cmdbAssetSelect = `
-SELECT a.id, IFNULL(a.asset_code,''), a.name, a.status, a.asset_class,
+SELECT a.id, a.project_id, IFNULL(a.sync_id,''), IFNULL(a.asset_code,''), a.name, a.status, a.asset_class,
        a.category_id, IFNULL(c.name,''), a.model_id, IFNULL(a.sn,''), IFNULL(a.vendor,''),
        IFNULL(a.model,''), IFNULL(a.tags,''), a.org_id, IFNULL(o.name,''), a.group_id,
        IFNULL(g.name,''), IFNULL(a.department,''), IFNULL(a.owner,''), IFNULL(a.data_center,''),
@@ -177,16 +181,16 @@ SELECT a.id, IFNULL(a.asset_code,''), a.name, a.status, a.asset_class,
        IFNULL(a.net_type,''), IFNULL(a.admin_user,''), IFNULL(a.room,''),
        a.owner_id, IFNULL(a.custom_fields,'')
 FROM cmdb_assets a
-LEFT JOIN cmdb_orgs o ON o.id = a.org_id
-LEFT JOIN cmdb_groups g ON g.id = a.group_id
-LEFT JOIN cmdb_device_categories c ON c.id = a.category_id`
+LEFT JOIN cmdb_orgs o ON o.id = a.org_id AND o.project_id = a.project_id
+LEFT JOIN cmdb_groups g ON g.id = a.group_id AND g.project_id = a.project_id
+LEFT JOIN cmdb_device_categories c ON c.id = a.category_id AND c.project_id = a.project_id`
 
 func scanCmdbAsset(rows interface {
 	Scan(dest ...interface{}) error
 }) (CmdbAsset, error) {
 	var a CmdbAsset
 	err := rows.Scan(
-		&a.ID, &a.AssetCode, &a.Name, &a.Status, &a.AssetClass,
+		&a.ID, &a.ProjectID, &a.SyncID, &a.AssetCode, &a.Name, &a.Status, &a.AssetClass,
 		&a.CategoryID, &a.CategoryName, &a.ModelID, &a.SN, &a.Vendor,
 		&a.Model, &a.Tags, &a.OrgID, &a.OrgName, &a.GroupID,
 		&a.GroupName, &a.Department, &a.Owner, &a.DataCenter,
@@ -354,13 +358,16 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 	}
 	if strings.EqualFold(strings.TrimSpace(q.ResourceScope), "infrastructure") {
 		where = append(where, `(a.source_type = 'legacy_server'
+			OR (a.source_type = 'manual' AND IFNULL(a.device_type,'') = '' AND IFNULL(a.category_id,0) = 0)
 			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage')
 			OR EXISTS (
 				SELECT 1 FROM cmdb_device_categories scope_category
 				WHERE scope_category.id = a.category_id
+				AND scope_category.project_id = a.project_id
 				AND (scope_category.name LIKE '%服务器%'
 					OR scope_category.name LIKE '%虚拟机%'
 					OR scope_category.name LIKE '%交换机%'
+					OR scope_category.name LIKE '%网络设备%'
 					OR scope_category.name LIKE '%路由器%'
 					OR scope_category.name LIKE '%安全设备%'
 					OR scope_category.name LIKE '%存储设备%')
@@ -374,8 +381,28 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 	return clause, args
 }
 
+func (s *Store) buildCmdbWhereForProject(scope ProjectScope, q CmdbAssetQuery) (string, []interface{}) {
+	whereClause, args := s.buildCmdbWhere(q)
+	projectWhere := " WHERE a.project_id = ?"
+	if whereClause != "" {
+		projectWhere += " AND " + strings.TrimPrefix(whereClause, " WHERE ")
+	}
+	return projectWhere, append([]interface{}{scope.ProjectID}, args...)
+}
+
 // QueryCmdbAssets 按条件分页查询 CMDB 资产，返回当前页数据与满足条件的总数。
 func (s *Store) QueryCmdbAssets(q CmdbAssetQuery) ([]CmdbAsset, int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.QueryCmdbAssetsForProject(scope, q)
+}
+
+func (s *Store) QueryCmdbAssetsForProject(scope ProjectScope, q CmdbAssetQuery) ([]CmdbAsset, int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, 0, err
+	}
 	if q.Page < 1 {
 		q.Page = 1
 	}
@@ -383,7 +410,7 @@ func (s *Store) QueryCmdbAssets(q CmdbAssetQuery) ([]CmdbAsset, int, error) {
 		q.PageSize = 10
 	}
 
-	whereClause, args := s.buildCmdbWhere(q)
+	whereClause, args := s.buildCmdbWhereForProject(scope, q)
 
 	var total int
 	if err := s.db.QueryRow("SELECT COUNT(*) FROM cmdb_assets a"+whereClause, args...).Scan(&total); err != nil {
@@ -422,13 +449,27 @@ func (s *Store) QueryCmdbAssets(q CmdbAssetQuery) ([]CmdbAsset, int, error) {
 
 // GetCmdbAsset 读取单个资产及其全部网络接口。
 func (s *Store) GetCmdbAsset(id int64) (*CmdbAsset, []CmdbAssetInterface, error) {
-	row := s.db.QueryRow(cmdbAssetSelect+" WHERE a.id = ?", id)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, nil, err
+	}
+	return s.GetCmdbAssetForProject(scope, id)
+}
+
+func (s *Store) GetCmdbAssetForProject(scope ProjectScope, id int64) (*CmdbAsset, []CmdbAssetInterface, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, nil, err
+	}
+	row := s.db.QueryRow(cmdbAssetSelect+" WHERE a.id = ? AND a.project_id = ?", id, scope.ProjectID)
 	asset, err := scanCmdbAsset(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, errors.Join(ErrProjectScopedNotFound, sql.ErrNoRows)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ifaces, err := s.getAssetInterfaces(id)
+	ifaces, err := s.getAssetInterfacesForProject(scope, id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -438,6 +479,17 @@ func (s *Store) GetCmdbAsset(id int64) (*CmdbAsset, []CmdbAssetInterface, error)
 
 // InsertCmdbAsset 写入单条 CMDB 记录（支持全量 48+ 列）。
 func (s *Store) InsertCmdbAsset(a *CmdbAsset) (int64, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return 0, err
+	}
+	return s.InsertCmdbAssetForProject(scope, a)
+}
+
+func (s *Store) InsertCmdbAssetForProject(scope ProjectScope, a *CmdbAsset) (int64, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	if a.Status == "" {
 		a.Status = "在库"
@@ -519,7 +571,7 @@ func (s *Store) InsertCmdbAsset(a *CmdbAsset) (int64, error) {
 
 	query := `
 		INSERT INTO cmdb_assets (
-			asset_code, name, status, asset_class, category_id, model_id, sn, vendor, model, tags,
+			project_id, asset_code, name, status, asset_class, category_id, model_id, sn, vendor, model, tags,
 			org_id, group_id, department, owner, data_center, floor, cabinet_name, cabinet_row,
 			cabinet_col, start_u, height_u, province, city, district, longitude, latitude, address,
 			mgmt_ip, mac, port_count, rated_power_w, max_power_w, power_type, redundant_power,
@@ -529,10 +581,10 @@ func (s *Store) InsertCmdbAsset(a *CmdbAsset) (int64, error) {
 			region, zone, vcpu, memory_mb, instance_type, public_ip, box_sn, display_sn, cpu_info,
 			disk_info, mgmt_url, biz_ip, rack_unit, security_software, net_type, admin_user, room,
 			owner_id, custom_fields, created_at, updated_at)
-		VALUES (` + strings.TrimRight(strings.Repeat("?,", 78), ",") + `)`
+		VALUES (` + strings.TrimRight(strings.Repeat("?,", 79), ",") + `)`
 
 	res, err := s.db.Exec(query,
-		a.AssetCode, a.Name, a.Status, a.AssetClass, a.CategoryID, a.ModelID, a.SN, a.Vendor, a.Model, a.Tags,
+		scope.ProjectID, a.AssetCode, a.Name, a.Status, a.AssetClass, a.CategoryID, a.ModelID, a.SN, a.Vendor, a.Model, a.Tags,
 		a.OrgID, a.GroupID, a.Department, a.Owner, a.DataCenter, a.Floor, a.CabinetName, a.CabinetRow,
 		a.CabinetCol, a.StartU, a.HeightU, a.Province, a.City, a.District, a.Longitude, a.Latitude, a.Address,
 		a.MgmtIP, a.MAC, a.PortCount, a.RatedPowerW, a.MaxPowerW, a.PowerType, a.RedundantPower,
@@ -545,5 +597,14 @@ func (s *Store) InsertCmdbAsset(a *CmdbAsset) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	a.ID = id
+	a.ProjectID = scope.ProjectID
+	if err := s.db.QueryRow("SELECT sync_id FROM cmdb_assets WHERE id = ? AND project_id = ?", id, scope.ProjectID).Scan(&a.SyncID); err != nil {
+		return 0, err
+	}
+	return id, nil
 }

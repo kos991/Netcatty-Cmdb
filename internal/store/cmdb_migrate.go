@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+type schemaExecutor interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
 // MigrateCMDBFullSchema 负责检查并平滑补齐 CMDB 所需的所有扩展列与新建表。
 // 支持在全新数据库以及已有旧版本数据库上安全幂等执行。
 func MigrateCMDBFullSchema(db *sql.DB) error {
@@ -62,6 +67,12 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	if err := addMissingColumns(db, "cmdb_asset_interfaces", ifaceColsToAdd); err != nil {
 		return fmt.Errorf("migrate cmdb_asset_interfaces columns: %w", err)
 	}
+	if err := addMissingColumns(db, "cmdb_work_orders", map[string]string{
+		"operation_type": "TEXT DEFAULT ''",
+		"work_minutes":   "INTEGER NOT NULL DEFAULT 0",
+	}); err != nil {
+		return fmt.Errorf("migrate cmdb_work_orders columns: %w", err)
+	}
 
 	// 3. 创建人员表 cmdb_persons
 	personsDDL := `
@@ -92,7 +103,7 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	customFieldsDDL := `
 	CREATE TABLE IF NOT EXISTS cmdb_custom_fields (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		field_key TEXT NOT NULL UNIQUE,
+		field_key TEXT NOT NULL,
 		field_name TEXT NOT NULL,
 		field_type TEXT NOT NULL,
 		options_json TEXT,
@@ -104,7 +115,6 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 		created_at TEXT,
 		updated_at TEXT
 	);
-	CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_cf_key ON cmdb_custom_fields(field_key);
 	CREATE INDEX IF NOT EXISTS idx_cmdb_cf_class ON cmdb_custom_fields(asset_class);
 	`
 	if _, err := db.Exec(customFieldsDDL); err != nil {
@@ -148,7 +158,7 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	return nil
 }
 
-func addMissingColumns(db *sql.DB, tableName string, cols map[string]string) error {
+func addMissingColumns(db schemaExecutor, tableName string, cols map[string]string) error {
 	existingCols, err := getTableColumns(db, tableName)
 	if err != nil {
 		return err
@@ -168,7 +178,9 @@ func addMissingColumns(db *sql.DB, tableName string, cols map[string]string) err
 	return nil
 }
 
-func getTableColumns(db *sql.DB, tableName string) (map[string]bool, error) {
+func getTableColumns(db interface {
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}, tableName string) (map[string]bool, error) {
 	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
 	if err != nil {
 		return nil, err

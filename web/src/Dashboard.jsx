@@ -90,7 +90,7 @@ export default function Dashboard() {
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={6}>
           <StatCard
-            title="云桌面终端总数"
+            title="终端资产总数"
             value={stats.total_assets ?? 0}
             suffix="台"
             icon={<DesktopOutlined />}
@@ -115,7 +115,7 @@ export default function Dashboard() {
             suffix="个"
             icon={<AppstoreOutlined />}
             accent="#13c2c2"
-            note="含 BES 中间件 / 达梦 DM8 / 审判系统"
+            note="含数据库、中间件与业务应用"
           />
         </Col>
         <Col xs={24} sm={12} md={6}>
@@ -133,7 +133,7 @@ export default function Dashboard() {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} md={8}>
           <RingCard
-            title="云桌面在用与健康度"
+            title="终端资产在用与健康度"
             percent={zaiyongRate}
             label="按在用台数占终端总数计算"
             accent="#1677ff"
@@ -147,12 +147,12 @@ export default function Dashboard() {
         </Col>
         <Col xs={24} md={8}>
           <RingCard
-            title="安元合规与终端安全防护"
+            title="软件安装覆盖"
             percent={anyuanRate}
-            label="按已安装安元平台的终端占比计算"
+            label="按已登记安全软件的终端占比计算"
             accent={anyuanRate > 80 ? '#389e0d' : '#d48806'}
             rows={[
-              { label: '已安装安元平台', value: `${stats.anyuan_installed ?? 0} 台`, color: '#389e0d' },
+              { label: '已登记安全软件', value: `${stats.anyuan_installed ?? 0} 台`, color: '#389e0d' },
               { label: '未安装 / 待补丁', value: `${stats.anyuan_uninstalled ?? 0} 台`, color: '#cf1322' },
               { label: '合规达标评级', value: '良好' },
             ]}
@@ -173,7 +173,7 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      <Card size="small" title="云桌面各庭审部门分布排行（Top 10）" style={{ marginTop: 16 }}>
+      <Card size="small" title="终端资产部门分布排行（Top 10）" style={{ marginTop: 16 }}>
         <Table
           rowKey={(r, i) => r.department || i}
           size="small"
@@ -184,7 +184,7 @@ export default function Dashboard() {
             { title: '排名', key: 'rank', width: 70, render: (_, __, i) => i + 1 },
             { title: '部门名称', dataIndex: 'department' },
             {
-              title: '云桌面设备数',
+              title: '终端资产数',
               dataIndex: 'count',
               width: 140,
               render: (v) => <b>{v} 台</b>,

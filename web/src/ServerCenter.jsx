@@ -44,7 +44,7 @@ import { hasNativeCmdbImportBridge } from './cmdbTransport'
 const { Option } = Select
 const { Text, Title, Paragraph } = Typography
 
-export default function ServerCenter({ meta, focusTarget, section }) {
+export default function ServerCenter({ meta, focusTarget, section, hideKeywordSearch = false }) {
   const nativeImport = hasNativeCmdbImportBridge()
   const [activeTab, setActiveTab] = useState(section || 'servers')
   const [appDetail, setAppDetail] = useState(null)
@@ -690,7 +690,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
                 {statusSummary.map((item) => <button key={item.status} className={`server-status-chip status-${item.status}`} onClick={() => setStatusFilter(item.status)}><span>{item.status}</span><strong>{item.count}</strong></button>)}
               </div>
             <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
-              <Col xs={24} sm={8} md={6}>
+              {!hideKeywordSearch && <Col xs={24} sm={8} md={6}>
                 <Input
                   placeholder="搜索主机名/型号/SN/IP/管理地址..."
                   prefix={<SearchOutlined />}
@@ -699,7 +699,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
                   onPressEnter={() => loadServers(1, pageSize)}
                   allowClear
                 />
-              </Col>
+              </Col>}
               <Col xs={12} sm={6} md={4}>
                 <Select
                   style={{ width: '100%' }}
@@ -742,7 +742,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
                       serverForm.resetFields()
                       serverForm.setFieldsValue({
                         status: '运行中',
-                        location: '科技法庭核心机房',
+                        location: '核心机房',
                       })
                       setServerModalVisible(true)
                     }}
@@ -808,7 +808,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
           <div>
             {appError && <Alert type="error" showIcon message="业务系统查询失败" description={appError} action={<Button onClick={() => loadAllApps()}>重试</Button>} />}
             <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
-              <Col xs={24} sm={8} md={6}>
+              {!hideKeywordSearch && <Col xs={24} sm={8} md={6}>
                 <Input
                   placeholder="搜索系统名称/中间件/端口/数据库..."
                   prefix={<SearchOutlined />}
@@ -817,7 +817,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
                   onPressEnter={() => loadAllApps(1, appPageSize)}
                   allowClear
                 />
-              </Col>
+              </Col>}
               <Col xs={12} sm={6} md={4}>
                 <Select
                   style={{ width: '100%' }}
@@ -984,7 +984,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="location" label="机房位置">
-                <Input placeholder="如：科技法庭核心机房 / 3层弱电间" />
+                <Input placeholder="如：核心机房 / 3 层弱电间" />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -1223,7 +1223,7 @@ export default function ServerCenter({ meta, focusTarget, section }) {
             label="应用系统名称"
             rules={[{ required: true, message: '请输入应用名称' }]}
           >
-            <Input placeholder="如：宝兰德 BES Application Server / 数字法庭审判业务系统" />
+            <Input placeholder="如：BES Application Server / 统一业务系统" />
           </Form.Item>
 
           <Row gutter={16}>

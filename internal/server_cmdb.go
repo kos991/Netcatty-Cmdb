@@ -11,22 +11,23 @@ import (
 
 // ---- CMDB 维度元数据 ----
 func (s *Server) handleCmdbMeta(w http.ResponseWriter, r *http.Request) {
-	orgs, err := s.Store.ListCmdbOrgs()
+	scope := requestProjectScope(r)
+	orgs, err := s.Store.ListCmdbOrgsForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	groups, err := s.Store.ListCmdbGroups()
+	groups, err := s.Store.ListCmdbGroupsForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	categories, err := s.Store.ListCmdbCategories()
+	categories, err := s.Store.ListCmdbCategoriesForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	models, err := s.Store.ListCmdbModels()
+	models, err := s.Store.ListCmdbModelsForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -43,6 +44,7 @@ func (s *Server) handleCmdbMeta(w http.ResponseWriter, r *http.Request) {
 
 // ---- CMDB 资源列表（服务端分页 + 检索 + 排序） ----
 func (s *Server) handleListCmdbAssets(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	q := r.URL.Query()
 
 	page, _ := strconv.Atoi(q.Get("page"))
@@ -55,7 +57,7 @@ func (s *Server) handleListCmdbAssets(w http.ResponseWriter, r *http.Request) {
 		pageSize = 10
 	}
 
-	list, total, err := s.Store.QueryCmdbAssets(cmdbQueryFromRequest(r, page, pageSize))
+	list, total, err := s.Store.QueryCmdbAssetsForProject(scope, cmdbQueryFromRequest(r, page, pageSize))
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -73,13 +75,14 @@ func (s *Server) handleListCmdbAssets(w http.ResponseWriter, r *http.Request) {
 
 // ---- CMDB 资产详情（含网络接口） ----
 func (s *Server) handleGetCmdbAsset(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, 400, "无效的资产 ID")
 		return
 	}
-	asset, ifaces, err := s.Store.GetCmdbAsset(id)
-	if errors.Is(err, sql.ErrNoRows) {
+	asset, ifaces, err := s.Store.GetCmdbAssetForProject(scope, id)
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrProjectScopedNotFound) {
 		writeErr(w, 404, "未找到该资产")
 		return
 	}
@@ -98,7 +101,8 @@ func (s *Server) handleGetCmdbAsset(w http.ResponseWriter, r *http.Request) {
 
 // ---- 旧台账映射同步（幂等） ----
 func (s *Server) handleCmdbSyncLegacy(w http.ResponseWriter, r *http.Request) {
-	res, err := s.Store.SyncLegacyToCmdb()
+	scope := requestProjectScope(r)
+	res, err := s.Store.SyncLegacyToCmdbForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return

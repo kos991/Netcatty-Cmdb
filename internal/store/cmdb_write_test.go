@@ -28,20 +28,44 @@ func findCmdbBySource(t *testing.T, s *Store, sourceType string) *CmdbAsset {
 
 func TestApplyCmdbAssetChangesPersistsEditorFields(t *testing.T) {
 	s := newCmdbTestStore(t)
+	initialOrgID, err := s.CreateCmdbTaxonomy("orgs", "原组织", 0, 0)
+	if err != nil {
+		t.Fatalf("准备原组织失败: %v", err)
+	}
+	initialGroupID, err := s.CreateCmdbTaxonomy("groups", "原分组", 0, 0)
+	if err != nil {
+		t.Fatalf("准备原分组失败: %v", err)
+	}
+	initialCategoryID, err := s.CreateCmdbTaxonomy("categories", "原分类", 0, 0)
+	if err != nil {
+		t.Fatalf("准备原分类失败: %v", err)
+	}
 	id, err := s.CreateCmdbAssetManual(&CmdbAsset{
 		Name: "原设备", DeviceType: "server", Status: "在库", Department: "原部门", Owner: "原负责人",
-		OrgID: 1, GroupID: 2, CategoryID: 3, DataCenter: "原机房", Floor: "1F", CabinetName: "A01",
+		OrgID: initialOrgID, GroupID: initialGroupID, CategoryID: initialCategoryID, DataCenter: "原机房", Floor: "1F", CabinetName: "A01",
 		Remark: "原备注", CustomFields: map[string]interface{}{"old": "value"},
 	})
 	if err != nil {
 		t.Fatalf("准备资产失败: %v", err)
 	}
 
+	updatedOrgID, err := s.CreateCmdbTaxonomy("orgs", "新组织", 0, 0)
+	if err != nil {
+		t.Fatalf("准备新组织失败: %v", err)
+	}
+	updatedGroupID, err := s.CreateCmdbTaxonomy("groups", "新分组", 0, 0)
+	if err != nil {
+		t.Fatalf("准备新分组失败: %v", err)
+	}
+	updatedCategoryID, err := s.CreateCmdbTaxonomy("categories", "新分类", 0, 0)
+	if err != nil {
+		t.Fatalf("准备新分类失败: %v", err)
+	}
 	customFields := map[string]interface{}{"z": "末项", "a": float64(1)}
 	changes := CmdbAssetChanges{
 		Name: strPtr("新设备"), DeviceType: strPtr("network"), Status: strPtr("在线"),
 		Department: strPtr("技术处"), Owner: strPtr("李四"), OwnerID: int64Ptr(0),
-		OrgID: int64Ptr(11), GroupID: int64Ptr(12), CategoryID: int64Ptr(13),
+		OrgID: &updatedOrgID, GroupID: &updatedGroupID, CategoryID: &updatedCategoryID,
 		DataCenter: strPtr("主机房"), Floor: strPtr("2F"), CabinetName: strPtr("B02"),
 		Remark: strPtr("新备注"), CustomFields: customFieldsPtr(customFields),
 	}
@@ -59,7 +83,7 @@ func TestApplyCmdbAssetChangesPersistsEditorFields(t *testing.T) {
 	}
 	if got.Name != "新设备" || got.DeviceType != "network" || got.Status != "在线" ||
 		got.Department != "技术处" || got.Owner != "李四" || got.OwnerID != 0 ||
-		got.OrgID != 11 || got.GroupID != 12 || got.CategoryID != 13 ||
+		got.OrgID != updatedOrgID || got.GroupID != updatedGroupID || got.CategoryID != updatedCategoryID ||
 		got.DataCenter != "主机房" || got.Floor != "2F" || got.CabinetName != "B02" || got.Remark != "新备注" {
 		t.Fatalf("编辑字段未完整持久化: %+v", got)
 	}
@@ -544,7 +568,7 @@ func TestCmdbDeleteGuardsMappedRecords(t *testing.T) {
 	if err == nil {
 		t.Fatalf("映射来的记录必须拒绝删除")
 	}
-	if !strings.Contains(err.Error(), "云桌面终端台账") || !strings.Contains(err.Error(), "下次同步会重新出现") {
+	if !strings.Contains(err.Error(), "终端资产台账") || !strings.Contains(err.Error(), "下次同步会重新出现") {
 		t.Fatalf("错误信息应说明来源与后果，实际: %v", err)
 	}
 	if _, _, err := s.GetCmdbAsset(mapped.ID); err != nil {

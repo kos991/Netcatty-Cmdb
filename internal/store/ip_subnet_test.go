@@ -45,7 +45,7 @@ func TestSeedIPSubnetsFromPoolIsIdempotent(t *testing.T) {
 		}
 		switch v.Name {
 		case "7段":
-			if v.Category != "专网" || v.Total != 2 || v.Used != 1 || v.Free != 1 {
+			if v.Category != "专网" || v.Total != 254 || v.Used != 1 || v.Free != 253 {
 				t.Fatalf("7段统计错误: %+v", v)
 			}
 		case "外网":
@@ -152,8 +152,8 @@ func TestIPPoolSummaryIncludesDefinedEmptySubnet(t *testing.T) {
 	for _, sub := range sum.Subnets {
 		if sub.Subnet == "内网办公段" {
 			found = true
-			if sub.Category != "内网" || sub.Total != 0 {
-				t.Fatalf("已定义的空网段应出现在总览且统计为 0: %+v", sub)
+			if sub.Category != "内网" || sub.Total != 254 || sub.Free != 254 {
+				t.Fatalf("已定义的空网段应按 CIDR 显示完整可用容量: %+v", sub)
 			}
 		}
 		if sub.Subnet == "7段" && sub.Category != "专网" {

@@ -37,7 +37,8 @@ func listResponse(list interface{}, total, page, pageSize int) map[string]interf
 // ============================ 仪表盘 ============================
 
 func (s *Server) handleCmdbDashboard(w http.ResponseWriter, r *http.Request) {
-	data, err := s.Store.CmdbDashboardData()
+	scope := requestProjectScope(r)
+	data, err := s.Store.CmdbDashboardDataForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -48,9 +49,10 @@ func (s *Server) handleCmdbDashboard(w http.ResponseWriter, r *http.Request) {
 // ============================ 工单管理 ============================
 
 func (s *Server) handleListCmdbWorkOrders(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	page, pageSize := cmdbPaging(r)
 	q := r.URL.Query()
-	list, total, err := s.Store.QueryCmdbWorkOrders(store.CmdbWorkOrderQuery{
+	list, total, err := s.Store.QueryCmdbWorkOrdersForProject(scope, store.CmdbWorkOrderQuery{
 		Keyword:    q.Get("keyword"),
 		BizType:    q.Get("biz_type"),
 		Status:     q.Get("status"),
@@ -71,12 +73,13 @@ func (s *Server) handleListCmdbWorkOrders(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleCreateCmdbWorkOrder(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.CmdbWorkOrder
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.CreateCmdbWorkOrder(&body)
+	id, err := s.Store.CreateCmdbWorkOrderForProject(scope, &body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -85,6 +88,7 @@ func (s *Server) handleCreateCmdbWorkOrder(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleUpdateCmdbWorkOrder(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的工单 ID")
@@ -96,7 +100,7 @@ func (s *Server) handleUpdateCmdbWorkOrder(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	body.ID = id
-	if err := s.Store.UpdateCmdbWorkOrder(&body); err != nil {
+	if err := s.Store.UpdateCmdbWorkOrderForProject(scope, &body); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -104,12 +108,13 @@ func (s *Server) handleUpdateCmdbWorkOrder(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleDeleteCmdbWorkOrder(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的工单 ID")
 		return
 	}
-	if err := s.Store.DeleteCmdbWorkOrder(id); err != nil {
+	if err := s.Store.DeleteCmdbWorkOrderForProject(scope, id); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
@@ -119,8 +124,9 @@ func (s *Server) handleDeleteCmdbWorkOrder(w http.ResponseWriter, r *http.Reques
 // ============================ 资产盘点 ============================
 
 func (s *Server) handleListCmdbInventory(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	page, pageSize := cmdbPaging(r)
-	list, total, err := s.Store.QueryCmdbInventoryTasks(
+	list, total, err := s.Store.QueryCmdbInventoryTasksForProject(scope,
 		r.URL.Query().Get("status"), r.URL.Query().Get("keyword"), page, pageSize)
 	if err != nil {
 		writeErr(w, 500, err.Error())
@@ -133,12 +139,13 @@ func (s *Server) handleListCmdbInventory(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleCreateCmdbInventory(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.CmdbInventoryTask
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.CreateCmdbInventoryTask(&body)
+	id, err := s.Store.CreateCmdbInventoryTaskForProject(scope, &body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -147,6 +154,7 @@ func (s *Server) handleCreateCmdbInventory(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleUpdateCmdbInventory(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的盘点任务 ID")
@@ -158,7 +166,7 @@ func (s *Server) handleUpdateCmdbInventory(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	body.ID = id
-	if err := s.Store.UpdateCmdbInventoryTask(&body); err != nil {
+	if err := s.Store.UpdateCmdbInventoryTaskForProject(scope, &body); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -166,12 +174,13 @@ func (s *Server) handleUpdateCmdbInventory(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleDeleteCmdbInventory(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的盘点任务 ID")
 		return
 	}
-	if err := s.Store.DeleteCmdbInventoryTask(id); err != nil {
+	if err := s.Store.DeleteCmdbInventoryTaskForProject(scope, id); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
@@ -181,8 +190,9 @@ func (s *Server) handleDeleteCmdbInventory(w http.ResponseWriter, r *http.Reques
 // ============================ 凭证中心 ============================
 
 func (s *Server) handleListCmdbCredentials(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	page, pageSize := cmdbPaging(r)
-	list, total, err := s.Store.QueryCmdbCredentials(
+	list, total, err := s.Store.QueryCmdbCredentialsForProject(scope,
 		r.URL.Query().Get("cred_type"), r.URL.Query().Get("keyword"), page, pageSize)
 	if err != nil {
 		writeErr(w, 500, err.Error())
@@ -195,12 +205,13 @@ func (s *Server) handleListCmdbCredentials(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleCreateCmdbCredential(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.CmdbCredential
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.CreateCmdbCredential(&body)
+	id, err := s.Store.CreateCmdbCredentialForProject(scope, &body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -209,6 +220,7 @@ func (s *Server) handleCreateCmdbCredential(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handleUpdateCmdbCredential(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的凭证 ID")
@@ -220,7 +232,7 @@ func (s *Server) handleUpdateCmdbCredential(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	body.ID = id
-	if err := s.Store.UpdateCmdbCredential(&body); err != nil {
+	if err := s.Store.UpdateCmdbCredentialForProject(scope, &body); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -228,12 +240,13 @@ func (s *Server) handleUpdateCmdbCredential(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handleDeleteCmdbCredential(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的凭证 ID")
 		return
 	}
-	if err := s.Store.DeleteCmdbCredential(id); err != nil {
+	if err := s.Store.DeleteCmdbCredentialForProject(scope, id); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
@@ -243,14 +256,15 @@ func (s *Server) handleDeleteCmdbCredential(w http.ResponseWriter, r *http.Reque
 // ============================ 编码与标签 ============================
 
 func (s *Server) handleListCmdbLabels(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	page, pageSize := cmdbPaging(r)
-	list, total, err := s.Store.QueryCmdbLabels(
+	list, total, err := s.Store.QueryCmdbLabelsForProject(scope,
 		r.URL.Query().Get("tab"), r.URL.Query().Get("keyword"), page, pageSize)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	orphan, err := s.Store.CountOrphanCmdbLabels()
+	orphan, err := s.Store.CountOrphanCmdbLabelsForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -264,20 +278,21 @@ func (s *Server) handleListCmdbLabels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGenerateCmdbLabels(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body struct {
 		Prefix string `json:"prefix"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	prefix := body.Prefix
 	if prefix == "" {
-		p, err := s.Store.LabelCodePrefix()
+		p, err := s.Store.LabelCodePrefixForProject(scope)
 		if err != nil {
 			writeErr(w, 500, err.Error())
 			return
 		}
 		prefix = p
 	}
-	n, err := s.Store.GenerateCmdbLabels(prefix)
+	n, err := s.Store.GenerateCmdbLabelsForProject(scope, prefix)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -286,7 +301,8 @@ func (s *Server) handleGenerateCmdbLabels(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleRepairCmdbLabels(w http.ResponseWriter, r *http.Request) {
-	n, err := s.Store.RepairOrphanCmdbLabels()
+	scope := requestProjectScope(r)
+	n, err := s.Store.RepairOrphanCmdbLabelsForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -295,6 +311,7 @@ func (s *Server) handleRepairCmdbLabels(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handlePrintCmdbLabels(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body struct {
 		IDs []int64 `json:"ids"`
 	}
@@ -303,7 +320,7 @@ func (s *Server) handlePrintCmdbLabels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	batch := time.Now().Format("20060102150405")
-	n, err := s.Store.MarkCmdbLabelsPrinted(body.IDs, batch)
+	n, err := s.Store.MarkCmdbLabelsPrintedForProject(scope, body.IDs, batch)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -312,6 +329,7 @@ func (s *Server) handlePrintCmdbLabels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetCmdbLabelStatus(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的编码 ID")
@@ -328,7 +346,7 @@ func (s *Server) handleSetCmdbLabelStatus(w http.ResponseWriter, r *http.Request
 		writeErr(w, 400, "状态只允许「使用中」或「已归档」")
 		return
 	}
-	if err := s.Store.SetCmdbLabelStatus(id, body.Status); err != nil {
+	if err := s.Store.SetCmdbLabelStatusForProject(scope, id, body.Status); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
@@ -337,7 +355,8 @@ func (s *Server) handleSetCmdbLabelStatus(w http.ResponseWriter, r *http.Request
 
 // handlePrintedCmdbLabels 返回已打印的编码记录（打印审计）。
 func (s *Server) handlePrintedCmdbLabels(w http.ResponseWriter, r *http.Request) {
-	list, err := s.Store.QueryCmdbPrintedLabels(200)
+	scope := requestProjectScope(r)
+	list, err := s.Store.QueryCmdbPrintedLabelsForProject(scope, 200)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -349,12 +368,13 @@ func (s *Server) handlePrintedCmdbLabels(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleDeleteCmdbLabel(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的编码 ID")
 		return
 	}
-	if err := s.Store.DeleteCmdbLabel(id); err != nil {
+	if err := s.Store.DeleteCmdbLabelForProject(scope, id); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
@@ -362,7 +382,8 @@ func (s *Server) handleDeleteCmdbLabel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetCmdbLabelRule(w http.ResponseWriter, r *http.Request) {
-	prefix, err := s.Store.LabelCodePrefix()
+	scope := requestProjectScope(r)
+	prefix, err := s.Store.LabelCodePrefixForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -371,6 +392,7 @@ func (s *Server) handleGetCmdbLabelRule(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleSaveCmdbLabelRule(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body struct {
 		Prefix string `json:"prefix"`
 	}
@@ -378,7 +400,7 @@ func (s *Server) handleSaveCmdbLabelRule(w http.ResponseWriter, r *http.Request)
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	if err := s.Store.SaveLabelCodePrefix(body.Prefix); err != nil {
+	if err := s.Store.SaveLabelCodePrefixForProject(scope, body.Prefix); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
@@ -388,8 +410,9 @@ func (s *Server) handleSaveCmdbLabelRule(w http.ResponseWriter, r *http.Request)
 // ============================ 配置中心：设备模型库 ============================
 
 func (s *Server) handleListCmdbModels(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	page, pageSize := cmdbPaging(r)
-	list, total, err := s.Store.QueryCmdbModels(r.URL.Query().Get("keyword"), page, pageSize)
+	list, total, err := s.Store.QueryCmdbModelsForProject(scope, r.URL.Query().Get("keyword"), page, pageSize)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -401,12 +424,13 @@ func (s *Server) handleListCmdbModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateCmdbModel(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	var body store.CmdbDeviceModel
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	id, err := s.Store.CreateCmdbModel(&body)
+	id, err := s.Store.CreateCmdbModelForProject(scope, &body)
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -415,6 +439,7 @@ func (s *Server) handleCreateCmdbModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateCmdbModel(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的模型 ID")
@@ -426,7 +451,7 @@ func (s *Server) handleUpdateCmdbModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.ID = id
-	if err := s.Store.UpdateCmdbModel(&body); err != nil {
+	if err := s.Store.UpdateCmdbModelForProject(scope, &body); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
@@ -434,12 +459,13 @@ func (s *Server) handleUpdateCmdbModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteCmdbModel(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)
 	if !ok {
 		writeErr(w, 400, "无效的模型 ID")
 		return
 	}
-	if err := s.Store.DeleteCmdbModel(id); err != nil {
+	if err := s.Store.DeleteCmdbModelForProject(scope, id); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}

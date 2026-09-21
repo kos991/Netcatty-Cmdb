@@ -68,7 +68,7 @@ const ASSET_FORM_SECTIONS = [
 // 本项目没有用户体系，故改为按来源划分的真实视图。
 const VIEWS = [
   { value: '', label: '全部资产' },
-  { value: 'legacy_asset', label: '云桌面终端' },
+  { value: 'legacy_asset', label: '终端资产' },
   { value: 'legacy_server', label: '服务器' },
   { value: 'manual', label: '手工登记' },
 ]
@@ -83,7 +83,7 @@ function compactChanges(values) {
   return out
 }
 
-export default function CmdbResources({ meta, scope, title = '资源总账', focusTarget }) {
+export default function CmdbResources({ meta, scope, title = '资源总账', focusTarget, hideKeywordSearch = false }) {
   const [mode, setMode] = useState('orgs')
   const [cmdbMeta, setCmdbMeta] = useState({ statuses: [] })
   const [filterOptions, setFilterOptions] = useState({})
@@ -143,7 +143,7 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
     cmdbApi
       .meta()
       .then((m) => setCmdbMeta(m || {}))
-      .catch((e) => message.error('加载 CMDB 元数据失败：' + e.message))
+      .catch((e) => message.error('加载 Cmdb 元数据失败：' + e.message))
   }, [])
 
   const loadFilterOptions = useCallback(async () => {
@@ -561,9 +561,9 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
           </Space>
         </header>
         <div className="ledger-filterbar">
-          <Input.Search aria-label="搜索资源" allowClear placeholder="搜索名称、编号、SN、IP" value={keywordInput}
-            onChange={(e) => setKeywordInput(e.target.value)}
-            onSearch={(value) => { setKeyword(value.trim()); setPage(1) }} />
+          {!hideKeywordSearch && <Input.Search aria-label="搜索资源" allowClear placeholder="搜索名称、编号、SN、IP" value={keywordInput}
+              onChange={(e) => setKeywordInput(e.target.value)}
+              onSearch={(value) => { setKeyword(value.trim()); setPage(1) }} />}
           <Select aria-label="资产状态" allowClear placeholder="全部状态" value={colFilters.status || undefined}
             options={(cmdbMeta.statuses || []).map((s) => ({value:s,label:s}))}
             onChange={(value) => {setColFilters((prev) => ({...prev,status:value || ''}));setPage(1)}} />
@@ -705,11 +705,11 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
             <Descriptions column={1} size="small" bordered title="来源" style={{ marginTop: 16 }}>
               <Descriptions.Item label="数据来源">
                 {detail.asset.source_type === 'legacy_asset' ? (
-                  <Tag color="blue">云桌面终端台账（映射）</Tag>
+                  <Tag color="blue">终端资产台账（映射）</Tag>
                 ) : detail.asset.source_type === 'legacy_server' ? (
                   <Tag color="purple">服务器台账（映射）</Tag>
                 ) : (
-                  <Tag color="green">CMDB 手工登记</Tag>
+                  <Tag color="green">Cmdb 手工登记</Tag>
                 )}
               </Descriptions.Item>
               <Descriptions.Item label="备注">{detail.asset.remark || '-'}</Descriptions.Item>
@@ -754,7 +754,7 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
                 <div className="cmdb-form-section-title">基础信息</div>
                 <div className="cmdb-form-grid cmdb-form-grid-2">
                   <Form.Item name="name" label="设备名称" rules={[{ required: true, message: '请填写设备名称' }]}>
-                    <Input placeholder="如 302室云桌面" allowClear />
+                    <Input placeholder="如 302 室终端" allowClear />
                   </Form.Item>
                   <Form.Item name="status" label="状态">
                     <Select options={(cmdbMeta.statuses || []).map((s) => ({ value: s, label: s }))} />
@@ -783,7 +783,7 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
                   type="info"
                   showIcon
                   message="凭证不在资产编辑表单中直接录入"
-                  description="可在 CMDB「凭证中心」维护 SSH、Web 等凭证，并通过资产编号关联；密码等敏感信息不会在普通资产页面展示。"
+                  description="可在 Cmdb“凭证中心”维护 SSH、Web 等凭证，并通过资产编号关联；密码等敏感信息不会在普通资产页面展示。"
                 />
               </section>
 
@@ -887,7 +887,7 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
                 </Form.Item>
                 {assetFormMode === 'edit' ? (
                   <div className="cmdb-info-grid cmdb-info-grid-muted">
-                    <span>数据来源</span><strong>{editingAsset?.source_type === 'legacy_asset' ? '云桌面终端台账（映射）' : editingAsset?.source_type === 'legacy_server' ? '服务器台账（映射）' : 'CMDB 手工登记'}</strong>
+                    <span>数据来源</span><strong>{editingAsset?.source_type === 'legacy_asset' ? '终端资产台账（映射）' : editingAsset?.source_type === 'legacy_server' ? '基础设施台账（映射）' : 'Cmdb 手工登记'}</strong>
                     <span>更新时间</span><strong>{editingAsset?.updated_at || '-'}</strong>
                   </div>
                 ) : null}
@@ -900,7 +900,7 @@ export default function CmdbResources({ meta, scope, title = '资源总账', foc
             type="warning"
             showIcon
             message="该记录由旧台账映射而来"
-            description="部门 / 负责人 / 状态 / 备注的修改会同步写回源台账；留空不会清空源台账（如需清空请到源台账中操作）。所属组织 / 分组 / 分类 / 数据中心 / 楼层 / 机柜仅保存在 CMDB。"
+            description="部门 / 负责人 / 状态 / 备注的修改会同步写回源台账；留空不会清空源台账（如需清空请到源台账中操作）。所属组织 / 分组 / 分类 / 数据中心 / 楼层 / 机柜仅保存在 Cmdb。"
           />
         ) : null}
       </Modal>

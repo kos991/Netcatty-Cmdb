@@ -20,32 +20,33 @@ func cmdbQueryFromRequest(r *http.Request, page, pageSize int) store.CmdbAssetQu
 	orgID, _ := strconv.ParseInt(q.Get("org_id"), 10, 64)
 	groupID, _ := strconv.ParseInt(q.Get("group_id"), 10, 64)
 	return store.CmdbAssetQuery{
-		Keyword:    q.Get("keyword"),
-		CategoryID: categoryID,
-		OrgID:      orgID,
-		GroupID:    groupID,
-		Status:     q.Get("status"),
-		OSType:     q.Get("os_type"),
-		OSVersion:  q.Get("os_version"),
-		MgmtIP:     q.Get("mgmt_ip"),
-		SourceType: q.Get("source_type"),
+		Keyword:       q.Get("keyword"),
+		CategoryID:    categoryID,
+		OrgID:         orgID,
+		GroupID:       groupID,
+		Status:        q.Get("status"),
+		OSType:        q.Get("os_type"),
+		OSVersion:     q.Get("os_version"),
+		MgmtIP:        q.Get("mgmt_ip"),
+		SourceType:    q.Get("source_type"),
 		ResourceScope: q.Get("scope"),
-		Page:       page,
-		PageSize:   pageSize,
-		SortBy:     q.Get("sort_by"),
-		SortOrder:  q.Get("sort_order"),
+		Page:          page,
+		PageSize:      pageSize,
+		SortBy:        q.Get("sort_by"),
+		SortOrder:     q.Get("sort_order"),
 	}
 }
 
 // ---- 列头筛选可选值 ----
 func (s *Server) handleCmdbAssetFilters(w http.ResponseWriter, r *http.Request) {
-	opts, err := s.Store.CmdbAssetFilterOptions()
+	scope := requestProjectScope(r)
+	opts, err := s.Store.CmdbAssetFilterOptionsForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
 	// 附上状态与三个维度的可选值
-	meta, err := s.Store.ListCmdbCategories()
+	meta, err := s.Store.ListCmdbCategoriesForProject(scope)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -105,7 +106,8 @@ var cmdbExportColumns = []struct {
 
 // handleExportCmdbAssets 按当前筛选导出全部匹配记录（不受分页限制）。
 func (s *Server) handleExportCmdbAssets(w http.ResponseWriter, r *http.Request) {
-	list, err := s.Store.AllCmdbAssets(cmdbQueryFromRequest(r, 1, 0))
+	scope := requestProjectScope(r)
+	list, err := s.Store.AllCmdbAssetsForProject(scope, cmdbQueryFromRequest(r, 1, 0))
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -119,7 +121,7 @@ func (s *Server) handleExportCmdbAssets(w http.ResponseWriter, r *http.Request) 
 	switch format {
 	case "csv":
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		w.Header().Set("Content-Disposition", "attachment; filename=\"CMDB资源_"+stamp+".csv\"")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"Cmdb_"+stamp+".csv\"")
 		w.Write([]byte{0xEF, 0xBB, 0xBF})
 		cw := csv.NewWriter(w)
 		head := make([]string, len(cmdbExportColumns))
@@ -138,7 +140,7 @@ func (s *Server) handleExportCmdbAssets(w http.ResponseWriter, r *http.Request) 
 	case "xlsx":
 		f := excelize.NewFile()
 		defer f.Close()
-		const sheet = "CMDB资源"
+		const sheet = "Cmdb"
 		idx, _ := f.NewSheet(sheet)
 		f.SetActiveSheet(idx)
 		_ = f.DeleteSheet("Sheet1")
@@ -158,7 +160,7 @@ func (s *Server) handleExportCmdbAssets(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-		w.Header().Set("Content-Disposition", "attachment; filename=\"CMDB资源_"+stamp+".xlsx\"")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"Cmdb_"+stamp+".xlsx\"")
 		w.Write(buf.Bytes())
 	default:
 		writeErr(w, 400, "不支持的格式: "+format)
@@ -173,12 +175,13 @@ func (s *Server) handleDownloadCmdbTemplate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", `attachment; filename="czfy_cmdb_import_template.xlsx"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="cmdb_import_template.xlsx"`)
 	w.Write(b)
 }
 
 // handleImportCmdbAssets 批量导入：默认只预览，commit=1 才写入。
 func (s *Server) handleImportCmdbAssets(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		writeErr(w, 400, "Excel 文件解析失败")
 		return
@@ -197,9 +200,9 @@ func (s *Server) handleImportCmdbAssets(w http.ResponseWriter, r *http.Request) 
 
 	var res *store.CmdbImportResult
 	if r.URL.Query().Get("commit") == "1" {
-		res, err = s.Store.CommitCmdbImport(bytes.NewReader(data))
+		res, err = s.Store.CommitCmdbImportForProject(scope, bytes.NewReader(data))
 	} else {
-		res, err = s.Store.PreviewCmdbImport(bytes.NewReader(data))
+		res, err = s.Store.PreviewCmdbImportForProject(scope, bytes.NewReader(data))
 	}
 	if err != nil {
 		writeErr(w, 400, "导入失败: "+err.Error())
