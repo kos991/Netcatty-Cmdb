@@ -1,7 +1,7 @@
 {
   "name": "netcatty-cmdb",
   "displayName": "Cmdb",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Netcatty Cmdb 资产管理扩展，支持统信 UOS / 银河麒麟虚拟机批量控制、软件源安全补丁与安装包盘点",
   "author": "kos991",
   "license": "MIT",
