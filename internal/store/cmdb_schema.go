@@ -172,6 +172,8 @@ CREATE TABLE IF NOT EXISTS cmdb_work_orders (
     priority TEXT,
     subject TEXT NOT NULL,
     biz_type TEXT,
+    operation_type TEXT,
+    work_minutes INTEGER NOT NULL DEFAULT 0,
     status TEXT,
     plan_time TEXT,
     actual_time TEXT,

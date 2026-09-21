@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestProjectScopeCmdbModulesTaxonomyAndConfigIsolation(t *testing.T) {
@@ -106,6 +107,31 @@ func TestProjectScopeCmdbModulesTaxonomyAndConfigIsolation(t *testing.T) {
 	}
 	if subnets, err := s.ListIPSubnetsForProject(scopeA); err != nil || len(subnets) != 1 || subnets[0].Name != "同名网段" {
 		t.Fatalf("项目 A 网段隔离失败: subnets=%+v err=%v", subnets, err)
+	}
+}
+
+func TestWorkOrderNumberUsesProjectRuleAndIgnoresClientNumber(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatalf("读取默认项目: %v", err)
+	}
+	if _, err := s.CreateConfigItem(scope, ConfigKindWorkOrderRule, &ConfigItem{
+		Name: "GD", Vendor: "-", Version: "YYYYMMDD", Remark: "每日", SortOrder: 4,
+	}); err != nil {
+		t.Fatalf("保存工单编号规则: %v", err)
+	}
+	first := &CmdbWorkOrder{OrderNo: "MANUAL", Subject: "第一张工单"}
+	second := &CmdbWorkOrder{Subject: "第二张工单"}
+	if _, err := s.CreateCmdbWorkOrderForProject(scope, first); err != nil {
+		t.Fatalf("创建第一张工单: %v", err)
+	}
+	if _, err := s.CreateCmdbWorkOrderForProject(scope, second); err != nil {
+		t.Fatalf("创建第二张工单: %v", err)
+	}
+	today := time.Now().Format("20060102")
+	if first.OrderNo != "GD-"+today+"-0001" || second.OrderNo != "GD-"+today+"-0002" {
+		t.Fatalf("工单编号未按项目规则连续生成: first=%q second=%q", first.OrderNo, second.OrderNo)
 	}
 }
 

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,10 +26,108 @@ func createLegacyAsset(t *testing.T, s *Store, a Asset) int64 {
 	return id
 }
 
+func TestImportAssetsForProjectRollsBackOnIPConflict(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.ImportAssetsForProject(scope, []Asset{
+		{AssetCode: "IMPORT-1", DeviceType: "台式电脑", IP: "10.20.30.80", Status: "在用"},
+		{AssetCode: "IMPORT-2", DeviceType: "台式电脑", IP: "10.20.30.80", Status: "在用"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "已关联其他资产") {
+		t.Fatalf("expected IP conflict, got %v", err)
+	}
+	assets, err := s.AllAssetsForProject(scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 0 {
+		t.Fatalf("partial import was not rolled back: %#v", assets)
+	}
+}
+
 func mustLegacyExec(t *testing.T, s *Store, query string, args ...interface{}) {
 	t.Helper()
 	if _, err := s.db.Exec(query, args...); err != nil {
 		t.Fatalf("准备测试数据失败: %v", err)
+	}
+}
+
+func TestLegacyAssetDeviceTypeRoundTripAndMaintenanceInheritance(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	id := createLegacyAsset(t, s, Asset{
+		AssetCode: "TYPE-1", DeviceType: "云桌面终端", BoxSN: "BOX-OLD", Status: "在用",
+	})
+
+	asset, _, err := s.GetAsset(id)
+	if err != nil {
+		t.Fatalf("读取设备类型失败: %v", err)
+	}
+	if asset.DeviceType != "云桌面终端" {
+		t.Fatalf("新增后设备类型未保存: %+v", asset)
+	}
+	asset.DeviceType = "台式电脑"
+	if err := s.UpdateAsset(asset, "测试"); err != nil {
+		t.Fatalf("更新设备类型失败: %v", err)
+	}
+	updated, _, err := s.GetAsset(id)
+	if err != nil || updated.DeviceType != "台式电脑" {
+		t.Fatalf("更新后设备类型未保存: asset=%+v err=%v", updated, err)
+	}
+
+	if err := s.Maintenance(id, MaintenanceReq{
+		PartType: "box", OldSN: "BOX-OLD", NewSN: "BOX-NEW",
+		NewStatus: "在用", MarkOldAs: "故障待修入库",
+	}); err != nil {
+		t.Fatalf("维修换件失败: %v", err)
+	}
+	var oldPartType string
+	if err := s.db.QueryRow(`SELECT IFNULL(device_type,'') FROM assets WHERE id <> ?`, id).Scan(&oldPartType); err != nil {
+		t.Fatalf("读取旧件设备类型失败: %v", err)
+	}
+	if oldPartType != "台式电脑" {
+		t.Fatalf("维修旧件未继承设备类型: %q", oldPartType)
+	}
+}
+
+func TestLegacyAssetDeviceTypeMigrationBackfillsExistingRows(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy_device_type.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("创建旧数据库失败: %v", err)
+	}
+	_, err = db.Exec(`
+		CREATE TABLE assets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			project_id INTEGER DEFAULT 1,
+			asset_code TEXT, box_sn TEXT, display_sn TEXT, user_name TEXT,
+			department TEXT, room TEXT, ip TEXT, terminal_ip TEXT,
+			security_software TEXT, status TEXT, net_type TEXT, remark TEXT,
+			created_at TEXT, updated_at TEXT
+		);
+		INSERT INTO assets (project_id, asset_code, box_sn, status) VALUES (1, 'OLD-1', 'BOX-1', '在用');
+	`)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("准备旧数据库失败: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("关闭旧数据库失败: %v", err)
+	}
+
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("迁移旧数据库失败: %v", err)
+	}
+	defer s.Close()
+	var deviceType string
+	if err := s.db.QueryRow(`SELECT IFNULL(device_type,'') FROM assets WHERE asset_code='OLD-1'`).Scan(&deviceType); err != nil {
+		t.Fatalf("读取迁移结果失败: %v", err)
+	}
+	if deviceType != "" {
+		t.Fatalf("旧终端资产类型未知时不应臆造分类，实际 %q", deviceType)
 	}
 }
 

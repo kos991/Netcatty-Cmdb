@@ -67,6 +67,12 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	if err := addMissingColumns(db, "cmdb_asset_interfaces", ifaceColsToAdd); err != nil {
 		return fmt.Errorf("migrate cmdb_asset_interfaces columns: %w", err)
 	}
+	if err := addMissingColumns(db, "cmdb_work_orders", map[string]string{
+		"operation_type": "TEXT DEFAULT ''",
+		"work_minutes":   "INTEGER NOT NULL DEFAULT 0",
+	}); err != nil {
+		return fmt.Errorf("migrate cmdb_work_orders columns: %w", err)
+	}
 
 	// 3. 创建人员表 cmdb_persons
 	personsDDL := `

@@ -188,6 +188,32 @@ test("keeps a selected import file behind an in-memory token until commit", asyn
   ]);
 });
 
+test("allows native terminal asset import with preview and commit", async () => {
+  const requestedUrls = [];
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: false, filePaths: ["C:/imports/terminal-assets.xlsx"] }),
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+    fetchImpl: async (url) => {
+      requestedUrls.push(url);
+      return new Response('{"valid":1}', { status: 200 });
+    },
+  });
+
+  const preview = await handlers.get(CMDB_CHANNELS.importFile)({}, { path: "/api/import/assets" });
+  await handlers.get(CMDB_CHANNELS.importFile)({}, {
+    path: "/api/import/assets",
+    commit: true,
+    token: preview.token,
+  });
+
+  assert.deepEqual(requestedUrls, [
+    "http://127.0.0.1:18080/api/import/assets",
+    "http://127.0.0.1:18080/api/import/assets?commit=1",
+  ]);
+});
+
 test("returns cancellation without writing when export selection is cancelled", async () => {
   let writes = 0;
   const handlers = registerTestBridge({

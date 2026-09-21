@@ -4,9 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"net/netip"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // ============================ IP 池数据规范化 ============================
@@ -167,7 +170,7 @@ func (s *Store) IPPoolSummaryDataForProject(scope ProjectScope) (*IPPoolSummary,
 			order = append(order, subnet)
 		}
 		a.total++
-		if status == "在用" {
+		if isIPUsedStatus(status) {
 			a.used++
 		}
 		if ipPlainRe.MatchString(ip) {
@@ -222,7 +225,7 @@ func (s *Store) IPPoolSummaryDataForProject(scope ProjectScope) (*IPPoolSummary,
 	}
 
 	// 合并「网段定义」：补上类别 / CIDR，并让「已定义但暂无 IP」的网段也出现在总览里。
-	defs, err := s.ListIPSubnets()
+	defs, err := s.ListIPSubnetsForProject(scope)
 	if err != nil {
 		return nil, err
 	}
@@ -237,14 +240,30 @@ func (s *Store) IPPoolSummaryDataForProject(scope ProjectScope) (*IPPoolSummary,
 			if out.Subnets[i].Prefix == "" {
 				out.Subnets[i].Prefix = d.Prefix
 			}
+			if capacity, first, last, ok := usableIPv4Range(normalizeSubnetCIDR(d.CIDR, d.Prefix)); d.Defined && ok {
+				previousTotal := out.Subnets[i].Total
+				out.Subnets[i].Total = capacity
+				out.Subnets[i].Free = max(0, capacity-out.Subnets[i].Used)
+				out.Subnets[i].UsageRate = usageRate(out.Subnets[i].Used, capacity)
+				out.Subnets[i].RangeFrom, out.Subnets[i].RangeTo = first.String(), last.String()
+				out.Total += capacity - previousTotal
+				out.Free += out.Subnets[i].Free - (previousTotal - out.Subnets[i].Used)
+			}
 			continue
 		}
-		out.Subnets = append(out.Subnets, IPSubnetSummary{
+		item := IPSubnetSummary{
 			Subnet:   d.Name,
 			Category: d.Category,
 			Prefix:   d.Prefix,
 			CIDR:     d.CIDR,
-		})
+		}
+		if capacity, first, last, ok := usableIPv4Range(normalizeSubnetCIDR(d.CIDR, d.Prefix)); d.Defined && ok {
+			item.Total, item.Free = capacity, capacity
+			item.RangeFrom, item.RangeTo = first.String(), last.String()
+			out.Total += capacity
+			out.Free += capacity
+		}
+		out.Subnets = append(out.Subnets, item)
 	}
 	// 无前缀的网段（尚未录入 IP）排到最后
 	sort.SliceStable(out.Subnets, func(i, j int) bool {
@@ -257,7 +276,138 @@ func (s *Store) IPPoolSummaryDataForProject(scope ProjectScope) (*IPPoolSummary,
 		}
 		return ipPrefixValue(pi) < ipPrefixValue(pj)
 	})
+	out.UsageRate = usageRate(out.Used, out.Total)
 	return out, nil
+}
+
+func usageRate(used, total int) float64 {
+	if total <= 0 {
+		return 0
+	}
+	return math.Round(float64(used)/float64(total)*1000) / 10
+}
+
+func isIPUsedStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "在用", "已占用", "已分配", "占用":
+		return true
+	default:
+		return false
+	}
+}
+
+func usableIPv4Range(cidr string) (int, netip.Addr, netip.Addr, bool) {
+	prefix, err := netip.ParsePrefix(strings.TrimSpace(cidr))
+	if err != nil || !prefix.Addr().Is4() || prefix.Bits() > 30 {
+		return 0, netip.Addr{}, netip.Addr{}, false
+	}
+	prefix = prefix.Masked()
+	capacity := (uint64(1) << uint(32-prefix.Bits())) - 2
+	if capacity > uint64(^uint(0)>>1) {
+		return 0, netip.Addr{}, netip.Addr{}, false
+	}
+	first := prefix.Addr().Next()
+	last := addIPv4(first, uint32(capacity-1))
+	return int(capacity), first, last, true
+}
+
+func normalizeSubnetCIDR(cidr, prefix string) string {
+	cidr, prefix = strings.TrimSpace(cidr), strings.TrimSpace(prefix)
+	if cidr == "" && strings.Contains(prefix, "/") {
+		return prefix
+	}
+	bitsText := strings.TrimPrefix(cidr, "/")
+	bits, err := strconv.Atoi(bitsText)
+	if err != nil || bits < 0 || bits > 32 || prefix == "" {
+		return cidr
+	}
+	base := prefix
+	if strings.Count(base, ".") == 2 {
+		base += ".0"
+	}
+	return base + "/" + strconv.Itoa(bits)
+}
+
+func addIPv4(addr netip.Addr, delta uint32) netip.Addr {
+	b := addr.As4()
+	value := uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
+	value += delta
+	return netip.AddrFrom4([4]byte{byte(value >> 24), byte(value >> 16), byte(value >> 8), byte(value)})
+}
+
+// VisualizeIPSubnet 返回 CIDR 中完整的可用地址空间。未录入 ip_pool 的地址以 ID=0、状态=空闲返回。
+func (s *Store) VisualizeIPSubnet(subnet string, page, pageSize int) ([]IPEntry, int, error) {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.VisualizeIPSubnetForProject(scope, subnet, page, pageSize)
+}
+
+func (s *Store) VisualizeIPSubnetForProject(scope ProjectScope, subnet string, page, pageSize int) ([]IPEntry, int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, 0, err
+	}
+	subnet = strings.TrimSpace(subnet)
+	var cidr, prefix string
+	err := s.db.QueryRow(`SELECT IFNULL(cidr,''),IFNULL(prefix,'') FROM ip_subnets WHERE project_id=? AND name=?`, scope.ProjectID, subnet).Scan(&cidr, &prefix)
+	if err == sql.ErrNoRows {
+		return nil, 0, fmt.Errorf("网段「%s」尚未定义 CIDR", subnet)
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	total, first, _, ok := usableIPv4Range(normalizeSubnetCIDR(cidr, prefix))
+	if !ok {
+		return nil, 0, fmt.Errorf("网段「%s」的 CIDR 无效或没有可用主机地址", subnet)
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 500 {
+		pageSize = 100
+	}
+	offset := (page - 1) * pageSize
+	if offset >= total {
+		return []IPEntry{}, total, nil
+	}
+	limit := min(pageSize, total-offset)
+	rows := make([]IPEntry, 0, limit)
+	addr := first
+	for i := 0; i < offset; i++ {
+		addr = addr.Next()
+	}
+	for i := 0; i < limit; i++ {
+		rows = append(rows, IPEntry{ProjectID: scope.ProjectID, Subnet: subnet, IP: addr.String(), Status: "空闲"})
+		addr = addr.Next()
+	}
+
+	dbRows, err := s.db.Query(`SELECT id,project_id,subnet,ip,IFNULL(department,''),IFNULL(room,''),IFNULL(account,''),IFNULL(status,''),IFNULL(remark,'')
+		FROM ip_pool WHERE project_id=? AND subnet=?`, scope.ProjectID, subnet)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer dbRows.Close()
+	byIP := make(map[string]IPEntry)
+	for dbRows.Next() {
+		var entry IPEntry
+		if err := dbRows.Scan(&entry.ID, &entry.ProjectID, &entry.Subnet, &entry.IP, &entry.Department, &entry.Room, &entry.Account, &entry.Status, &entry.Remark); err != nil {
+			return nil, 0, err
+		}
+		byIP[entry.IP] = entry
+	}
+	if err := dbRows.Err(); err != nil {
+		return nil, 0, err
+	}
+	for i := range rows {
+		if entry, exists := byIP[rows[i].IP]; exists {
+			rows[i] = entry
+		}
+	}
+	if err := s.attachIPOwnersForProject(scope, rows); err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }
 
 // ipPrefixValue 把 "138.64.7" 这类前缀转成可比较的整数值，用于网段自然排序。
@@ -494,6 +644,16 @@ func (s *Store) CreateIPEntryForProject(scope ProjectScope, e *IPEntry) (int64, 
 	if cnt > 0 {
 		return 0, fmt.Errorf("IP %s 已存在", e.IP)
 	}
+	var owner Asset
+	err := s.db.QueryRow(`SELECT id,IFNULL(user_name,''),IFNULL(department,''),IFNULL(room,'') FROM assets
+		WHERE project_id=? AND (ip=? OR terminal_ip=?) LIMIT 1`, scope.ProjectID, e.IP, e.IP).
+		Scan(&owner.ID, &owner.UserName, &owner.Department, &owner.Room)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, err
+	}
+	if err == nil {
+		e.Status, e.Account, e.Department, e.Room = "在用", owner.UserName, owner.Department, owner.Room
+	}
 	res, err := s.db.Exec(`INSERT INTO ip_pool (project_id, subnet, ip, department, room, account, status, remark)
 		VALUES (?,?,?,?,?,?,?,?)`, scope.ProjectID, e.Subnet, e.IP, e.Department, e.Room, e.Account, e.Status, e.Remark)
 	if err != nil {
@@ -550,6 +710,78 @@ func (s *Store) AllocateIPForProject(scope ProjectScope, id int64, department, a
 	return err
 }
 
+func (s *Store) AllocateIPToAsset(id, assetID int64, field, remark string) error {
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		return err
+	}
+	return s.AllocateIPToAssetForProject(scope, id, assetID, field, remark)
+}
+
+// AllocateIPToAssetForProject 在一个事务中同步资产与 IP 池，人员、部门和位置以资产台账为准。
+func (s *Store) AllocateIPToAssetForProject(scope ProjectScope, id, assetID int64, field, remark string) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	if field != "ip" && field != "terminal_ip" {
+		return fmt.Errorf("IP 用途无效")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var entry IPEntry
+	if err := tx.QueryRow(`SELECT id,project_id,subnet,ip,IFNULL(status,''),IFNULL(remark,'') FROM ip_pool WHERE id=? AND project_id=?`, id, scope.ProjectID).
+		Scan(&entry.ID, &entry.ProjectID, &entry.Subnet, &entry.IP, &entry.Status, &entry.Remark); err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("IP 条目不存在")
+		}
+		return err
+	}
+	if entry.Status == "在用" {
+		return fmt.Errorf("IP %s 已被占用，请先释放", entry.IP)
+	}
+	var asset Asset
+	if err := tx.QueryRow(`SELECT id,IFNULL(device_type,''),IFNULL(user_name,''),IFNULL(department,''),IFNULL(room,''),IFNULL(ip,''),IFNULL(terminal_ip,'') FROM assets WHERE id=? AND project_id=?`, assetID, scope.ProjectID).
+		Scan(&asset.ID, &asset.DeviceType, &asset.UserName, &asset.Department, &asset.Room, &asset.IP, &asset.TerminalIP); err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("资产不存在")
+		}
+		return err
+	}
+	if field == "terminal_ip" && !isCloudDesktopDeviceType(asset.DeviceType) {
+		return fmt.Errorf("仅云桌面类设备可以分配终端物理 IP")
+	}
+	var conflicts int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM assets WHERE project_id=? AND id<>? AND (ip=? OR terminal_ip=?)`, scope.ProjectID, assetID, entry.IP, entry.IP).Scan(&conflicts); err != nil {
+		return err
+	}
+	if conflicts > 0 {
+		return fmt.Errorf("IP %s 已关联其他资产", entry.IP)
+	}
+	oldIP := asset.IP
+	if field == "terminal_ip" {
+		oldIP = asset.TerminalIP
+	}
+	column := "ip"
+	if field == "terminal_ip" {
+		column = "terminal_ip"
+	}
+	if _, err := tx.Exec(`UPDATE assets SET `+column+`=?,updated_at=? WHERE id=? AND project_id=?`, entry.IP, time.Now().Format("2006-01-02 15:04:05"), assetID, scope.ProjectID); err != nil {
+		return err
+	}
+	if oldIP != "" && oldIP != entry.IP {
+		if err := releaseUnreferencedIPInTx(tx, scope.ProjectID, oldIP); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE ip_pool SET status='在用',department=?,account=?,room=?,remark=? WHERE id=? AND project_id=?`, asset.Department, asset.UserName, asset.Room, remark, id, scope.ProjectID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // ReleaseIP 释放一个 IP：置回「空闲」并清空占用信息，保留 IP 与网段。
 func (s *Store) ReleaseIP(id int64) error {
 	scope, err := s.DefaultProjectScope()
@@ -567,8 +799,33 @@ func (s *Store) ReleaseIPForProject(scope ProjectScope, id int64) error {
 	if cur.Status != "在用" {
 		return fmt.Errorf("IP %s 当前不是占用状态，无需释放", cur.IP)
 	}
-	_, err = s.db.Exec(`UPDATE ip_pool SET status='空闲', department='', account='', room='', remark='' WHERE id=? AND project_id=?`, id, scope.ProjectID)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE assets SET ip=CASE WHEN ip=? THEN '' ELSE ip END, terminal_ip=CASE WHEN terminal_ip=? THEN '' ELSE terminal_ip END, updated_at=? WHERE project_id=? AND (ip=? OR terminal_ip=?)`, cur.IP, cur.IP, time.Now().Format("2006-01-02 15:04:05"), scope.ProjectID, cur.IP, cur.IP); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE ip_pool SET status='空闲', department='', account='', room='', remark='' WHERE id=? AND project_id=?`, id, scope.ProjectID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func releaseUnreferencedIPInTx(tx *sql.Tx, projectID int64, ip string) error {
+	if strings.TrimSpace(ip) == "" {
+		return nil
+	}
+	var references int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM assets WHERE project_id=? AND (ip=? OR terminal_ip=?)`, projectID, ip, ip).Scan(&references); err != nil {
+		return err
+	}
+	if references == 0 {
+		_, err := tx.Exec(`UPDATE ip_pool SET status='空闲',department='',account='',room='',remark='' WHERE project_id=? AND ip=?`, projectID, ip)
+		return err
+	}
+	return nil
 }
 
 // ipOwner 返回占用该 IP 的资产编号与使用人（没有则返回空串）。

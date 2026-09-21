@@ -635,7 +635,7 @@ func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
 	sheet := "资产台账"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"序号", "资产编码", "终端主机SN", "显示器SN", "使用人", "部门", "房间/位置", "业务IP", "终端IP", "软件安装情况", "状态", "网络类型", "备注"}
+	headers := []string{"序号", "资产编码", "设备类型", "终端主机SN", "显示器SN", "使用人", "部门", "房间/位置", "设备/业务IP", "终端物理IP", "软件安装情况", "状态", "网络类型", "备注"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(sheet, cell, h)
@@ -644,7 +644,7 @@ func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
 	for rowIdx, a := range assets {
 		r := rowIdx + 2
 		vals := []interface{}{
-			a.ID, a.AssetCode, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark,
+			a.ID, a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark,
 		}
 		for colIdx, v := range vals {
 			cell, _ := excelize.CoordinatesToCellName(colIdx+1, r)
@@ -665,13 +665,13 @@ func (s *Server) handleDownloadTemplate(w http.ResponseWriter, r *http.Request) 
 	sheet := "资产导入模板"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"资产编码", "终端主机SN", "显示器SN", "当前使用人", "所属组织", "房间/位置", "业务IP", "终端IP", "软件安装情况", "状态", "网络类型", "备注"}
+	headers := []string{"资产编码", "设备类型", "终端主机SN", "显示器SN", "当前使用人", "所属组织", "房间/位置", "设备/业务IP", "终端物理IP", "软件安装情况", "状态", "网络类型", "备注"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(sheet, cell, h)
 	}
 
-	example := []interface{}{"ASSET-2026-001", "HOST-SN-001", "DISPLAY-SN-001", "示例人员", "信息技术部", "A101", "10.10.1.10", "10.10.1.11", "终端安全客户端", "在用", "专网", "示例数据"}
+	example := []interface{}{"ASSET-2026-001", "台式电脑", "HOST-SN-001", "DISPLAY-SN-001", "示例人员", "信息技术部", "A101", "10.10.1.10", "", "终端安全客户端", "在用", "内网", "示例数据"}
 	for colIdx, v := range example {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 2)
 		f.SetCellValue(sheet, cell, v)
@@ -719,6 +719,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("GET /api/logs", s.handleListLogs)
 	scoped("GET /api/ip_pool", s.handleListIPPool)
 	scoped("GET /api/ip_pool/summary", s.handleIPPoolSummary)
+	scoped("GET /api/ip_pool/visualization", s.handleIPPoolVisualization)
 	scoped("GET /api/ip_pool/export", s.handleExportIPPool)
 	scoped("POST /api/ip_pool", s.handleCreateIPEntry)
 	scoped("POST /api/ip_pool/normalize", s.handleNormalizeIPPool)
@@ -737,6 +738,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("GET /api/search", s.handleGlobalSearch)
 	scoped("POST /api/import/sangfor", s.handleSangforImport)
 	mux.HandleFunc("GET /api/template/assets", s.handleDownloadTemplate)
+	scoped("POST /api/import/assets", s.handleImportAssets)
 
 	// Cmdb 资源管理
 	scoped("GET /api/cmdb/meta", s.handleCmdbMeta)
@@ -750,6 +752,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/cmdb/assets/template", s.handleDownloadCmdbTemplate)
 	scoped("POST /api/cmdb/assets/import", s.handleImportCmdbAssets)
 	scoped("GET /api/cmdb/assets/filters", s.handleCmdbAssetFilters)
+	scoped("PUT /api/cmdb/assets/{id}/full", s.handleReplaceCmdbAsset)
 	scoped("PUT /api/cmdb/assets/{id}", s.handleUpdateCmdbAsset)
 	scoped("DELETE /api/cmdb/assets/{id}", s.handleDeleteCmdbAsset)
 	scoped("POST /api/cmdb/sync/legacy", s.handleCmdbSyncLegacy)
@@ -759,6 +762,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 
 	// CMDB 工单管理
 	scoped("GET /api/cmdb/work-orders", s.handleListCmdbWorkOrders)
+	scoped("GET /api/cmdb/work-orders/export", s.handleExportCmdbWorkOrders)
 	scoped("POST /api/cmdb/work-orders", s.handleCreateCmdbWorkOrder)
 	scoped("PUT /api/cmdb/work-orders/{id}", s.handleUpdateCmdbWorkOrder)
 	scoped("DELETE /api/cmdb/work-orders/{id}", s.handleDeleteCmdbWorkOrder)

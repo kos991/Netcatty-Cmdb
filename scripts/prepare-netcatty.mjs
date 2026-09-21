@@ -59,7 +59,7 @@ function assertContainsOnce(relativePath, anchor) {
   ["global.d.ts", "interface NetcattyBridge {"],
 ].forEach(([file, anchor]) => assertContainsOnce(file, anchor));
 
-cpSync(join(repositoryRoot, "web", "src"), join(target, "components", "cmdb"), {
+cpSync(join(integrationRoot, "cmdb"), join(target, "components", "cmdb"), {
   recursive: true,
   force: true,
 });
@@ -328,18 +328,26 @@ update("electron-builder.config.cjs", (source) => {
   );
 });
 
-update("package.json", (source) => {
-  const pkg = JSON.parse(source);
-  pkg.dependencies = {
-    ...pkg.dependencies,
-    "@ant-design/icons": "^5.5.1",
-    "@ant-design/v5-patch-for-react-19": "^1.0.3",
-    antd: "^5.21.6",
-    dayjs: "^1.11.13",
-  };
-  pkg.scripts["build:plugin-packages"] = pkg.scripts["build:plugin-packages"]
-    .replace(" && npm run build --workspace @netcatty/cmdb-plugin", "");
-  return `${JSON.stringify(pkg, null, 2)}\n`;
-});
+update("eslint.config.js", (source) => replaceOnce(
+  source,
+  'export default [',
+  `export default [
+  {
+    files: ["components/cmdb/**/*.{js,jsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: globals.browser,
+    },
+    plugins: { "react-hooks": reactHooks, "unused-imports": unusedImports },
+    rules: {
+      "no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "error",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+    },
+  },`,
+  "eslint.config.js",
+));
 
 console.log(`Prepared Netcatty Cmdb integration at ${target}`);

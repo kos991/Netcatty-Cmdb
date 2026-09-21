@@ -13,12 +13,16 @@ const (
 	OrgNodeDepartment   = "department"
 	OrgNodeGroup        = "group"
 
-	ConfigKindOrgNodes    = "org-nodes"
-	ConfigKindDeviceTypes = "device-types"
-	ConfigKindSoftware    = "software"
-	ConfigKindLocations   = "locations"
-	ConfigKindStatuses    = "statuses"
-	ConfigKindModels      = "models"
+	ConfigKindOrgNodes            = "org-nodes"
+	ConfigKindDeviceTypes         = "device-types"
+	ConfigKindSoftware            = "software"
+	ConfigKindLocations           = "locations"
+	ConfigKindStatuses            = "statuses"
+	ConfigKindModels              = "models"
+	ConfigKindWorkOrderCategories = "work-order-categories"
+	ConfigKindWorkOrderTypes      = "work-order-types"
+	ConfigKindWorkOrderPriorities = "work-order-priorities"
+	ConfigKindWorkOrderRule       = "work-order-rule"
 )
 
 var ErrReferenced = errors.New("配置项已被引用")
@@ -402,6 +406,14 @@ func (s *Store) ListConfigItems(scope ProjectScope, kind string) ([]ConfigItem, 
 		return s.listFlatConfigItems(scope, "cmdb_locations", false)
 	case ConfigKindStatuses:
 		return s.listFlatConfigItems(scope, "cmdb_statuses", false)
+	case ConfigKindWorkOrderCategories:
+		return s.listFlatConfigItems(scope, "cmdb_work_order_categories", false)
+	case ConfigKindWorkOrderTypes:
+		return s.listFlatConfigItems(scope, "cmdb_work_order_types", false)
+	case ConfigKindWorkOrderPriorities:
+		return s.listFlatConfigItems(scope, "cmdb_work_order_priorities", false)
+	case ConfigKindWorkOrderRule:
+		return s.listFlatConfigItems(scope, "cmdb_work_order_rules", true)
 	default:
 		return nil, fmt.Errorf("不支持的配置类型: %s", kind)
 	}
@@ -425,6 +437,14 @@ func (s *Store) CreateConfigItem(scope ProjectScope, kind string, item *ConfigIt
 		return s.createFlatConfigItem(scope, "cmdb_locations", kind, item, false)
 	case ConfigKindStatuses:
 		return s.createFlatConfigItem(scope, "cmdb_statuses", kind, item, false)
+	case ConfigKindWorkOrderCategories:
+		return s.createFlatConfigItem(scope, "cmdb_work_order_categories", kind, item, false)
+	case ConfigKindWorkOrderTypes:
+		return s.createFlatConfigItem(scope, "cmdb_work_order_types", kind, item, false)
+	case ConfigKindWorkOrderPriorities:
+		return s.createFlatConfigItem(scope, "cmdb_work_order_priorities", kind, item, false)
+	case ConfigKindWorkOrderRule:
+		return s.createFlatConfigItem(scope, "cmdb_work_order_rules", kind, item, true)
 	default:
 		return 0, fmt.Errorf("不支持的配置类型: %s", kind)
 	}
@@ -448,6 +468,14 @@ func (s *Store) UpdateConfigItem(scope ProjectScope, kind string, item *ConfigIt
 		return s.updateFlatConfigItem(scope, "cmdb_locations", kind, item, false)
 	case ConfigKindStatuses:
 		return s.updateFlatConfigItem(scope, "cmdb_statuses", kind, item, false)
+	case ConfigKindWorkOrderCategories:
+		return s.updateFlatConfigItem(scope, "cmdb_work_order_categories", kind, item, false)
+	case ConfigKindWorkOrderTypes:
+		return s.updateFlatConfigItem(scope, "cmdb_work_order_types", kind, item, false)
+	case ConfigKindWorkOrderPriorities:
+		return s.updateFlatConfigItem(scope, "cmdb_work_order_priorities", kind, item, false)
+	case ConfigKindWorkOrderRule:
+		return s.updateFlatConfigItem(scope, "cmdb_work_order_rules", kind, item, true)
 	default:
 		return fmt.Errorf("不支持的配置类型: %s", kind)
 	}
@@ -480,6 +508,14 @@ func (s *Store) DeleteConfigItem(scope ProjectScope, kind string, id int64) erro
 		return s.softDeleteFlatConfigItem(scope, "cmdb_locations", id)
 	case ConfigKindStatuses:
 		return s.softDeleteFlatConfigItem(scope, "cmdb_statuses", id)
+	case ConfigKindWorkOrderCategories:
+		return s.softDeleteFlatConfigItem(scope, "cmdb_work_order_categories", id)
+	case ConfigKindWorkOrderTypes:
+		return s.softDeleteFlatConfigItem(scope, "cmdb_work_order_types", id)
+	case ConfigKindWorkOrderPriorities:
+		return s.softDeleteFlatConfigItem(scope, "cmdb_work_order_priorities", id)
+	case ConfigKindWorkOrderRule:
+		return s.softDeleteFlatConfigItem(scope, "cmdb_work_order_rules", id)
 	default:
 		return fmt.Errorf("不支持的配置类型: %s", kind)
 	}

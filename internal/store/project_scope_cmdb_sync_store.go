@@ -126,7 +126,7 @@ func (s *Store) SyncLegacyToCmdbForProject(scope ProjectScope) (*CmdbSyncResult,
 		}
 		item := &CmdbAsset{
 			AssetCode: asset.AssetCode, Name: name, Status: mapLegacyAssetStatus(asset.Status),
-			AssetClass: "physical", SN: asset.BoxSN,
+			AssetClass: "physical", DeviceType: asset.DeviceType, SN: asset.BoxSN,
 			OrgID: orgMap[strings.TrimSpace(asset.Department)], Department: asset.Department,
 			Owner: asset.UserName, MgmtIP: asset.TerminalIP,
 			SourceType: "legacy_asset", SourceID: asset.ID,

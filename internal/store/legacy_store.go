@@ -22,7 +22,7 @@ func (s *Store) AllAssetsForProject(scope ProjectScope) ([]Asset, error) {
 	if _, err := s.ResolveProject(scope); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(`SELECT id, project_id, IFNULL(asset_code,''), IFNULL(box_sn,''), IFNULL(display_sn,''), IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,''), IFNULL(ip,''), IFNULL(terminal_ip,''), IFNULL(security_software,''), IFNULL(status,''), IFNULL(net_type,''), IFNULL(remark,''), IFNULL(created_at,''), IFNULL(updated_at,'') FROM assets WHERE project_id=? ORDER BY id DESC`, scope.ProjectID)
+	rows, err := s.db.Query(`SELECT id, project_id, IFNULL(asset_code,''), IFNULL(device_type,''), IFNULL(box_sn,''), IFNULL(display_sn,''), IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,''), IFNULL(ip,''), IFNULL(terminal_ip,''), IFNULL(security_software,''), IFNULL(status,''), IFNULL(net_type,''), IFNULL(remark,''), IFNULL(created_at,''), IFNULL(updated_at,'') FROM assets WHERE project_id=? ORDER BY id DESC`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +31,7 @@ func (s *Store) AllAssetsForProject(scope ProjectScope) ([]Asset, error) {
 	var list []Asset
 	for rows.Next() {
 		var a Asset
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.AssetCode, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.SecuritySoftware, &a.Status, &a.NetType, &a.Remark, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.SecuritySoftware, &a.Status, &a.NetType, &a.Remark, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, a)
@@ -158,8 +158,8 @@ func (s *Store) GetAssetForProject(scope ProjectScope, id int64) (*Asset, []Asse
 		return nil, nil, err
 	}
 	var a Asset
-	err := s.db.QueryRow(`SELECT id, project_id, IFNULL(asset_code,''), IFNULL(box_sn,''), IFNULL(display_sn,''), IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,''), IFNULL(ip,''), IFNULL(terminal_ip,''), IFNULL(security_software,''), IFNULL(status,''), IFNULL(net_type,''), IFNULL(remark,''), IFNULL(created_at,''), IFNULL(updated_at,'') FROM assets WHERE id = ? AND project_id=?`, id, scope.ProjectID).Scan(
-		&a.ID, &a.ProjectID, &a.AssetCode, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.SecuritySoftware, &a.Status, &a.NetType, &a.Remark, &a.CreatedAt, &a.UpdatedAt,
+	err := s.db.QueryRow(`SELECT id, project_id, IFNULL(asset_code,''), IFNULL(device_type,''), IFNULL(box_sn,''), IFNULL(display_sn,''), IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,''), IFNULL(ip,''), IFNULL(terminal_ip,''), IFNULL(security_software,''), IFNULL(status,''), IFNULL(net_type,''), IFNULL(remark,''), IFNULL(created_at,''), IFNULL(updated_at,'') FROM assets WHERE id = ? AND project_id=?`, id, scope.ProjectID).Scan(
+		&a.ID, &a.ProjectID, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.SecuritySoftware, &a.Status, &a.NetType, &a.Remark, &a.CreatedAt, &a.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -300,15 +300,63 @@ func (s *Store) CreateAssetForProject(scope ProjectScope, a *Asset, operator str
 	if a == nil {
 		return 0, fmt.Errorf("资产信息不能为空")
 	}
+	normalizeLegacyAssetForWrite(a)
 	now := time.Now().Format("2006-01-02 15:04:05")
-	res, err := s.db.Exec(`INSERT INTO assets (project_id, asset_code, box_sn, display_sn, user_name, department, room, ip, terminal_ip, security_software, status, net_type, remark, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		scope.ProjectID, a.AssetCode, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark, now, now,
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`INSERT INTO assets (project_id, asset_code, device_type, box_sn, display_sn, user_name, department, room, ip, terminal_ip, security_software, status, net_type, remark, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		scope.ProjectID, a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark, now, now,
 	)
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := syncAssetIPPoolInTx(tx, scope.ProjectID, id, "", "", a); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// ImportAssetsForProject 在同一事务中导入终端资产，任一行失败时不保留部分数据。
+func (s *Store) ImportAssetsForProject(scope ProjectScope, assets []Asset) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	now := time.Now().Format("2006-01-02 15:04:05")
+	for index := range assets {
+		a := &assets[index]
+		normalizeLegacyAssetForWrite(a)
+		res, err := tx.Exec(`INSERT INTO assets (project_id, asset_code, device_type, box_sn, display_sn, user_name, department, room, ip, terminal_ip, security_software, status, net_type, remark, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			scope.ProjectID, a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark, now, now,
+		)
+		if err != nil {
+			return fmt.Errorf("第 %d 条资产写入失败: %w", index+1, err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if err := syncAssetIPPoolInTx(tx, scope.ProjectID, id, "", "", a); err != nil {
+			return fmt.Errorf("第 %d 条资产同步 IP 失败: %w", index+1, err)
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) UpdateAsset(a *Asset, operator string) error {
@@ -326,14 +374,30 @@ func (s *Store) UpdateAssetForProject(scope ProjectScope, a *Asset, operator str
 	if a == nil {
 		return fmt.Errorf("资产信息不能为空")
 	}
+	normalizeLegacyAssetForWrite(a)
 	now := time.Now().Format("2006-01-02 15:04:05")
-	res, err := s.db.Exec(`UPDATE assets SET asset_code=?, box_sn=?, display_sn=?, user_name=?, department=?, room=?, ip=?, terminal_ip=?, security_software=?, status=?, net_type=?, remark=?, updated_at=? WHERE id=? AND project_id=?`,
-		a.AssetCode, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark, now, a.ID, scope.ProjectID,
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	old, err := legacyAssetSnapshotInTx(tx, a.ID, scope.ProjectID)
+	if err != nil {
+		return err
+	}
+	res, err := tx.Exec(`UPDATE assets SET asset_code=?, device_type=?, box_sn=?, display_sn=?, user_name=?, department=?, room=?, ip=?, terminal_ip=?, security_software=?, status=?, net_type=?, remark=?, updated_at=? WHERE id=? AND project_id=?`,
+		a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.SecuritySoftware, a.Status, a.NetType, a.Remark, now, a.ID, scope.ProjectID,
 	)
 	if err != nil {
 		return err
 	}
-	return requireAffected(res, "资产不存在")
+	if err := requireAffected(res, "资产不存在"); err != nil {
+		return err
+	}
+	if err := syncAssetIPPoolInTx(tx, scope.ProjectID, a.ID, old.IP, old.TerminalIP, a); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) DeleteAsset(id int64, reason, operator string) error {
@@ -446,6 +510,10 @@ func (s *Store) TransferUserForProject(scope ProjectScope, id int64, req Transfe
 		WHERE project_id=? AND source_type='legacy_asset' AND source_id=?`, toUser, department, room, logTime, scope.ProjectID, id); err != nil {
 		return err
 	}
+	updated := &Asset{UserName: toUser, Department: department, Room: room, IP: ip, TerminalIP: asset.TerminalIP}
+	if err := syncAssetIPPoolInTx(tx, scope.ProjectID, id, asset.IP, asset.TerminalIP, updated); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -544,8 +612,8 @@ func (s *Store) MaintenanceForProject(scope ProjectScope, id int64, req Maintena
 		oldPartCode := fmt.Sprintf("%s-旧件-%s-%d", sourceCode, partType, logID)
 		remark := fmt.Sprintf("原资产 %s（ID:%d）维修换下旧件，履历ID:%d", sourceCode, id, logID)
 		if _, err := tx.Exec(`INSERT INTO assets
-			(project_id, asset_code, box_sn, display_sn, status, remark, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, scope.ProjectID, oldPartCode, boxSN, displaySN, oldPartStatus, remark, logTime, logTime); err != nil {
+			(project_id, asset_code, device_type, box_sn, display_sn, status, remark, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, scope.ProjectID, oldPartCode, asset.DeviceType, boxSN, displaySN, oldPartStatus, remark, logTime, logTime); err != nil {
 			return err
 		}
 	}
@@ -569,21 +637,23 @@ func (s *Store) MaintenanceForProject(scope ProjectScope, id int64, req Maintena
 
 type legacyAssetSnapshot struct {
 	AssetCode  string
+	DeviceType string
 	BoxSN      string
 	DisplaySN  string
 	UserName   string
 	Department string
 	Room       string
 	IP         string
+	TerminalIP string
 	Status     string
 }
 
 func legacyAssetSnapshotInTx(tx *sql.Tx, id, projectID int64) (legacyAssetSnapshot, error) {
 	var asset legacyAssetSnapshot
-	err := tx.QueryRow(`SELECT IFNULL(asset_code,''), IFNULL(box_sn,''), IFNULL(display_sn,''),
-		IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,''), IFNULL(ip,''), IFNULL(status,'')
-		FROM assets WHERE id=? AND project_id=?`, id, projectID).Scan(&asset.AssetCode, &asset.BoxSN, &asset.DisplaySN,
-		&asset.UserName, &asset.Department, &asset.Room, &asset.IP, &asset.Status)
+	err := tx.QueryRow(`SELECT IFNULL(asset_code,''), IFNULL(device_type,''), IFNULL(box_sn,''), IFNULL(display_sn,''),
+		IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,''), IFNULL(ip,''), IFNULL(terminal_ip,''), IFNULL(status,'')
+		FROM assets WHERE id=? AND project_id=?`, id, projectID).Scan(&asset.AssetCode, &asset.DeviceType, &asset.BoxSN, &asset.DisplaySN,
+		&asset.UserName, &asset.Department, &asset.Room, &asset.IP, &asset.TerminalIP, &asset.Status)
 	if err == sql.ErrNoRows {
 		return asset, fmt.Errorf("资产不存在")
 	}
@@ -591,6 +661,55 @@ func legacyAssetSnapshotInTx(tx *sql.Tx, id, projectID int64) (legacyAssetSnapsh
 		return asset, err
 	}
 	return asset, nil
+}
+
+func normalizeLegacyAssetForWrite(asset *Asset) {
+	asset.DeviceType = strings.TrimSpace(asset.DeviceType)
+	// 旧数据的类型可能为空，此时保留已有物理 IP；仅对明确的普通设备清理该字段。
+	if asset.DeviceType != "" && !isCloudDesktopDeviceType(asset.DeviceType) {
+		asset.TerminalIP = ""
+	}
+}
+
+func syncAssetIPPoolInTx(tx *sql.Tx, projectID, assetID int64, oldIP, oldTerminalIP string, asset *Asset) error {
+	newIPs := []string{strings.TrimSpace(asset.IP), strings.TrimSpace(asset.TerminalIP)}
+	if newIPs[0] != "" && newIPs[0] == newIPs[1] {
+		return fmt.Errorf("设备 IP 与终端物理 IP 不能相同")
+	}
+	for _, ip := range newIPs {
+		if ip == "" {
+			continue
+		}
+		var conflicts int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM assets WHERE project_id=? AND id<>? AND (ip=? OR terminal_ip=?)`, projectID, assetID, ip, ip).Scan(&conflicts); err != nil {
+			return err
+		}
+		if conflicts > 0 {
+			return fmt.Errorf("IP %s 已关联其他资产", ip)
+		}
+		if _, err := tx.Exec(`UPDATE ip_pool SET status='在用',account=?,department=?,room=? WHERE project_id=? AND ip=?`, asset.UserName, asset.Department, asset.Room, projectID, ip); err != nil {
+			return err
+		}
+	}
+	for _, old := range []string{oldIP, oldTerminalIP} {
+		old = strings.TrimSpace(old)
+		if old == "" || old == newIPs[0] || old == newIPs[1] {
+			continue
+		}
+		if err := releaseUnreferencedIPInTx(tx, projectID, old); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isCloudDesktopDeviceType(deviceType string) bool {
+	for _, keyword := range []string{"云桌面", "云盒", "盒子"} {
+		if strings.Contains(deviceType, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func requireAffected(result sql.Result, message string) error {

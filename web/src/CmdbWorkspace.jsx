@@ -18,12 +18,36 @@ import './cmdb/resource-ledger.css'
 import './modules/app-rebuild.css'
 import './cmdb-workspace.css'
 
-function ModulePanel({ hidden, children }) {
+const ModulePanel = React.memo(function ModulePanel({ hidden, children }) {
   const panel = useRef(null)
+  const getPopupContainer = useCallback(() => panel.current, [])
   return <section ref={panel} hidden={hidden} className="cmdb-module-panel">
-    <ConfigProvider getPopupContainer={() => panel.current}>{children}</ConfigProvider>
+    <ConfigProvider getPopupContainer={getPopupContainer}>{children}</ConfigProvider>
   </section>
-}
+})
+
+const DeviceAssetsPanel = React.memo(function DeviceAssetsPanel(props) {
+  return <DeviceAssetCenter {...props} />
+})
+
+const PeoplePanel = React.memo(function PeoplePanel(props) {
+  return <OrgPersonCenter {...props} />
+})
+
+const IPPanel = React.memo(function IPPanel(props) {
+  return <IPManager {...props} />
+})
+
+const OperationsPanel = React.memo(function OperationsPanel({ activeTab, onTabChange, meta, focusTarget }) {
+  return <Tabs activeKey={activeTab} onChange={onTabChange} items={[
+    { key: 'dashboard', label: '统计概览', children: <Dashboard /> },
+    { key: 'audit', label: '运维履历', children: <AuditLogs meta={meta} focusTarget={focusTarget} /> },
+  ]} />
+})
+
+const ConfigPanel = React.memo(function ConfigPanel() {
+  return <CmdbConfig />
+})
 
 export default function CmdbWorkspace({
   activeModule,
@@ -40,11 +64,13 @@ export default function CmdbWorkspace({
   const [targets, setTargets] = useState({})
   const [visited, setVisited] = useState(new Set(['assets']))
   const [hostTheme, setHostTheme] = useState({})
-  const module = activeModule ?? internalModule
+  const controlled = activeModule !== undefined
+  const module = controlled ? activeModule : internalModule
   const setModule = useCallback((nextModule) => {
-    if (activeModule === undefined) setInternalModule(nextModule)
+    if (!controlled) setInternalModule(nextModule)
     onModuleChange?.(nextModule)
-  }, [activeModule, onModuleChange])
+  }, [controlled, onModuleChange])
+  const getRootPopupContainer = useCallback((trigger) => trigger?.closest('.cmdb-workspace') || root.current, [])
   const panelKey = panelKeyFor(module)
 
   const initialize = useCallback(async () => {
@@ -89,14 +115,14 @@ export default function CmdbWorkspace({
     return () => observer.disconnect()
   }, [])
 
-  const navigateSearch = (result) => {
+  const navigateSearch = useCallback((result) => {
     const target = resolveSearchTarget(result)
     if (!target) return
     setModule(target.module)
     if (result.tableKey === 'asset_logs') setOperationsTab('audit')
     const key = panelKeyFor(target.module)
     setTargets((previous) => ({ ...previous, [key]: { ...target.focusTarget } }))
-  }
+  }, [setModule])
 
   useEffect(() => {
     const handleKey = (event) => {
@@ -113,18 +139,15 @@ export default function CmdbWorkspace({
   }, [setModule])
 
   const panels = [
-    ['assets', <DeviceAssetCenter meta={meta} focusTarget={targets.assets} onNavigate={navigateSearch} />],
-    ['people', <OrgPersonCenter focusTarget={targets.people} onNavigate={navigateSearch} />],
-    ['ip', <IPManager meta={meta} focusTarget={targets.ip} onNavigate={navigateSearch} />],
-    ['operations', <Tabs activeKey={operationsTab} onChange={setOperationsTab} items={[
-      { key: 'dashboard', label: '统计概览', children: <Dashboard /> },
-      { key: 'audit', label: '运维履历', children: <AuditLogs meta={meta} focusTarget={targets.operations} /> },
-    ]} />],
-    ['config', <CmdbConfig />],
+    ['assets', <DeviceAssetsPanel meta={meta} focusTarget={targets.assets} onNavigate={navigateSearch} />],
+    ['people', <PeoplePanel focusTarget={targets.people} onNavigate={navigateSearch} />],
+    ['ip', <IPPanel meta={meta} focusTarget={targets.ip} onNavigate={navigateSearch} />],
+    ['operations', <OperationsPanel activeTab={operationsTab} onTabChange={setOperationsTab} meta={meta} focusTarget={targets.operations} />],
+    ['config', <ConfigPanel />],
   ]
 
   return <div ref={root} className={`cmdb-workspace${nativeShell ? ' cmdb-workspace-native' : ''}`}>
-    <ConfigProvider locale={zhCN} theme={hostTheme} getPopupContainer={(trigger) => trigger?.closest('.cmdb-workspace') || root.current}>
+    <ConfigProvider locale={zhCN} theme={hostTheme} getPopupContainer={getRootPopupContainer}>
       {!nativeShell && <ModuleTabs items={MODULES} activeKey={module} onChange={setModule} label="Cmdb 模块" />}
       <main className="cmdb-workspace-content">
         {error ? <Alert type="error" showIcon message="Cmdb 服务不可用" description={error} action={<Button onClick={initialize} loading={loading}>重试</Button>} />

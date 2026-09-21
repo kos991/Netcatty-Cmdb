@@ -6,6 +6,7 @@ type Asset struct {
 	ID               int64  `json:"id"`
 	ProjectID        int64  `json:"project_id"`
 	AssetCode        string `json:"asset_code"`
+	DeviceType       string `json:"device_type"`
 	BoxSN            string `json:"box_sn"`
 	DisplaySN        string `json:"display_sn"`
 	UserName         string `json:"user_name"`

@@ -119,7 +119,14 @@ func (s *Store) ListPersonsForProject(scope ProjectScope, q PersonQuery) ([]Pers
 		       COALESCE(NULLIF(g.name,''), IFNULL(p.group_name,'')),
 		       COALESCE(NULLIF(d.name,''), p.department), IFNULL(p.title,''), IFNULL(p.phone,''), IFNULL(p.email,''),
 		       p.status, IFNULL(p.remark,''), IFNULL(p.created_at,''), IFNULL(p.updated_at,''),
-		       (SELECT COUNT(*) FROM cmdb_assets a WHERE a.project_id = p.project_id AND (a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name))) AS asset_count
+		       ((SELECT COUNT(*) FROM cmdb_assets a
+		         WHERE a.project_id = p.project_id
+		           AND a.source_type <> 'legacy_asset'
+		           AND (a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name)))
+		        +
+		        (SELECT COUNT(*) FROM assets la
+		         WHERE la.project_id = p.project_id
+		           AND TRIM(IFNULL(la.user_name,'')) = TRIM(p.name))) AS asset_count
 		%s
 		%s
 		ORDER BY p.id DESC
@@ -171,7 +178,14 @@ func (s *Store) GetPersonForProject(scope ProjectScope, id int64) (*Person, erro
 		       COALESCE(NULLIF(g.name,''), IFNULL(p.group_name,'')),
 		       COALESCE(NULLIF(d.name,''), p.department), IFNULL(p.title,''), IFNULL(p.phone,''), IFNULL(p.email,''),
 		       p.status, IFNULL(p.remark,''), IFNULL(p.created_at,''), IFNULL(p.updated_at,''),
-		       (SELECT COUNT(*) FROM cmdb_assets a WHERE a.project_id = p.project_id AND (a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name))) AS asset_count
+		       ((SELECT COUNT(*) FROM cmdb_assets a
+		         WHERE a.project_id = p.project_id
+		           AND a.source_type <> 'legacy_asset'
+		           AND (a.owner_id = p.id OR (a.owner_id = 0 AND a.owner = p.name)))
+		        +
+		        (SELECT COUNT(*) FROM assets la
+		         WHERE la.project_id = p.project_id
+		           AND TRIM(IFNULL(la.user_name,'')) = TRIM(p.name))) AS asset_count
 		FROM cmdb_persons p
 		LEFT JOIN cmdb_org_nodes o ON o.id=p.org_id AND o.project_id=p.project_id AND o.deleted_at IS NULL
 		LEFT JOIN cmdb_org_nodes d ON d.id=p.department_id AND d.project_id=p.project_id AND d.deleted_at IS NULL
@@ -341,7 +355,7 @@ func (s *Store) GetPersonAssetsForProject(scope ProjectScope, personID int64) (*
 		return nil, nil, fmt.Errorf("人员不存在: %w", err)
 	}
 
-	query := cmdbAssetSelect + " WHERE a.project_id = ? AND (a.owner_id = ? OR (a.owner_id = 0 AND a.owner = ?)) ORDER BY a.id DESC"
+	query := cmdbAssetSelect + " WHERE a.project_id = ? AND a.source_type <> 'legacy_asset' AND (a.owner_id = ? OR (a.owner_id = 0 AND a.owner = ?)) ORDER BY a.id DESC"
 	rows, err := s.db.Query(query, scope.ProjectID, person.ID, person.Name)
 	if err != nil {
 		return nil, nil, err
@@ -356,9 +370,71 @@ func (s *Store) GetPersonAssetsForProject(scope ProjectScope, personID int64) (*
 		}
 		assets = append(assets, asset)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
 	rows.Close()
 
+	legacyRows, err := s.db.Query(`
+		SELECT la.id, la.project_id, IFNULL(la.asset_code,''), IFNULL(la.device_type,''),
+		       IFNULL(la.box_sn,''), IFNULL(la.display_sn,''), IFNULL(la.user_name,''),
+		       IFNULL(la.department,''), IFNULL(la.room,''), IFNULL(la.ip,''),
+		       IFNULL(la.terminal_ip,''), IFNULL(la.security_software,''), IFNULL(la.status,''),
+		       IFNULL(la.net_type,''), IFNULL(la.remark,''), IFNULL(la.created_at,''),
+		       IFNULL(la.updated_at,''), IFNULL(mapped.id,0)
+		FROM assets la
+		LEFT JOIN cmdb_assets mapped
+		  ON mapped.project_id = la.project_id
+		 AND mapped.source_type = 'legacy_asset'
+		 AND mapped.source_id = la.id
+		 AND mapped.deleted_at IS NULL
+		WHERE la.project_id = ? AND TRIM(IFNULL(la.user_name,'')) = TRIM(?)
+		ORDER BY la.id DESC`, scope.ProjectID, person.Name)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer legacyRows.Close()
+	for legacyRows.Next() {
+		var legacyID, mappedID int64
+		var asset CmdbAsset
+		if err := legacyRows.Scan(
+			&legacyID, &asset.ProjectID, &asset.AssetCode, &asset.DeviceType,
+			&asset.BoxSN, &asset.DisplaySN, &asset.Owner,
+			&asset.Department, &asset.Room, &asset.ManageIP,
+			&asset.MgmtIP, &asset.SecuritySoftware, &asset.Status,
+			&asset.NetType, &asset.Remark, &asset.CreatedAt,
+			&asset.UpdatedAt, &mappedID,
+		); err != nil {
+			return nil, nil, err
+		}
+		asset.ID = mappedID
+		if asset.ID == 0 {
+			asset.ID = -legacyID
+		}
+		asset.SourceType = "legacy_asset"
+		asset.SourceID = legacyID
+		asset.AssetClass = "terminal"
+		asset.SN = asset.BoxSN
+		asset.Name = asset.AssetCode
+		if asset.Name == "" {
+			asset.Name = asset.DeviceType
+		}
+		if asset.Name == "" {
+			asset.Name = "终端资产"
+		}
+		if asset.ManageIP != "" {
+			asset.Interfaces = []CmdbAssetInterface{{AssetID: asset.ID, Name: "设备 IP", IP: asset.ManageIP, IsPrimary: 1, NetworkZone: asset.NetType, NetZone: asset.NetType}}
+		}
+		assets = append(assets, asset)
+	}
+	if err := legacyRows.Err(); err != nil {
+		return nil, nil, err
+	}
+
 	for i := range assets {
+		if assets[i].SourceType == "legacy_asset" {
+			continue
+		}
 		ifaces, err := s.getAssetInterfacesForProject(scope, assets[i].ID)
 		if err != nil {
 			return nil, nil, err
@@ -369,7 +445,7 @@ func (s *Store) GetPersonAssetsForProject(scope ProjectScope, personID int64) (*
 		assets = []CmdbAsset{}
 	}
 	person.AssetCount = len(assets)
-	return person, assets, rows.Err()
+	return person, assets, nil
 }
 
 // TransferPersonAssets 一键批量交接人员名下的资产到新人员。
@@ -417,8 +493,8 @@ func (s *Store) TransferPersonAssetsForProject(scope ProjectScope, req PersonTra
 			targetIDs = append(targetIDs, id)
 		}
 	} else {
-		// 未指定具体资产列表，交接移交人名下的全部资产
-		rows, err := s.db.Query("SELECT id FROM cmdb_assets WHERE project_id = ? AND (owner_id = ? OR (owner_id = 0 AND owner = ?))", scope.ProjectID, fromPerson.ID, fromPerson.Name)
+		// 原生 CMDB 资产直接取 ID；终端台账优先复用映射 ID，未映射记录以负 ID 区分。
+		rows, err := s.db.Query("SELECT id FROM cmdb_assets WHERE project_id = ? AND source_type <> 'legacy_asset' AND (owner_id = ? OR (owner_id = 0 AND owner = ?))", scope.ProjectID, fromPerson.ID, fromPerson.Name)
 		if err != nil {
 			return 0, err
 		}
@@ -431,6 +507,29 @@ func (s *Store) TransferPersonAssetsForProject(scope ProjectScope, req PersonTra
 			targetIDs = append(targetIDs, id)
 		}
 		rows.Close()
+		legacyRows, err := s.db.Query(`
+			SELECT CASE WHEN mapped.id IS NULL THEN -la.id ELSE mapped.id END
+			FROM assets la
+			LEFT JOIN cmdb_assets mapped
+			  ON mapped.project_id=la.project_id AND mapped.source_type='legacy_asset'
+			 AND mapped.source_id=la.id AND mapped.deleted_at IS NULL
+			WHERE la.project_id=? AND TRIM(IFNULL(la.user_name,''))=TRIM(?)`, scope.ProjectID, fromPerson.Name)
+		if err != nil {
+			return 0, err
+		}
+		for legacyRows.Next() {
+			var id int64
+			if err := legacyRows.Scan(&id); err != nil {
+				legacyRows.Close()
+				return 0, err
+			}
+			targetIDs = append(targetIDs, id)
+		}
+		if err := legacyRows.Err(); err != nil {
+			legacyRows.Close()
+			return 0, err
+		}
+		legacyRows.Close()
 	}
 
 	if len(targetIDs) == 0 {
@@ -446,6 +545,34 @@ func (s *Store) TransferPersonAssetsForProject(scope ProjectScope, req PersonTra
 
 	transferredCount := 0
 	for _, assetID := range targetIDs {
+		if assetID < 0 {
+			legacyID := -assetID
+			var oldOwner, oldDept, oldRoom string
+			err := tx.QueryRow(`SELECT IFNULL(user_name,''), IFNULL(department,''), IFNULL(room,'')
+				FROM assets WHERE id=? AND project_id=?`, legacyID, scope.ProjectID).Scan(&oldOwner, &oldDept, &oldRoom)
+			if errors.Is(err, sql.ErrNoRows) {
+				return 0, fmt.Errorf("终端资产 %d 不属于当前项目: %w", legacyID, ErrProjectScopedNotFound)
+			}
+			if err != nil {
+				return 0, err
+			}
+			if strings.TrimSpace(oldOwner) != strings.TrimSpace(fromPerson.Name) {
+				return 0, fmt.Errorf("终端资产 %d 已不属于 %s", legacyID, fromPerson.Name)
+			}
+			if _, err := tx.Exec(`UPDATE assets SET user_name=?, department=?, updated_at=? WHERE id=? AND project_id=?`,
+				toPerson.Name, toPerson.Department, now, legacyID, scope.ProjectID); err != nil {
+				return 0, err
+			}
+			if _, err := tx.Exec(`
+				INSERT INTO asset_logs(project_id, asset_id, log_type, from_user, to_user, from_location, to_location, old_sn, new_sn, operator, description, log_time)
+				VALUES(?, ?, '调换使用人', ?, ?, ?, ?, '', '', ?, ?, ?)`,
+				scope.ProjectID, legacyID, oldOwner, toPerson.Name, strings.TrimSpace(oldDept+" "+oldRoom), strings.TrimSpace(toPerson.Department), operator, remark, now,
+			); err != nil {
+				return 0, err
+			}
+			transferredCount++
+			continue
+		}
 		var oldOwner, oldDept, oldRoom, boxSN, srcType string
 		var srcID int64
 		assetRelations := &CmdbAsset{ID: assetID}

@@ -19,15 +19,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - name: Check version consistency
         run: node scripts/check-version.mjs
       - name: Test release data scanner
         run: node --test scripts/check-release-data.test.mjs
-      - name: Build Ant Design frontend
-        working-directory: web
-        run: npm ci && npm run build
+      - name: Test native UI data contracts
+        run: node --test integrations/netcatty/cmdb/*.test.js
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -71,6 +68,8 @@ jobs:
           commit=$(node -p "require('./integrations/netcatty/upstream.json').commit")
           git clone --filter=blob:none "$repository" build/netcatty
           git -C build/netcatty checkout "$commit"
+      - name: Verify native UI assembly
+        run: node --test scripts/prepare-netcatty.test.mjs
       - name: Apply CMDB integration
         run: node scripts/prepare-netcatty.mjs --target build/netcatty
       - name: Install Netcatty dependencies

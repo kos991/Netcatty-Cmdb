@@ -228,6 +228,14 @@ func insertProjectScopedRow(t *testing.T, db *sql.DB, table, prefix string) int6
 		result, err = db.Exec(`INSERT INTO cmdb_locations(name, updated_at) VALUES (?, '')`, value)
 	case "cmdb_statuses":
 		result, err = db.Exec(`INSERT INTO cmdb_statuses(name, updated_at) VALUES (?, '')`, value)
+	case "cmdb_work_order_categories":
+		result, err = db.Exec(`INSERT INTO cmdb_work_order_categories(name, updated_at) VALUES (?, '')`, value)
+	case "cmdb_work_order_types":
+		result, err = db.Exec(`INSERT INTO cmdb_work_order_types(name, updated_at) VALUES (?, '')`, value)
+	case "cmdb_work_order_priorities":
+		result, err = db.Exec(`INSERT INTO cmdb_work_order_priorities(name, updated_at) VALUES (?, '')`, value)
+	case "cmdb_work_order_rules":
+		result, err = db.Exec(`INSERT INTO cmdb_work_order_rules(name, updated_at) VALUES (?, '')`, value)
 	default:
 		t.Fatalf("未定义 %s 的测试插入语句", table)
 	}

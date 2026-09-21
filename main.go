@@ -1,34 +1,19 @@
 package main
 
 import (
-	"embed"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log"
 	"net"
 	"net/http"
-	"os/exec"
-	"runtime"
 
 	"czfy-assets/internal"
 	"czfy-assets/internal/store"
 )
 
-//go:embed web/dist
-var webFS embed.FS
-
-func newHTTPHandler(srv *internal.Server, apiOnly bool) (http.Handler, error) {
+func newHTTPHandler(srv *internal.Server, _ bool) (http.Handler, error) {
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
-	if apiOnly {
-		return mux, nil
-	}
-	dist, err := fs.Sub(webFS, "web/dist")
-	if err != nil {
-		return nil, fmt.Errorf("加载前端资源失败: %w", err)
-	}
-	mux.Handle("/", http.FileServer(http.FS(dist)))
 	return mux, nil
 }
 
@@ -47,8 +32,9 @@ func openApplicationStore(dbPath string) (*store.Store, error) {
 func main() {
 	port := flag.Int("port", 0, "监听端口（0 表示自动选择空闲端口）")
 	dbPath := flag.String("db", "assets.db", "SQLite 数据库文件路径")
-	noBrowser := flag.Bool("no-browser", false, "启动时不自动打开浏览器")
-	apiOnly := flag.Bool("api-only", false, "仅启动 API 服务，不提供前端页面")
+	// 保留启动参数兼容已安装的 Netcatty 服务桥；服务始终仅提供 API。
+	flag.Bool("no-browser", true, "兼容参数：不打开浏览器")
+	apiOnly := flag.Bool("api-only", true, "兼容参数：服务始终仅提供 API")
 	flag.Parse()
 
 	st, err := openApplicationStore(*dbPath)
@@ -70,22 +56,9 @@ func main() {
 	addr := listener.Addr().String()
 	url := fmt.Sprintf("http://%s", addr)
 	log.Printf("=====================================================")
-	log.Printf("  常州中院云桌面资产与全景服务器管理系统已启动")
-	log.Printf("  访问地址: %s", url)
+	log.Printf("  Netcatty Cmdb API 服务已启动")
+	log.Printf("  本地服务地址: %s", url)
 	log.Printf("=====================================================")
-
-	if !*noBrowser && !*apiOnly {
-		go func() {
-			switch runtime.GOOS {
-			case "windows":
-				_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-			case "darwin":
-				_ = exec.Command("open", url).Start()
-			default:
-				_ = exec.Command("xdg-open", url).Start()
-			}
-		}()
-	}
 
 	if err := http.Serve(listener, handler); err != nil {
 		log.Fatalf("服务运行退出: %v", err)

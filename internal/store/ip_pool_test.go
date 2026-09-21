@@ -245,6 +245,116 @@ func TestIPPoolSummaryCountsAllRowsNotJustCurrentPage(t *testing.T) {
 	}
 }
 
+func TestAllocateIPToAssetLinksAndReleaseClearsBothSides(t *testing.T) {
+	s := newCmdbTestStore(t)
+	assetID, err := s.CreateAsset(&Asset{AssetCode: "IP-LINK-1", DeviceType: "台式电脑", UserName: "张三", Department: "技术处", Room: "301", Status: "在用"}, "测试")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ipID, err := s.CreateIPEntry(&IPEntry{Subnet: "办公网", IP: "10.20.30.40", Status: "空闲"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AllocateIPToAsset(ipID, assetID, "ip", "自动关联"); err != nil {
+		t.Fatalf("分配到资产失败: %v", err)
+	}
+	asset, _, _ := s.GetAsset(assetID)
+	if asset.IP != "10.20.30.40" || asset.Department != "技术处" {
+		t.Fatalf("IP 未同步到资产: %+v", asset)
+	}
+	entry, _ := s.GetIPEntry(ipID)
+	if entry.Status != "在用" || entry.Account != "张三" || entry.Department != "技术处" || entry.Room != "301" {
+		t.Fatalf("资产资料未同步到 IP: %+v", entry)
+	}
+	if err := s.ReleaseIP(ipID); err != nil {
+		t.Fatalf("释放失败: %v", err)
+	}
+	asset, _, _ = s.GetAsset(assetID)
+	if asset.IP != "" {
+		t.Fatalf("释放后资产仍保留 IP: %+v", asset)
+	}
+}
+
+func TestAssetIPWriteAutomaticallyUpdatesExistingPoolEntries(t *testing.T) {
+	s := newCmdbTestStore(t)
+	first, _ := s.CreateIPEntry(&IPEntry{Subnet: "办公网", IP: "10.20.30.41", Status: "空闲"})
+	second, _ := s.CreateIPEntry(&IPEntry{Subnet: "办公网", IP: "10.20.30.42", Status: "空闲"})
+	assetID, err := s.CreateAsset(&Asset{AssetCode: "IP-LINK-2", DeviceType: "台式电脑", UserName: "李四", Department: "办公室", Room: "302", IP: "10.20.30.41", Status: "在用"}, "测试")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, _ := s.GetIPEntry(first)
+	if entry.Status != "在用" || entry.Account != "李四" {
+		t.Fatalf("新增资产未占用已有 IP: %+v", entry)
+	}
+	asset, _, _ := s.GetAsset(assetID)
+	asset.IP = "10.20.30.42"
+	if err := s.UpdateAsset(asset, "测试"); err != nil {
+		t.Fatal(err)
+	}
+	oldEntry, _ := s.GetIPEntry(first)
+	newEntry, _ := s.GetIPEntry(second)
+	if oldEntry.Status != "空闲" || newEntry.Status != "在用" || newEntry.Account != "李四" {
+		t.Fatalf("修改资产 IP 未双向同步: old=%+v new=%+v", oldEntry, newEntry)
+	}
+}
+
+func TestCreateIPEntryAutomaticallyDetectsExistingAsset(t *testing.T) {
+	s := newCmdbTestStore(t)
+	if _, err := s.CreateAsset(&Asset{AssetCode: "IP-LINK-3", DeviceType: "台式电脑", UserName: "王五", Department: "信息处", Room: "501", IP: "10.20.30.43", Status: "在用"}, "测试"); err != nil {
+		t.Fatal(err)
+	}
+	id, err := s.CreateIPEntry(&IPEntry{Subnet: "办公网", IP: "10.20.30.43", Status: "空闲"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := s.GetIPEntry(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Status != "在用" || entry.Account != "王五" || entry.Department != "信息处" || entry.Room != "501" {
+		t.Fatalf("新增 IP 未自动识别已有资产: %+v", entry)
+	}
+}
+
+func TestIPVisualizationExpandsCIDRAndSummaryUsesCapacity(t *testing.T) {
+	s := newCmdbTestStore(t)
+	if _, err := s.CreateIPSubnet(&IPSubnet{Name: "小网段", Category: "内网", Prefix: "192.0.2", CIDR: "192.0.2.0/29"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateIPEntry(&IPEntry{Subnet: "小网段", IP: "192.0.2.2", Status: "在用", Account: "占用人"}); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := s.IPPoolSummaryData()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Total != 6 || summary.Used != 1 || summary.Free != 5 || summary.UsageRate != 16.7 {
+		t.Fatalf("CIDR 容量统计错误: %+v", summary)
+	}
+	rows, total, err := s.VisualizeIPSubnet("小网段", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 6 || len(rows) != 6 || rows[0].IP != "192.0.2.1" || rows[1].IP != "192.0.2.2" || rows[1].Status != "在用" || rows[5].IP != "192.0.2.6" {
+		t.Fatalf("CIDR 可视化结果错误: total=%d rows=%+v", total, rows)
+	}
+}
+
+func TestIPVisualizationAcceptsPrefixLengthCIDR(t *testing.T) {
+	s := newCmdbTestStore(t)
+	if _, err := s.CreateIPSubnet(&IPSubnet{Name: "兼容网段", Prefix: "198.51.100", CIDR: "29"}); err != nil {
+		t.Fatal(err)
+	}
+	rows, total, err := s.VisualizeIPSubnet("兼容网段", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 6 || rows[0].IP != "198.51.100.1" || rows[5].IP != "198.51.100.6" {
+		t.Fatalf("掩码位数格式未展开: total=%d rows=%+v", total, rows)
+	}
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

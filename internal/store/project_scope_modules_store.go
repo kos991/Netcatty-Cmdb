@@ -64,17 +64,27 @@ func (s *Store) CreateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	if err := s.requireAssetInProject(s.db, scope.ProjectID, w.AssetID); err != nil {
 		return 0, err
 	}
-	now := time.Now().Format("2006-01-02 15:04:05")
+	nowTime := time.Now()
+	now := nowTime.Format("2006-01-02 15:04:05")
 	if strings.TrimSpace(w.Subject) == "" {
 		return 0, fmt.Errorf("维护主题不能为空")
 	}
 	if w.Status == "" {
 		w.Status = "新建"
 	}
-	res, err := s.db.Exec(`INSERT INTO cmdb_work_orders
-		(project_id, order_no, priority, subject, biz_type, status, plan_time, actual_time, result, owner, maintainer, asset_id, remark, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		scope.ProjectID, w.OrderNo, w.Priority, w.Subject, w.BizType, w.Status, w.PlanTime, w.ActualTime,
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	orderNo, err := nextWorkOrderNumber(tx, scope.ProjectID, nowTime)
+	if err != nil {
+		return 0, err
+	}
+	res, err := tx.Exec(`INSERT INTO cmdb_work_orders
+		(project_id, order_no, priority, subject, biz_type, operation_type, work_minutes, status, plan_time, actual_time, result, owner, maintainer, asset_id, remark, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		scope.ProjectID, orderNo, w.Priority, w.Subject, w.BizType, w.OperationType, w.WorkMinutes, w.Status, w.PlanTime, w.ActualTime,
 		w.Result, w.Owner, w.Maintainer, w.AssetID, w.Remark, now, now)
 	if err != nil {
 		return 0, err
@@ -83,19 +93,76 @@ func (s *Store) CreateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	if err != nil {
 		return 0, err
 	}
-	if strings.TrimSpace(w.OrderNo) == "" {
-		no := fmt.Sprintf("WO%s%04d", time.Now().Format("20060102"), id)
-		if _, err := s.db.Exec(`UPDATE cmdb_work_orders SET order_no=? WHERE id=? AND project_id=?`, no, id, scope.ProjectID); err != nil {
-			return id, err
-		}
-		w.OrderNo = no
-	}
+	w.OrderNo = orderNo
 	w.ID = id
 	w.ProjectID = scope.ProjectID
-	if err := s.db.QueryRow(`SELECT sync_id FROM cmdb_work_orders WHERE id=? AND project_id=?`, id, scope.ProjectID).Scan(&w.SyncID); err != nil {
+	if err := tx.QueryRow(`SELECT sync_id FROM cmdb_work_orders WHERE id=? AND project_id=?`, id, scope.ProjectID).Scan(&w.SyncID); err != nil {
+		return id, err
+	}
+	if err := tx.Commit(); err != nil {
 		return id, err
 	}
 	return id, nil
+}
+
+func nextWorkOrderNumber(tx *sql.Tx, projectID int64, now time.Time) (string, error) {
+	prefix, separator, datePattern, resetPeriod := "GD", "-", "YYYYMMDD", "每日"
+	digits := int64(4)
+	err := tx.QueryRow(`SELECT name, vendor, version, remark, sort_order
+		FROM cmdb_work_order_rules WHERE project_id=? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`, projectID).
+		Scan(&prefix, &separator, &datePattern, &resetPeriod, &digits)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return "", errors.New("工单编号规则缺少固定前缀")
+	}
+	if separator != "-" && separator != "_" {
+		separator = ""
+	}
+	dateValue := ""
+	switch strings.ToUpper(strings.TrimSpace(datePattern)) {
+	case "YYYY":
+		dateValue = now.Format("2006")
+	case "YYYYMM":
+		dateValue = now.Format("200601")
+	case "YYYYMMDD":
+		dateValue = now.Format("20060102")
+	case "", "NONE":
+	default:
+		return "", fmt.Errorf("不支持的工单编号日期段: %s", datePattern)
+	}
+	if digits < 3 || digits > 8 {
+		return "", errors.New("工单编号流水号位数必须为 3 到 8")
+	}
+	where := "project_id=?"
+	args := []interface{}{projectID}
+	switch strings.TrimSpace(resetPeriod) {
+	case "每日":
+		where += " AND created_at>=?"
+		args = append(args, now.Format("2006-01-02 00:00:00"))
+	case "每月":
+		where += " AND created_at>=?"
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		args = append(args, monthStart.Format("2006-01-02 15:04:05"))
+	case "每年":
+		where += " AND created_at>=?"
+		args = append(args, now.Format("2006-01-01 00:00:00"))
+	case "不重置", "":
+	default:
+		return "", fmt.Errorf("不支持的工单编号重置周期: %s", resetPeriod)
+	}
+	var sequence int64
+	if err := tx.QueryRow("SELECT COALESCE(MAX(CAST(SUBSTR(order_no, ?) AS INTEGER)), 0) FROM cmdb_work_orders WHERE "+where, append([]interface{}{-int(digits)}, args...)...).Scan(&sequence); err != nil {
+		return "", err
+	}
+	parts := []string{prefix}
+	if dateValue != "" {
+		parts = append(parts, dateValue)
+	}
+	parts = append(parts, fmt.Sprintf("%0*d", digits, sequence+1))
+	return strings.Join(parts, separator), nil
 }
 
 func (s *Store) GetCmdbWorkOrderForProject(scope ProjectScope, id int64) (*CmdbWorkOrder, error) {
@@ -123,9 +190,9 @@ func (s *Store) UpdateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 		return err
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	res, err := s.db.Exec(`UPDATE cmdb_work_orders SET order_no=?, priority=?, subject=?, biz_type=?, status=?,
+	res, err := s.db.Exec(`UPDATE cmdb_work_orders SET order_no=?, priority=?, subject=?, biz_type=?, operation_type=?, work_minutes=?, status=?,
 		plan_time=?, actual_time=?, result=?, owner=?, maintainer=?, asset_id=?, remark=?, updated_at=?
-		WHERE id=? AND project_id=?`, w.OrderNo, w.Priority, w.Subject, w.BizType, w.Status,
+		WHERE id=? AND project_id=?`, w.OrderNo, w.Priority, w.Subject, w.BizType, w.OperationType, w.WorkMinutes, w.Status,
 		w.PlanTime, w.ActualTime, w.Result, w.Owner, w.Maintainer, w.AssetID, w.Remark, now, w.ID, scope.ProjectID)
 	if err != nil {
 		return err

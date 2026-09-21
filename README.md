@@ -5,7 +5,7 @@
 
 Netcatty-CMDB 将本项目的 Go + SQLite CMDB 服务作为内置服务集成到
 [Netcatty](https://github.com/binaricat/Netcatty) 桌面客户端。Netcatty 保留 SSH、SFTP、终端和主机管理能力，
-CMDB 提供全局查询、资产台账、服务器与应用、运维履历、IP 规划池以及资产生命周期管理。
+Cmdb 提供设备资产统一查询、终端资产、基础设施、业务系统、组织架构、IPAM/IP、统计与履历和配置中心，直接复用 Netcatty 原生组件。
 
 当前版本：`1.2.0`
 
@@ -14,17 +14,16 @@ CMDB 提供全局查询、资产台账、服务器与应用、运维履历、IP 
 ```text
 Netcatty 桌面客户端
 ├─ 原有 SSH / SFTP / 终端能力
-├─ 原生 CMDB 资产管理工作区
-│  ├─ 全局查询与终端资产
-│  ├─ 基础设施资源与业务系统
-│  ├─ 组织与人员、IP 规划池
-│  └─ 统计概览与运维履历
+├─ 原生 Cmdb 工作区
+│  ├─ 设备资产（终端资产 / 基础设施 / 业务系统）
+│  ├─ 组织架构、IPAM/IP
+│  ├─ 统计与履历
+│  └─ 配置中心
 └─ 自动管理 cmdb-server 子进程
 
 cmdb-server
 ├─ Go HTTP API
-├─ SQLite 数据库
-└─ React 18 + Ant Design 5 管理界面
+└─ SQLite 数据库（只提供本地 API，不包含浏览器界面）
 ```
 
 Netcatty 前端不直接访问 SQLite。桌面主进程在固定回环地址 `http://127.0.0.1:18080`
@@ -34,7 +33,8 @@ Netcatty 前端不直接访问 SQLite。桌面主进程在固定回环地址 `ht
 
 ```text
 internal/                       Go API 与 SQLite 存储层
-web/                            React + Ant Design 管理界面
+integrations/netcatty/cmdb/      唯一正式界面源码（Netcatty 原生组件）
+web/                            停止维护的历史界面参考，不装配或打包
 integrations/netcatty/electron/ CMDB 子进程生命周期模块与测试
 integrations/netcatty/upstream.json  已验证的 Netcatty 上游提交
 scripts/prepare-netcatty.mjs    可重复的 Netcatty 集成装配器
@@ -44,13 +44,9 @@ scripts/prepare-netcatty.mjs    可重复的 Netcatty 集成装配器
 
 ## 本地验证
 
-构建前端并测试后端：
+测试并构建内置服务：
 
 ```powershell
-cd web
-npm.cmd ci
-npm.cmd run build
-cd ..
 go test ./...
 go build -o build/cmdb-server.exe .
 ```
@@ -73,7 +69,7 @@ npm.cmd run build
 
 每次推送到 `main` 都会验证：
 
-- Ant Design 前端可构建；
+- 原生界面装配测试，确认不引入 Ant Design 依赖；
 - Go 全量测试和服务端构建；
 - UOS/Kylin 探针及 Python CLI；
 - 固定 Netcatty 上游提交可成功装配；

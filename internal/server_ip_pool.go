@@ -23,6 +23,19 @@ func (s *Server) handleIPPoolSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, data)
 }
 
+func (s *Server) handleIPPoolVisualization(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+	list, total, err := s.Store.VisualizeIPSubnetForProject(scope, q.Get("subnet"), page, pageSize)
+	if err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"list": list, "total": total, "page": page, "page_size": pageSize})
+}
+
 // ---- 网段管理（子网定义：名称 / 类别 / 网段 / 网关 / VLAN / 用途）----
 func (s *Server) handleListIPSubnets(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
@@ -142,7 +155,7 @@ func (s *Server) handleDeleteIPEntry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"ok": "1"})
 }
 
-// handleAllocateIP 分配 IP：占用该地址并登记使用人 / 部门 / 房间。
+// handleAllocateIP 优先关联到指定资产；旧请求仍可按人员 / 部门 / 房间登记。
 func (s *Server) handleAllocateIP(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -151,6 +164,8 @@ func (s *Server) handleAllocateIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
+		AssetID    int64  `json:"asset_id"`
+		IPField    string `json:"ip_field"`
 		Department string `json:"department"`
 		Account    string `json:"account"`
 		Room       string `json:"room"`
@@ -160,7 +175,12 @@ func (s *Server) handleAllocateIP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "请求体解析失败: "+err.Error())
 		return
 	}
-	if err := s.Store.AllocateIPForProject(scope, id, body.Department, body.Account, body.Room, body.Remark); err != nil {
+	if body.AssetID > 0 {
+		err = s.Store.AllocateIPToAssetForProject(scope, id, body.AssetID, body.IPField, body.Remark)
+	} else {
+		err = s.Store.AllocateIPForProject(scope, id, body.Department, body.Account, body.Room, body.Remark)
+	}
+	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}

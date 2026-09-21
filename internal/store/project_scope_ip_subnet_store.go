@@ -41,7 +41,7 @@ func (s *Store) ListIPSubnetsForProject(scope ProjectScope) ([]IPSubnet, error) 
 	type subnetStat struct{ total, used int }
 	stats := map[string]subnetStat{}
 	statOrder := []string{}
-	statRows, err := s.db.Query(`SELECT subnet,COUNT(*),SUM(CASE WHEN status='在用' THEN 1 ELSE 0 END) FROM ip_pool WHERE project_id=? GROUP BY subnet`, scope.ProjectID)
+	statRows, err := s.db.Query(`SELECT subnet,COUNT(*),SUM(CASE WHEN status IN ('在用','已占用','已分配','占用') THEN 1 ELSE 0 END) FROM ip_pool WHERE project_id=? GROUP BY subnet`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +86,12 @@ func (s *Store) ListIPSubnetsForProject(scope ProjectScope) ([]IPSubnet, error) 
 			out[i].Free = stat.total - stat.used
 		}
 	}
+	for i := range out {
+		if capacity, _, _, ok := usableIPv4Range(normalizeSubnetCIDR(out[i].CIDR, out[i].Prefix)); out[i].Defined && ok {
+			out[i].Total = capacity
+			out[i].Free = max(0, capacity-out[i].Used)
+		}
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		pi, pj := out[i].Prefix, out[j].Prefix
 		if pi == "" {
@@ -113,6 +119,7 @@ func (s *Store) CreateIPSubnetForProject(scope ProjectScope, v *IPSubnet) (int64
 	if strings.TrimSpace(v.Category) == "" {
 		v.Category = "专网"
 	}
+	v.CIDR = normalizeSubnetCIDR(v.CIDR, v.Prefix)
 	now := time.Now().Format("2006-01-02 15:04:05")
 	res, err := s.db.Exec(`INSERT INTO ip_subnets
 		(project_id, name, category, prefix, cidr, gateway, vlan, purpose, sort_order, remark, created_at, updated_at)
@@ -196,6 +203,7 @@ func (s *Store) UpdateIPSubnetForProject(scope ProjectScope, v *IPSubnet) error 
 	if strings.TrimSpace(v.Category) == "" {
 		v.Category = cur.Category
 	}
+	v.CIDR = normalizeSubnetCIDR(v.CIDR, v.Prefix)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err

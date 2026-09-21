@@ -88,6 +88,68 @@ CREATE TABLE IF NOT EXISTS cmdb_statuses (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_statuses_project_name
     ON cmdb_statuses(project_id, name) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS cmdb_work_order_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    sync_id TEXT,
+    name TEXT NOT NULL,
+    remark TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    deleted_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_order_categories_project_name
+    ON cmdb_work_order_categories(project_id, name) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS cmdb_work_order_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    sync_id TEXT,
+    name TEXT NOT NULL,
+    remark TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    deleted_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_order_types_project_name
+    ON cmdb_work_order_types(project_id, name) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS cmdb_work_order_priorities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    sync_id TEXT,
+    name TEXT NOT NULL,
+    remark TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    deleted_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_order_priorities_project_name
+    ON cmdb_work_order_priorities(project_id, name) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS cmdb_work_order_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    sync_id TEXT,
+    name TEXT NOT NULL,
+    vendor TEXT NOT NULL DEFAULT '-',
+    version TEXT NOT NULL DEFAULT 'YYYYMMDD',
+    remark TEXT NOT NULL DEFAULT '每日',
+    sort_order INTEGER NOT NULL DEFAULT 4,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    deleted_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_order_rules_project
+    ON cmdb_work_order_rules(project_id) WHERE deleted_at IS NULL;
 `
 
 func (s *Store) InitConfigSchema() error {

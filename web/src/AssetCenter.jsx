@@ -40,8 +40,10 @@ import {
 import dayjs from 'dayjs'
 import { api } from './api'
 import { cmdbApi } from './cmdb/cmdbApi'
+import { assetIPFields, isCloudDesktopDeviceType, normalizeAssetPayload } from './assetFormState'
 
 const { Text } = Typography
+const IP_NETWORK_TYPES = ['专网', '外网', '内网']
 
 export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeywordSearch = false }) {
   const [data, setData] = useState([])
@@ -79,8 +81,10 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [editForm] = Form.useForm()
+  const editDeviceType = Form.useWatch('device_type', editForm)
   const [personDirectory, setPersonDirectory] = useState([])
   const [configuredStatuses, setConfiguredStatuses] = useState([])
+  const [configuredDeviceTypes, setConfiguredDeviceTypes] = useState([])
   const [softwareCatalog, setSoftwareCatalog] = useState([])
 
   useEffect(() => {
@@ -95,13 +99,15 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
           people.push(...(response.list || []))
           count = response.total || 0
         } while (people.length < count)
-        const [statuses, software] = await Promise.all([
+        const [statuses, deviceTypes, software] = await Promise.all([
           cmdbApi.listConfig('statuses'),
+          cmdbApi.listConfig('device-types'),
           cmdbApi.listConfig('software'),
         ])
         if (!active) return
         setPersonDirectory(people)
         setConfiguredStatuses((statuses.list || []).map((item) => item.name))
+        setConfiguredDeviceTypes((deviceTypes.list || []).map((item) => item.name))
         setSoftwareCatalog((software.list || []).map((item) => item.name))
       } catch (error) {
         if (active) message.error(`加载人员与配置目录失败: ${error.message}`)
@@ -121,7 +127,9 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
     label: [person.name, person.org_name, person.department, person.group_name].filter(Boolean).join(' · '),
   })), [personDirectory])
   const statusOptions = useMemo(() => [...new Set([...configuredStatuses, ...(meta?.statuses || [])])], [configuredStatuses, meta?.statuses])
+  const deviceTypeOptions = useMemo(() => [...new Set(['云桌面终端', ...configuredDeviceTypes])], [configuredDeviceTypes])
   const softwareOptions = useMemo(() => [...new Set([...softwareCatalog, ...(meta?.security_software || [])])], [softwareCatalog, meta?.security_software])
+  const editIPFields = assetIPFields(editDeviceType)
 
   const loadData = async (overrides = {}) => {
     setLoading(true)
@@ -272,6 +280,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
     setEditTarget(null)
     editForm.resetFields()
     editForm.setFieldsValue({
+      device_type: '云桌面终端',
       status: '在用',
       net_type: '专网',
     })
@@ -288,11 +297,12 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
   const submitEdit = async () => {
     try {
       const vals = await editForm.validateFields()
+      const payload = normalizeAssetPayload(vals)
       if (editTarget) {
-        await api.updateAsset(editTarget.id, vals)
+        await api.updateAsset(editTarget.id, payload)
         message.success('资产信息更新成功！')
       } else {
-        await api.createAsset(vals)
+        await api.createAsset(payload)
         message.success('新设备录入成功，已建立资产档案！')
       }
       setEditModalOpen(false)
@@ -519,16 +529,17 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
       title: '设备分类',
       key: 'category',
       width: 150,
-      render: () => <Tag color="blue">终端资产</Tag>,
+      render: (_, r) => <Tag color="blue">{r.device_type || '云桌面终端'}</Tag>,
     },
     {
-      title: 'SN / IP',
+      title: 'SN / IP / 网络',
       key: 'identity',
-      width: 230,
+      width: 240,
       render: (_, r) => (
         <div className="cmdb-mono-cell">
           <div>{r.box_sn || r.display_sn || '-'}</div>
-          <div className="cmdb-secondary-text">{r.ip || r.terminal_ip || '未配置 IP'}</div>
+          <div className="cmdb-secondary-text">{r.ip || (isCloudDesktopDeviceType(r.device_type) ? r.terminal_ip : '') || '未配置 IP'}</div>
+          <div className="cmdb-secondary-text">IP 网络类型：{r.net_type || '未设置'}</div>
         </div>
       ),
     },
@@ -714,9 +725,10 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
                         <div className="cmdb-card-owner">{r.user_name || '公用 / 闲置'}</div>
                         <div className="cmdb-card-location">{r.department || '未分配'} · {r.room || '未指定位置'}</div>
                         <div className="cmdb-card-fields">
-                          <div><span>设备类型</span><b>终端资产</b></div>
+                          <div><span>设备类型</span><b>{r.device_type || '云桌面终端'}</b></div>
                           <div><span>终端主机 SN</span><b className="cmdb-card-mono">{r.box_sn || r.display_sn || '-'}</b></div>
-                          <div><span>业务 IP</span><b className="cmdb-card-mono">{r.ip || r.terminal_ip || '未配置'}</b></div>
+                          <div><span>{isCloudDesktopDeviceType(r.device_type) ? '业务/虚拟机 IP' : '设备 IP'}</span><b className="cmdb-card-mono">{r.ip || '未配置'}</b></div>
+                          <div><span>IP 网络类型</span><b>{r.net_type || '未设置'}</b></div>
                           <div><span>软件安装情况</span><b>{r.security_software || '未登记'}</b></div>
                         </div>
                         <div className="cmdb-card-actions">
@@ -787,7 +799,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
       >
         {drawerAsset && (
           <div>
-            <Card size="small" style={{ marginBottom: 20, background: '#fafafa' }}>
+            <Card size="small" className="cmdb-context-card" style={{ marginBottom: 20 }}>
               <Descriptions size="small" column={2} title="当前设备概况">
                 <Descriptions.Item label="资产编码">{drawerAsset.asset_code || '-'}</Descriptions.Item>
                 <Descriptions.Item label="设备状态">
@@ -802,7 +814,12 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
                   {drawerAsset.department || '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="房间 / 位置">{drawerAsset.room || '-'}</Descriptions.Item>
-                <Descriptions.Item label="业务IP">{drawerAsset.ip || '-'}</Descriptions.Item>
+                <Descriptions.Item label="设备类型">{drawerAsset.device_type || '云桌面终端'}</Descriptions.Item>
+                <Descriptions.Item label={isCloudDesktopDeviceType(drawerAsset.device_type) ? '业务/虚拟机 IP' : '设备 IP'}>{drawerAsset.ip || '-'}</Descriptions.Item>
+                {isCloudDesktopDeviceType(drawerAsset.device_type) && (
+                  <Descriptions.Item label="终端物理 IP">{drawerAsset.terminal_ip || '-'}</Descriptions.Item>
+                )}
+                <Descriptions.Item label="IP 网络类型">{drawerAsset.net_type || '未设置'}</Descriptions.Item>
                 <Descriptions.Item label="终端主机 SN">
                   <span style={{ fontFamily: 'monospace' }}>{drawerAsset.box_sn || '-'}</span>
                 </Descriptions.Item>
@@ -890,15 +907,15 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
                         </div>
 
                         {log.log_type === '调换使用人' && (
-                          <div style={{ marginTop: 4, background: '#f6ffed', padding: '6px 10px', borderRadius: 4, border: '1px solid #b7eb8f' }}>
+                          <div className="cmdb-history-event">
                             <div>
                               人员交接：
-                              <del style={{ color: '#999' }}>{log.from_user || '未指定'}</del>
+                              <del className="cmdb-original-value">{log.from_user || '未指定'}</del>
                               {' ➡️ '}
                               <strong style={{ color: '#52c41a' }}>{log.to_user}</strong>
                             </div>
                             {(log.from_location || log.to_location) && (
-                              <div style={{ fontSize: 12, color: '#666' }}>
+                              <div className="cmdb-muted-inline">
                                 位置变动：{log.from_location || '-'} ➡️ {log.to_location || '-'}
                               </div>
                             )}
@@ -906,10 +923,10 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
                         )}
 
                         {log.log_type === '设备维修更换' && (
-                          <div style={{ marginTop: 4, background: '#fff7e6', padding: '6px 10px', borderRadius: 4, border: '1px solid #ffd591' }}>
+                          <div className="cmdb-history-event">
                             {log.old_sn && log.new_sn && (
                               <div>
-                                SN 更换：<del style={{ color: '#999' }}>{log.old_sn}</del>
+                                SN 更换：<del className="cmdb-original-value">{log.old_sn}</del>
                                 {' ➡️ '}
                                 <strong style={{ color: '#fa8c16' }}>{log.new_sn}</strong>
                               </div>
@@ -917,7 +934,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
                           </div>
                         )}
 
-                        <div style={{ marginTop: 6, color: '#333' }}>
+                        <div className="cmdb-history-description">
                           {log.description}
                         </div>
                       </div>
@@ -948,7 +965,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
       >
         {transferTarget && (
           <Form form={transferForm} layout="vertical" style={{ marginTop: 16 }}>
-            <Card size="small" style={{ background: '#f5f5f5', marginBottom: 16 }}>
+            <Card size="small" className="cmdb-context-card" style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <div>
                   原使用人：<strong>{transferTarget.user_name || '公用 / 闲置'}</strong>
@@ -957,8 +974,10 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
                   原位置：<strong>{transferTarget.department} {transferTarget.room}</strong>
                 </div>
               </div>
-              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-                终端主机 SN: {transferTarget.box_sn} | IP: {transferTarget.ip || '未分配'}
+              <div className="cmdb-muted-inline">
+                终端主机 SN: {transferTarget.box_sn} | {isCloudDesktopDeviceType(transferTarget.device_type) ? '业务/虚拟机 IP' : '设备 IP'}: {transferTarget.ip || '未分配'}
+                {isCloudDesktopDeviceType(transferTarget.device_type) && ` | 终端物理 IP: ${transferTarget.terminal_ip || '未分配'}`}
+                {` | IP 网络类型: ${transferTarget.net_type || '未设置'}`}
               </div>
             </Card>
 
@@ -999,7 +1018,7 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
 
             <Form.Item
               name="new_ip"
-              label="变更业务IP (留空则沿用当前IP)"
+              label={`变更${isCloudDesktopDeviceType(transferTarget.device_type) ? '业务/虚拟机 IP' : '设备 IP'} (留空则沿用当前IP)`}
             >
               <Input placeholder={`当前IP为: ${transferTarget.ip || '无'}，需要调整请填入`} />
             </Form.Item>
@@ -1041,9 +1060,9 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
       >
         {maintTarget && (
           <Form form={maintForm} layout="vertical" style={{ marginTop: 16 }}>
-            <Card size="small" style={{ background: '#fffbe6', marginBottom: 16, border: '1px solid #ffe58f' }}>
+            <Card size="small" className="cmdb-context-card cmdb-context-card-warning" style={{ marginBottom: 16 }}>
               <div>设备：{maintTarget.user_name} ({maintTarget.department} {maintTarget.room})</div>
-              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+              <div className="cmdb-muted-inline">
                 当前终端主机 SN: <strong>{maintTarget.box_sn || '无'}</strong> | 显示器 SN: <strong>{maintTarget.display_sn || '无'}</strong>
               </div>
             </Card>
@@ -1075,36 +1094,35 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
               </Radio.Group>
             </Form.Item>
 
-            <Space style={{ width: '100%', display: 'flex' }} size={12}>
-              <Form.Item name="old_sn" label="原设备SN" style={{ flex: 1 }}>
-                <Input placeholder="原旧件 SN" readOnly style={{ background: '#f5f5f5' }} />
+            <div className="cmdb-form-grid cmdb-form-grid-two">
+              <Form.Item name="old_sn" label="原设备SN">
+                <Input className="cmdb-readonly-field" placeholder="原旧件 SN" readOnly />
               </Form.Item>
               <Form.Item
                 name="new_sn"
                 label="新设备SN (换上件)"
-                style={{ flex: 1 }}
                 rules={[{ required: true, message: '请输入更换后的新SN编号' }]}
               >
                 <Input placeholder="输入替换上的新 SN" />
               </Form.Item>
-            </Space>
+            </div>
 
-            <Space style={{ width: '100%', display: 'flex' }} size={12}>
-              <Form.Item name="new_status" label="换件后资产状态" style={{ flex: 1 }}>
-                <Select>
+            <div className="cmdb-form-grid cmdb-form-grid-two">
+              <Form.Item name="new_status" label="换件后资产状态">
+                <Select style={{ width: '100%' }} popupMatchSelectWidth={180}>
                   <Select.Option value="在用">在用</Select.Option>
                   <Select.Option value="维修中">维修中</Select.Option>
                   <Select.Option value="仓库备用">仓库备用</Select.Option>
                 </Select>
               </Form.Item>
-              <Form.Item name="mark_old_as" label="旧设备去向联动" style={{ flex: 1 }}>
-                <Select>
+              <Form.Item name="mark_old_as" label="旧设备去向联动">
+                <Select style={{ width: '100%' }} popupMatchSelectWidth={220}>
                   <Select.Option value="故障待修入库">自动作为故障件入库备修</Select.Option>
                   <Select.Option value="报废">直接报废</Select.Option>
                   <Select.Option value="无">不联动</Select.Option>
                 </Select>
               </Form.Item>
-            </Space>
+            </div>
 
             <Space style={{ width: '100%', display: 'flex' }} size={12}>
               <Form.Item name="date" label="维保日期" style={{ flex: 1 }}>
@@ -1137,12 +1155,21 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
         width={650}
       >
         <Form form={editForm} layout="vertical" style={{ marginTop: 16 }}>
-          <Space style={{ width: '100%', display: 'flex' }} size={12}>
-            <Form.Item name="asset_code" label="资产编码" style={{ flex: 1 }}>
+          <div className="cmdb-form-grid cmdb-form-grid-three">
+            <Form.Item name="asset_code" label="资产编码">
               <Input placeholder="如：202510000201xxxx" />
             </Form.Item>
-            <Form.Item name="status" label="设备状态" style={{ flex: 1 }}>
-              <Select>
+            <Form.Item name="device_type" label="设备类型" rules={[{ required: true, message: '请选择设备类型' }]}>
+              <Select
+                showSearch
+                optionFilterProp="label"
+                options={deviceTypeOptions.map((name) => ({ value: name, label: name }))}
+                placeholder="选择设备类型"
+                popupMatchSelectWidth={180}
+              />
+            </Form.Item>
+            <Form.Item name="status" label="设备状态">
+              <Select style={{ width: '100%' }} popupMatchSelectWidth={180}>
                 {statusOptions.map((s) => (
                   <Select.Option key={s} value={s}>
                     {s}
@@ -1150,19 +1177,19 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
                 ))}
               </Select>
             </Form.Item>
-          </Space>
+          </div>
 
-          <Space style={{ width: '100%', display: 'flex' }} size={12}>
-            <Form.Item name="box_sn" label="终端主机 SN" style={{ flex: 1 }}>
+          <div className="cmdb-form-grid cmdb-form-grid-two">
+            <Form.Item name="box_sn" label="终端主机 SN">
               <Input placeholder="如：71W5270xxx" />
             </Form.Item>
-            <Form.Item name="display_sn" label="显示器SN" style={{ flex: 1 }}>
+            <Form.Item name="display_sn" label="显示器SN">
               <Input placeholder="如：TGME1HW270HTxxxx" />
             </Form.Item>
-          </Space>
+          </div>
 
-          <Space style={{ width: '100%', display: 'flex' }} size={12}>
-            <Form.Item name="user_name" label="当前使用人" style={{ flex: 1 }}>
+          <div className="cmdb-form-grid cmdb-form-grid-three">
+            <Form.Item name="user_name" label="当前使用人">
               <Select
                 allowClear
                 showSearch
@@ -1175,25 +1202,28 @@ export default function AssetCenter({ meta, focusTarget, onNavigate, hideKeyword
                 }}
               />
             </Form.Item>
-            <Form.Item name="department" label="所属部门" style={{ flex: 1 }}>
+            <Form.Item name="department" label="所属部门">
               <Input readOnly placeholder="选择人员后自动带出" />
             </Form.Item>
-            <Form.Item name="room" label="房间 / 位置" style={{ flex: 1 }}>
+            <Form.Item name="room" label="房间 / 位置">
               <Input placeholder="如：305 室或 3 层会议室" />
             </Form.Item>
-          </Space>
+          </div>
 
-          <Space style={{ width: '100%', display: 'flex' }} size={12}>
-            <Form.Item name="ip" label="业务/虚拟机IP" style={{ flex: 1 }}>
-              <Input placeholder="如：138.64.9.50" />
+          <div className={`cmdb-form-grid ${editIPFields.length === 2 ? 'cmdb-form-grid-three' : 'cmdb-form-grid-two'}`}>
+            {editIPFields.map((field) => (
+              <Form.Item key={field.name} name={field.name} label={field.label}>
+                <Input placeholder={field.name === 'terminal_ip' ? '如：192.168.35.x' : '如：138.64.9.50'} />
+              </Form.Item>
+            ))}
+            <Form.Item name="net_type" label="IP 网络类型">
+              <Select options={IP_NETWORK_TYPES.map((name) => ({ value: name, label: name }))} placeholder="选择 IP 网络类型" />
             </Form.Item>
-            <Form.Item name="terminal_ip" label="终端物理IP" style={{ flex: 1 }}>
-              <Input placeholder="如：192.168.35.x" />
-            </Form.Item>
-            <Form.Item name="security_software" label="软件安装情况" style={{ flex: 1 }}>
-              <Select allowClear showSearch optionFilterProp="label" options={softwareOptions.map((name) => ({ value: name, label: name }))} placeholder={softwareOptions.length ? '选择已安装软件' : '请先在配置中心维护软件目录'} />
-            </Form.Item>
-          </Space>
+          </div>
+
+          <Form.Item name="security_software" label="软件安装情况">
+            <Select allowClear showSearch optionFilterProp="label" options={softwareOptions.map((name) => ({ value: name, label: name }))} placeholder={softwareOptions.length ? '选择已安装软件' : '请先在配置中心维护软件目录'} />
+          </Form.Item>
 
           <Form.Item name="remark" label="备注说明">
             <Input.TextArea rows={2} placeholder="其他说明备注" />

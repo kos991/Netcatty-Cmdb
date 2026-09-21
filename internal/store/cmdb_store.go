@@ -358,6 +358,7 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 	}
 	if strings.EqualFold(strings.TrimSpace(q.ResourceScope), "infrastructure") {
 		where = append(where, `(a.source_type = 'legacy_server'
+			OR (a.source_type = 'manual' AND IFNULL(a.device_type,'') = '' AND IFNULL(a.category_id,0) = 0)
 			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage')
 			OR EXISTS (
 				SELECT 1 FROM cmdb_device_categories scope_category
@@ -366,6 +367,7 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 				AND (scope_category.name LIKE '%服务器%'
 					OR scope_category.name LIKE '%虚拟机%'
 					OR scope_category.name LIKE '%交换机%'
+					OR scope_category.name LIKE '%网络设备%'
 					OR scope_category.name LIKE '%路由器%'
 					OR scope_category.name LIKE '%安全设备%'
 					OR scope_category.name LIKE '%存储设备%')

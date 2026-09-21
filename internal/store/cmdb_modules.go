@@ -7,23 +7,25 @@ import (
 // ============================ 工单管理 ============================
 
 type CmdbWorkOrder struct {
-	ID         int64  `json:"id"`
-	ProjectID  int64  `json:"project_id"`
-	SyncID     string `json:"sync_id"`
-	OrderNo    string `json:"order_no"`
-	Priority   string `json:"priority"`
-	Subject    string `json:"subject"`
-	BizType    string `json:"biz_type"`
-	Status     string `json:"status"`
-	PlanTime   string `json:"plan_time"`
-	ActualTime string `json:"actual_time"`
-	Result     string `json:"result"`
-	Owner      string `json:"owner"`
-	Maintainer string `json:"maintainer"`
-	AssetID    int64  `json:"asset_id"`
-	Remark     string `json:"remark"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	ID            int64  `json:"id"`
+	ProjectID     int64  `json:"project_id"`
+	SyncID        string `json:"sync_id"`
+	OrderNo       string `json:"order_no"`
+	Priority      string `json:"priority"`
+	Subject       string `json:"subject"`
+	BizType       string `json:"biz_type"`
+	OperationType string `json:"operation_type"`
+	WorkMinutes   int64  `json:"work_minutes"`
+	Status        string `json:"status"`
+	PlanTime      string `json:"plan_time"`
+	ActualTime    string `json:"actual_time"`
+	Result        string `json:"result"`
+	Owner         string `json:"owner"`
+	Maintainer    string `json:"maintainer"`
+	AssetID       int64  `json:"asset_id"`
+	Remark        string `json:"remark"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
 }
 
 type CmdbWorkOrderQuery struct {
@@ -38,13 +40,13 @@ type CmdbWorkOrderQuery struct {
 }
 
 const cmdbWorkOrderSelect = `SELECT id, project_id, IFNULL(sync_id,''), IFNULL(order_no,''), IFNULL(priority,''), subject,
-	IFNULL(biz_type,''), IFNULL(status,''), IFNULL(plan_time,''), IFNULL(actual_time,''),
+	IFNULL(biz_type,''), IFNULL(operation_type,''), work_minutes, IFNULL(status,''), IFNULL(plan_time,''), IFNULL(actual_time,''),
 	IFNULL(result,''), IFNULL(owner,''), IFNULL(maintainer,''), asset_id, IFNULL(remark,''),
 	IFNULL(created_at,''), IFNULL(updated_at,'') FROM cmdb_work_orders`
 
 func scanCmdbWorkOrder(sc interface{ Scan(...interface{}) error }) (CmdbWorkOrder, error) {
 	var w CmdbWorkOrder
-	err := sc.Scan(&w.ID, &w.ProjectID, &w.SyncID, &w.OrderNo, &w.Priority, &w.Subject, &w.BizType, &w.Status,
+	err := sc.Scan(&w.ID, &w.ProjectID, &w.SyncID, &w.OrderNo, &w.Priority, &w.Subject, &w.BizType, &w.OperationType, &w.WorkMinutes, &w.Status,
 		&w.PlanTime, &w.ActualTime, &w.Result, &w.Owner, &w.Maintainer, &w.AssetID,
 		&w.Remark, &w.CreatedAt, &w.UpdatedAt)
 	return w, err

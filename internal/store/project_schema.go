@@ -48,6 +48,10 @@ var projectScopedTables = []string{
 	"cmdb_asset_software",
 	"cmdb_locations",
 	"cmdb_statuses",
+	"cmdb_work_order_categories",
+	"cmdb_work_order_types",
+	"cmdb_work_order_priorities",
+	"cmdb_work_order_rules",
 }
 
 const projectSchema = `
@@ -214,6 +218,10 @@ func migrateProjectUniqueIndexes(tx *sql.Tx) error {
 		if _, err := tx.Exec(idx.create); err != nil {
 			return fmt.Errorf("create project unique index after %s: %w", idx.drop, err)
 		}
+	}
+	if _, err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_orders_project_order_no
+		ON cmdb_work_orders(project_id, order_no) WHERE order_no <> '' AND deleted_at IS NULL`); err != nil {
+		return fmt.Errorf("create project work order number index: %w", err)
 	}
 	return nil
 }

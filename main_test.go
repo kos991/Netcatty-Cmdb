@@ -52,3 +52,17 @@ func TestNewHTTPHandlerAPIOnly(t *testing.T) {
 		t.Fatalf("API-only 根路径状态码=%d，期望 404", root.Code)
 	}
 }
+
+func TestNewHTTPHandlerNeverServesRetiredBrowserUI(t *testing.T) {
+	h, err := newHTTPHandler(&internal.Server{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/", "/index.html", "/assets/index.js"} {
+		response := httptest.NewRecorder()
+		h.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("停用的浏览器入口 %s 返回 %d，期望 404", path, response.Code)
+		}
+	}
+}

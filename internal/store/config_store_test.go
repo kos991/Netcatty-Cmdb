@@ -173,6 +173,10 @@ func TestConfigCatalogProjectIsolation(t *testing.T) {
 		{kind: ConfigKindSoftware, itemA: ConfigItem{Name: "终端安全软件", Vendor: "厂商甲", Version: "1.0"}, itemB: ConfigItem{Name: "终端安全软件", Vendor: "厂商乙", Version: "2.0"}},
 		{kind: ConfigKindLocations, itemA: ConfigItem{Name: "数据机房"}, itemB: ConfigItem{Name: "数据机房"}},
 		{kind: ConfigKindStatuses, itemA: ConfigItem{Name: "在用"}, itemB: ConfigItem{Name: "在用"}},
+		{kind: ConfigKindWorkOrderCategories, itemA: ConfigItem{Name: "故障处理"}, itemB: ConfigItem{Name: "故障处理"}},
+		{kind: ConfigKindWorkOrderTypes, itemA: ConfigItem{Name: "排障"}, itemB: ConfigItem{Name: "排障"}},
+		{kind: ConfigKindWorkOrderPriorities, itemA: ConfigItem{Name: "P3（普通）"}, itemB: ConfigItem{Name: "P3（普通）"}},
+		{kind: ConfigKindWorkOrderRule, itemA: ConfigItem{Name: "GD", Vendor: "-", Version: "YYYYMMDD", Remark: "每日", SortOrder: 4}, itemB: ConfigItem{Name: "GD", Vendor: "-", Version: "YYYYMMDD", Remark: "每日", SortOrder: 4}},
 		{kind: ConfigKindModels, itemA: ConfigItem{Vendor: "华为", Model: "S5735", Name: "S5735"}, itemB: ConfigItem{Vendor: "华为", Model: "S5735", Name: "S5735"}},
 	}
 

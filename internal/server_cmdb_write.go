@@ -45,6 +45,28 @@ func (s *Server) handleUpdateCmdbAsset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{"updated": n})
 }
 
+// handleReplaceCmdbAsset 保存完整资产档案，包括网络接口与扩展字段。
+// 原有 PUT 接口继续承担列表内的局部编辑，避免改变批量编辑语义。
+func (s *Server) handleReplaceCmdbAsset(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, 400, "无效的资产 ID")
+		return
+	}
+	var body store.CmdbAsset
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, "请求体解析失败: "+err.Error())
+		return
+	}
+	body.ID = id
+	if err := s.Store.UpdateCmdbAssetManualForProject(scope, &body); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"ok": "1"})
+}
+
 // handleDeleteCmdbAsset 删除单条 CMDB 资产（映射来的记录会被拒绝）。
 func (s *Server) handleDeleteCmdbAsset(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
