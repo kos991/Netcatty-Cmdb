@@ -6,14 +6,20 @@ import (
 
 // 组织 / 分组 / 设备分类 三个维度共用一套增删改查。
 // 通过白名单映射到具体表与被资产引用的外键列，避免把外部输入拼进 SQL。
-var cmdbTaxonomyTables = map[string]struct {
-	Table string // 维度表名
-	FK    string // cmdb_assets 上引用该维度的外键列
-	Label string // 中文名，用于错误提示
-}{
-	"orgs":       {"cmdb_orgs", "org_id", "组织"},
-	"groups":     {"cmdb_groups", "group_id", "分组"},
-	"categories": {"cmdb_device_categories", "category_id", "设备分类"},
+type cmdbTaxonomyTableSpec struct {
+	Table      string // 维度表名
+	FK         string // cmdb_assets 上引用该维度的外键列
+	Label      string // 中文名，用于错误提示
+	AssetScope string // 分类适用范围；非分类维度为空
+}
+
+var cmdbTaxonomyTables = map[string]cmdbTaxonomyTableSpec{
+	"orgs":                      {Table: "cmdb_orgs", FK: "org_id", Label: "组织"},
+	"groups":                    {Table: "cmdb_groups", FK: "group_id", Label: "资产分组"},
+	"categories":                {Table: "cmdb_device_categories", FK: "category_id", Label: "基础设施分类", AssetScope: "infrastructure"},
+	"infrastructure-categories": {Table: "cmdb_device_categories", FK: "category_id", Label: "基础设施分类", AssetScope: "infrastructure"},
+	"terminal-categories":       {Table: "cmdb_device_categories", Label: "终端资产分类", AssetScope: "terminal"},
+	"application-categories":    {Table: "cmdb_device_categories", Label: "业务系统分类", AssetScope: "application"},
 }
 
 // CmdbTaxonomyNode 是三个维度通用的节点结构。
@@ -28,11 +34,7 @@ type CmdbTaxonomyNode struct {
 	ChildCount int    `json:"child_count"` // 子节点数
 }
 
-func cmdbTaxonomySpec(kind string) (struct {
-	Table string
-	FK    string
-	Label string
-}, error) {
+func cmdbTaxonomySpec(kind string) (cmdbTaxonomyTableSpec, error) {
 	spec, ok := cmdbTaxonomyTables[kind]
 	if !ok {
 		return spec, fmt.Errorf("未知的分类维度: %s", kind)

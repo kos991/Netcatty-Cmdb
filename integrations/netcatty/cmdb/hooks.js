@@ -1,5 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from '@/components/ui/toast'
+
+export function useTableDensity() {
+  const ref = useRef(null)
+  const [density, setDensity] = useState('wide')
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (!element) return undefined
+    const update = (width) => setDensity(width < 650 ? 'compact' : width < 1100 ? 'medium' : 'wide')
+    update(element.getBoundingClientRect().width)
+    const observer = new ResizeObserver(([entry]) => update(entry.contentRect.width))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+  return [ref, density]
+}
 
 // 过期请求不能覆盖新的筛选结果或已关闭的详情。
 export function useQuery(loader, initial = null) {

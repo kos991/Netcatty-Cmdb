@@ -37,7 +37,13 @@ var projectScopedTables = []string{
 	"cmdb_device_models",
 	"cmdb_assets",
 	"cmdb_asset_interfaces",
+	"cmdb_asset_links",
+	"cmdb_netcatty_links",
+	"cmdb_switch_snapshots",
+	"cmdb_asset_history",
 	"cmdb_work_orders",
+	"cmdb_work_order_asset_links",
+	"cmdb_work_order_attachments",
 	"cmdb_inventory_tasks",
 	"cmdb_credentials",
 	"cmdb_labels",
@@ -115,6 +121,9 @@ func MigrateProjectSchema(db *sql.DB) error {
 	if err := migrateLegacyCustomFieldUniqueConstraint(tx); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`INSERT OR REPLACE INTO _meta(k, v) VALUES ('cmdb_sync_apply', 'schema-migration')`); err != nil {
+		return fmt.Errorf("mark project schema migration: %w", err)
+	}
 	for _, table := range projectScopedTables {
 		if err := addMissingColumns(tx, table, columns); err != nil {
 			return fmt.Errorf("add project columns to %s: %w", table, err)
@@ -131,12 +140,41 @@ func MigrateProjectSchema(db *sql.DB) error {
 	if err := migrateProjectUniqueIndexes(tx); err != nil {
 		return err
 	}
+	if err := backfillAssetCategoryTaxonomies(tx, now); err != nil {
+		return err
+	}
 	if err := migrateLegacyPersonOrgPaths(tx, now); err != nil {
 		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM _meta WHERE k = 'cmdb_sync_apply'`); err != nil {
+		return fmt.Errorf("clear project schema migration marker: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit project migration: %w", err)
+	}
+	return nil
+}
+
+func backfillAssetCategoryTaxonomies(tx *sql.Tx, now string) error {
+	statements := []struct {
+		scope  string
+		table  string
+		column string
+	}{
+		{scope: "terminal", table: "assets", column: "device_type"},
+		{scope: "application", table: "server_apps", column: "app_type"},
+	}
+	for _, item := range statements {
+		query := fmt.Sprintf(`INSERT OR IGNORE INTO cmdb_device_categories
+			(project_id,name,asset_scope,parent_id,sort_order,created_at,updated_at)
+			SELECT project_id,TRIM(%s),?,0,0,?,?
+			FROM %s
+			WHERE project_id>0 AND TRIM(IFNULL(%s,''))<>''
+			GROUP BY project_id,TRIM(%s)`, item.column, item.table, item.column, item.column)
+		if _, err := tx.Exec(query, item.scope, now, now); err != nil {
+			return fmt.Errorf("backfill %s asset categories: %w", item.scope, err)
+		}
 	}
 	return nil
 }
@@ -198,13 +236,18 @@ func migrateLegacyCustomFieldUniqueConstraint(tx *sql.Tx) error {
 }
 
 func migrateProjectUniqueIndexes(tx *sql.Tx) error {
+	// 分类名称只要求在同一项目、同一资产范围和同一上级内唯一。
+	// 旧索引不含 asset_scope，必须先删除后以同名索引重建，才能允许三类资产使用同名分类。
+	if _, err := tx.Exec("DROP INDEX IF EXISTS idx_cmdb_categories_project_parent_name"); err != nil {
+		return fmt.Errorf("drop idx_cmdb_categories_project_parent_name: %w", err)
+	}
 	indexes := []struct {
 		drop   string
 		create string
 	}{
 		{drop: "idx_cmdb_orgs_parent_name", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_orgs_project_parent_name ON cmdb_orgs(project_id, parent_id, name) WHERE deleted_at IS NULL"},
 		{drop: "idx_cmdb_groups_parent_name", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_groups_project_parent_name ON cmdb_groups(project_id, parent_id, name) WHERE deleted_at IS NULL"},
-		{drop: "idx_cmdb_categories_parent_name", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_categories_project_parent_name ON cmdb_device_categories(project_id, parent_id, name) WHERE deleted_at IS NULL"},
+		{drop: "idx_cmdb_categories_parent_name", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_categories_project_parent_name ON cmdb_device_categories(project_id, asset_scope, parent_id, name) WHERE deleted_at IS NULL"},
 		{drop: "idx_cmdb_models_vendor_model", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_models_project_vendor_model ON cmdb_device_models(project_id, vendor, model) WHERE deleted_at IS NULL"},
 		{drop: "idx_cmdb_labels_code", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_labels_project_code ON cmdb_labels(project_id, code) WHERE deleted_at IS NULL"},
 		{drop: "idx_cmdb_assets_source", create: "CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_assets_project_source ON cmdb_assets(project_id, source_type, source_id) WHERE source_id > 0 AND deleted_at IS NULL"},
@@ -222,6 +265,34 @@ func migrateProjectUniqueIndexes(tx *sql.Tx) error {
 	if _, err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_orders_project_order_no
 		ON cmdb_work_orders(project_id, order_no) WHERE order_no <> '' AND deleted_at IS NULL`); err != nil {
 		return fmt.Errorf("create project work order number index: %w", err)
+	}
+	if _, err := tx.Exec(`DROP INDEX IF EXISTS ux_cmdb_netcatty_primary_host`); err != nil {
+		return fmt.Errorf("drop Netcatty primary host index: %w", err)
+	}
+	if _, err := tx.Exec(`CREATE UNIQUE INDEX ux_cmdb_netcatty_primary_host
+		ON cmdb_netcatty_links(project_id, host_id) WHERE host_id <> '' AND is_primary = 1 AND deleted_at IS NULL`); err != nil {
+		return fmt.Errorf("create Netcatty primary host index: %w", err)
+	}
+	if _, err := tx.Exec(`DROP INDEX IF EXISTS ux_cmdb_netcatty_asset_host`); err != nil {
+		return fmt.Errorf("drop Netcatty asset host index: %w", err)
+	}
+	if _, err := tx.Exec(`CREATE UNIQUE INDEX ux_cmdb_netcatty_asset_host
+		ON cmdb_netcatty_links(project_id, asset_type, asset_id, host_id) WHERE host_id <> '' AND deleted_at IS NULL`); err != nil {
+		return fmt.Errorf("create Netcatty asset host index: %w", err)
+	}
+	if _, err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_cmdb_netcatty_asset_credential_only
+		ON cmdb_netcatty_links(project_id, asset_type, asset_id, credential_id) WHERE host_id = '' AND credential_id <> '' AND deleted_at IS NULL`); err != nil {
+		return fmt.Errorf("create Netcatty standalone credential index: %w", err)
+	}
+	if _, err := tx.Exec(`DROP INDEX IF EXISTS idx_cmdb_switch_snapshot_asset`); err != nil {
+		return fmt.Errorf("drop switch snapshot asset index: %w", err)
+	}
+	if _, err := tx.Exec(`DROP INDEX IF EXISTS idx_cmdb_switch_snapshot_project_asset`); err != nil {
+		return fmt.Errorf("drop project switch snapshot asset index: %w", err)
+	}
+	if _, err := tx.Exec(`CREATE UNIQUE INDEX idx_cmdb_switch_snapshot_project_asset
+		ON cmdb_switch_snapshots(project_id, asset_id) WHERE deleted_at IS NULL`); err != nil {
+		return fmt.Errorf("create switch snapshot project asset index: %w", err)
 	}
 	return nil
 }
@@ -277,6 +348,9 @@ func backfillProjectMetadata(tx *sql.Tx, table string, projectID int64, now stri
 	if err := createProjectInsertTrigger(tx, table); err != nil {
 		return err
 	}
+	if err := createProjectChangeTriggers(tx, table); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -310,6 +384,74 @@ func createProjectInsertTrigger(tx *sql.Tx, table string) error {
 	`, table, table, table, DefaultProjectCode, uuidExpression)
 	if _, err := tx.Exec(query); err != nil {
 		return fmt.Errorf("create %s sync metadata trigger: %w", table, err)
+	}
+	return nil
+}
+
+func createProjectChangeTriggers(tx *sql.Tx, table string) error {
+	for _, suffix := range []string{"sync_revision", "sync_soft_delete", "sync_delete"} {
+		if _, err := tx.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS trg_%s_%s", table, suffix)); err != nil {
+			return fmt.Errorf("drop %s %s trigger: %w", table, suffix, err)
+		}
+	}
+	changeTrigger := fmt.Sprintf(`
+		CREATE TRIGGER IF NOT EXISTS trg_%s_sync_revision
+		AFTER UPDATE ON %s
+		FOR EACH ROW
+		WHEN OLD.project_id IS NOT NULL AND OLD.project_id > 0
+			AND OLD.sync_id IS NOT NULL AND OLD.sync_id <> ''
+			AND (NEW.revision IS NULL OR NEW.revision <= OLD.revision)
+			AND NOT EXISTS (SELECT 1 FROM _meta WHERE k='cmdb_sync_apply')
+		BEGIN
+			UPDATE %s
+			SET revision = OLD.revision + 1,
+				updated_at = strftime('%%Y-%%m-%%dT%%H:%%M:%%fZ', 'now')
+			WHERE id = NEW.id;
+		END
+	`, table, table, table)
+	if _, err := tx.Exec(changeTrigger); err != nil {
+		return fmt.Errorf("create %s revision trigger: %w", table, err)
+	}
+
+	tombstoneUpdateTrigger := fmt.Sprintf(`
+		CREATE TRIGGER IF NOT EXISTS trg_%s_sync_soft_delete
+		AFTER UPDATE OF deleted_at ON %s
+		FOR EACH ROW
+		WHEN OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
+			AND NEW.sync_id IS NOT NULL AND NEW.sync_id <> ''
+			AND NOT EXISTS (SELECT 1 FROM _meta WHERE k='cmdb_sync_apply')
+		BEGIN
+			INSERT INTO cmdb_tombstones(project_id,entity_type,sync_id,revision,deleted_at)
+			VALUES(NEW.project_id,'%s',NEW.sync_id,
+				CASE WHEN NEW.revision <= OLD.revision THEN OLD.revision + 1 ELSE NEW.revision END,
+				NEW.deleted_at)
+			ON CONFLICT(project_id,entity_type,sync_id) DO UPDATE SET
+				revision=MAX(revision,excluded.revision),
+				deleted_at=CASE WHEN excluded.revision >= revision THEN excluded.deleted_at ELSE deleted_at END;
+		END
+	`, table, table, table)
+	if _, err := tx.Exec(tombstoneUpdateTrigger); err != nil {
+		return fmt.Errorf("create %s soft-delete trigger: %w", table, err)
+	}
+
+	tombstoneDeleteTrigger := fmt.Sprintf(`
+		CREATE TRIGGER IF NOT EXISTS trg_%s_sync_delete
+		AFTER DELETE ON %s
+		FOR EACH ROW
+		WHEN OLD.project_id IS NOT NULL AND OLD.project_id > 0
+			AND OLD.sync_id IS NOT NULL AND OLD.sync_id <> ''
+			AND NOT EXISTS (SELECT 1 FROM _meta WHERE k='cmdb_sync_apply')
+		BEGIN
+			INSERT INTO cmdb_tombstones(project_id,entity_type,sync_id,revision,deleted_at)
+			VALUES(OLD.project_id,'%s',OLD.sync_id,OLD.revision + 1,
+				COALESCE(NULLIF(OLD.deleted_at,''),strftime('%%Y-%%m-%%dT%%H:%%M:%%fZ', 'now')))
+			ON CONFLICT(project_id,entity_type,sync_id) DO UPDATE SET
+				revision=MAX(revision,excluded.revision),
+				deleted_at=CASE WHEN excluded.revision >= revision THEN excluded.deleted_at ELSE deleted_at END;
+		END
+	`, table, table, table)
+	if _, err := tx.Exec(tombstoneDeleteTrigger); err != nil {
+		return fmt.Errorf("create %s delete trigger: %w", table, err)
 	}
 	return nil
 }

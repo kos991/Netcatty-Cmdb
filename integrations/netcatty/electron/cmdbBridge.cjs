@@ -10,12 +10,14 @@ const IMPORT_PATHS = new Set([
   "/api/import/assets",
   "/api/import/sangfor",
   "/api/cmdb/assets/import",
+  "/api/ip_pool/import",
 ]);
 
 const CMDB_CHANNELS = Object.freeze({
   status: "netcatty:cmdb:status",
   request: "netcatty:cmdb:request",
   importFile: "netcatty:cmdb:import-file",
+  uploadFile: "netcatty:cmdb:upload-file",
   exportFile: "netcatty:cmdb:export-file",
 });
 
@@ -128,6 +130,15 @@ function createImportForm(filePath, file) {
   return form;
 }
 
+function workOrderAttachmentUploadPath(path) {
+  const normalizedPath = normalizeApiPath(path);
+  const url = new URL(normalizedPath, API_ORIGIN);
+  if (url.search || !/^\/api\/cmdb\/work-orders\/[1-9]\d*\/attachments$/.test(url.pathname)) {
+    throw new Error("工单附件上传路径不允许");
+  }
+  return url.pathname;
+}
+
 function registerCmdbBridge({
   ipcMain,
   dialog,
@@ -193,6 +204,31 @@ function registerCmdbBridge({
     });
     if (payload.commit) importFiles.delete(token);
     return { ...(response && typeof response === "object" ? response : { result: response }), token, cancelled: false };
+  });
+
+  ipcMain.handle(CMDB_CHANNELS.uploadFile, async (_event, payload = {}) => {
+    const path = workOrderAttachmentUploadPath(payload.path);
+    let form;
+    if (payload.fileName !== undefined || payload.bytes !== undefined) {
+      if (typeof payload.fileName !== "string" || !payload.fileName.trim() || !(payload.bytes instanceof Uint8Array)) {
+        throw new Error("附件内容无效");
+      }
+      if (payload.bytes.byteLength > 50 * 1024 * 1024) throw new Error("附件不能超过 50 MiB");
+      form = createImportForm(payload.fileName, payload.bytes);
+    } else {
+      const selection = await dialog.showOpenDialog({ properties: ["openFile"] });
+      if (selection.canceled || !selection.filePaths?.[0]) return { cancelled: true };
+      const filePath = selection.filePaths[0];
+      form = createImportForm(filePath, await readFileImpl(filePath));
+    }
+    const response = await requestCmdb({
+      service: requireService(getService),
+      path,
+      method: "POST",
+      body: form,
+      fetchImpl,
+    });
+    return { ...(response && typeof response === "object" ? response : { result: response }), cancelled: false };
   });
 
   ipcMain.handle(CMDB_CHANNELS.exportFile, async (_event, payload = {}) => {

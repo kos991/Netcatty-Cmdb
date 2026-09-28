@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS ip_subnets (
     cidr TEXT,
     gateway TEXT,
     vlan TEXT,
+    vni TEXT,
     purpose TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     remark TEXT,
@@ -43,11 +44,14 @@ type IPSubnet struct {
 	CIDR      string `json:"cidr"`
 	Gateway   string `json:"gateway"`
 	VLAN      string `json:"vlan"`
+	VNI       string `json:"vni"`
 	Purpose   string `json:"purpose"`
 	SortOrder int64  `json:"sort_order"`
 	Remark    string `json:"remark"`
 	Total     int    `json:"total"`
 	Used      int    `json:"used"`
+	Reserved  int    `json:"reserved"`
+	Abnormal  int    `json:"abnormal"`
 	Free      int    `json:"free"`
 	// Defined=false 表示该网段只在 ip_pool 里有数据、但还没有定义记录
 	Defined bool `json:"defined"`

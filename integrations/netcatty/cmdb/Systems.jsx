@@ -1,78 +1,112 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Pencil, Server, Trash2 } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link2, Pencil, Server, Settings2, Trash2, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { api } from './api'
-import { allPages, useAction, useQuery } from './hooks'
+import { allPages, useAction, useDirectory, useQuery, useTableDensity } from './hooks'
 import { choices, Fields, textFields, validateFields } from './Fields'
-import { ActionIcon, DataTable, DefinitionList, DetailSheet, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
+import { isApplicationHostInfrastructure } from './state'
+import { ActionIcon, DataTable, ErrorBanner, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
 import ImportDialog from './ImportDialog'
+import NetcattyConnectionFields, { useNetcattyConnectionEditor } from './NetcattyConnectionFields'
+import NetcattyLinks from './NetcattyLinks'
+import { AssetPanel, AssetPanelFields, AssetPanelSave, AssetPanelSection } from './AssetPanel'
 
-const SERVER_FIELDS = textFields([['device_name', '设备名称'], ['asset_code', '资产编码'], ['brand_model', '品牌型号'], ['serial_number', '序列号'], ['location', '位置'], ['rack_unit', '机位'], ['cpu_info', 'CPU'], ['memory_info', '内存'], ['disk_info', '磁盘'], ['mgmt_ip', '管理 IP'], ['biz_ip', '业务 IP'], ['mgmt_url', '管理地址'], ['os_type', '操作系统'], ['admin_user', '管理员'], ['purchase_date', '采购日期', 'date'], ['warranty_date', '质保日期', 'date'], ['remark', '备注', 'textarea']]).map((f) => ({ ...f, required: f.key === 'device_name' }))
-const APP_FIELDS = textFields([['app_name', '系统名称'], ['version', '版本'], ['port', '端口'], ['access_url', '访问地址'], ['middleware', '中间件'], ['database_info', '数据库'], ['owner', '负责人'], ['description', '说明', 'textarea'], ['remark', '备注', 'textarea']]).map((f) => ({ ...f, required: f.key === 'app_name' }))
-const loadDirectory = () => allPages(api.servers)
+const APP_FIELDS = textFields([['app_name', '系统名称'], ['version', '版本'], ['provider', '供应商'], ['port', '端口'], ['access_url', '访问地址'], ['middleware', '中间件'], ['database_info', '数据库'], ['owner', '负责人'], ['description', '说明', 'textarea'], ['remark', '备注', 'textarea']]).map((f) => ({ ...f, required: f.key === 'app_name' }))
+const loadDirectory = () => allPages(api.infrastructure, { scope: 'infrastructure' })
+const loadTaxonomy = async () => {
+  const [categories, groups] = await Promise.all([api.taxonomy('application-categories'), api.taxonomy('groups')])
+  return { categories: categories.list || [], groups: groups.list || [] }
+}
 
-export default function Systems({ keyword, focusTarget, meta, command, leadingControl }) {
+export default function Systems({ keyword, focusTarget, meta, command, leadingControl, onPanelOpenChange }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [type, setType] = useState('')
+  const [groupId, setGroupId] = useState('')
   const [status, setStatus] = useState('')
   const [editor, setEditor] = useState(null)
   const [values, setValues] = useState({})
   const [deleting, setDeleting] = useState(null)
   const [detail, setDetail] = useState(null)
-  const [serverOpen, setServerOpen] = useState(false)
-  const [serverPage, setServerPage] = useState(1)
+  const [tableRef, density] = useTableDensity()
+  useEffect(() => { onPanelOpenChange?.(!!detail || !!editor) }, [detail, editor, onPanelOpenChange])
   const handledCommandId = useRef(null)
   const action = useAction()
+  const netcatty = useNetcattyConnectionEditor('application')
+  const beginNetcattyConnection = netcatty.begin
   const directory = useQuery(loadDirectory, [])
-  const loader = useCallback(() => api.apps({ keyword, app_type: type, status, page, page_size: pageSize }), [keyword, type, status, page, pageSize])
+  const taxonomy = useDirectory(loadTaxonomy)
+  const categories = useMemo(() => taxonomy.data?.categories || [], [taxonomy.data?.categories])
+  const groups = useMemo(() => taxonomy.data?.groups || [], [taxonomy.data?.groups])
+  const loader = useCallback(() => api.apps({ keyword, app_type: type, group_id: groupId, status, page, page_size: pageSize }), [keyword, type, groupId, status, page, pageSize])
   const query = useQuery(loader)
   const detailLoader = useCallback(async () => {
     if (!detail) return null
-    if (detail.tableKey === 'servers') return api.server(detail.id)
     const apps = await allPages(api.apps)
     const app = apps.find((item) => item.id === detail.id)
     if (!app) throw new Error('业务系统不存在')
-    const host = app.server_id ? await api.server(app.server_id) : null
-    return { app, ...host }
+    const host = app.cmdb_asset_id ? await api.infrastructureAsset(app.cmdb_asset_id) : null
+    return { app, infrastructure: host?.asset || null }
   }, [detail])
   const detailQuery = useQuery(detailLoader)
+  const serverDirectory = (directory.data || []).filter((asset) => isApplicationHostInfrastructure(asset))
   useEffect(() => { setPage(1) }, [keyword])
-  useEffect(() => { if (['servers', 'server_apps'].includes(focusTarget?.tableKey)) setDetail(focusTarget) }, [focusTarget])
-  const open = useCallback((kind, record = {}) => { setEditor({ kind, record }); setValues({ status: kind === 'server' ? '运行中' : '正常运行', app_type: '业务应用', ...record }) }, [])
-  const refresh = useCallback(() => { query.reload(); directory.reload(); detailQuery.reload() }, [detailQuery, directory, query])
+  useEffect(() => { if (focusTarget?.tableKey === 'server_apps') setDetail(focusTarget) }, [focusTarget])
+  const open = useCallback((record = {}) => { void beginNetcattyConnection(record.id || 0); setEditor({ record }); setValues({ status: '正常运行', app_type: categories[0]?.name || '', group_id: 0, ...record }) }, [beginNetcattyConnection, categories])
+  const refresh = useCallback(() => { query.reload(); directory.reload(); taxonomy.reload(); detailQuery.reload() }, [detailQuery, directory, query, taxonomy])
   useEffect(() => {
     if (!command?.id || command?.tab !== 'systems' || handledCommandId.current === command.id) return
     handledCommandId.current = command.id
-    if (command.type === 'create') open('app')
+    if (command.type === 'create') open()
     if (command.type === 'refresh') refresh()
   }, [command, open, refresh])
-  const fields = editor?.kind === 'server' ? [...SERVER_FIELDS, { key: 'status', label: '状态', options: choices(meta.server_statuses || []) }] : [
-    ...APP_FIELDS, { key: 'server_id', label: '承载基础设施', numeric: true, required: true, options: choices((directory.data || []).map((s) => ({ value: s.id, label: `${s.device_name} · ${s.biz_ip || s.mgmt_ip || ''}` }))) },
-    { key: 'app_type', label: '系统类型', options: choices(meta.app_types || []) }, { key: 'status', label: '状态', options: choices(meta.app_statuses || []) },
+  const fields = [
+    ...APP_FIELDS, { key: 'cmdb_asset_id', label: '承载服务器（可选）', numeric: true, options: choices(serverDirectory.map((asset) => ({ value: asset.id, label: `${asset.name || asset.asset_code} · ${asset.category_name || asset.device_type || ''} · ${asset.mgmt_ip || asset.manage_ip || asset.biz_ip || '无 IP'}` })), '不关联服务器') },
+    { key: 'app_type', label: '系统类型', required: true, searchable: true, options: choices([...new Set([...categories.map((item) => item.name), values.app_type].filter(Boolean))]) },
+    { key: 'group_id', label: '所属分组', numeric: true, searchable: true, options: choices(groups.map((item) => ({ value: item.id, label: item.name })), '未分组') },
+    { key: 'status', label: '状态', options: choices(meta.app_statuses || []) },
   ]
   const appColumns = [
     { key: 'app_name', label: '业务系统', render: (v, row) => <Button variant="link" className="h-auto p-0" onClick={() => setDetail({ tableKey: 'server_apps', id: row.id })}>{v}</Button> },
-    ...textFields([['app_type', '类型'], ['version', '版本'], ['server_name', '承载设备'], ['server_biz_ip', 'IP'], ['port', '端口'], ['owner', '负责人']]), { key: 'status', label: '状态', render: (v) => <StatusPill tone={statusTone(v)}>{v}</StatusPill> },
-    { key: 'actions', label: '操作', render: (_, row) => <div className="flex"><ActionIcon label="编辑系统" onClick={() => open('app', row)}><Pencil size={15} /></ActionIcon><ActionIcon label="删除系统" danger onClick={() => setDeleting({ kind: 'app', record: row })}><Trash2 size={15} /></ActionIcon></div> },
+    { key: 'app_type', label: '分类 / 分组', render: (value, row) => <div>{value || '未分类'}<p className="text-[11px] text-muted-foreground">{row.group_name || '未分组'}</p></div> },
+    ...textFields([['version', '版本'], ['provider', '供应商'], ['server_name', '承载服务器'], ['server_biz_ip', 'IP'], ['port', '端口'], ['owner', '负责人']]), { key: 'status', label: '状态', render: (v) => <StatusPill tone={statusTone(v)}>{v}</StatusPill> },
+    { key: 'actions', label: '操作', render: (_, row) => <div className="flex"><ActionIcon label="编辑系统" onClick={() => open(row)}><Pencil size={15} /></ActionIcon><ActionIcon label="删除系统" danger onClick={() => setDeleting({ kind: 'app', record: row })}><Trash2 size={15} /></ActionIcon></div> },
   ]
-  return <div className="flex min-h-0 flex-1 flex-col"><Toolbar>
+  const compactColumns = [
+    { key: 'app_name', label: '业务系统 / 承载', render: (value, row) => <div className="min-w-0"><Button variant="link" className="h-auto max-w-full truncate p-0" onClick={() => setDetail({ tableKey: 'server_apps', id: row.id })}>{value}</Button><p className="truncate text-[11px] text-muted-foreground">{row.app_type || '未分类'} · {row.group_name || '未分组'} · {row.server_name || '未关联服务器'} · {row.server_biz_ip || '无 IP'}</p></div> },
+    { key: 'status', label: '状态', headerClassName: 'w-24', render: (value) => <StatusPill tone={statusTone(value)}>{value}</StatusPill> },
+    { key: 'actions', label: '操作', headerClassName: 'w-20', render: (_, row) => <div className="flex"><ActionIcon label="编辑系统" onClick={() => open(row)}><Pencil size={15} /></ActionIcon><ActionIcon label="删除系统" danger onClick={() => setDeleting({ kind: 'app', record: row })}><Trash2 size={15} /></ActionIcon></div> },
+  ]
+  const mediumColumns = appColumns.filter((column) => ['app_name', 'app_type', 'server_name', 'server_biz_ip', 'status', 'actions'].includes(column.key))
+  const visibleColumns = density === 'compact' ? compactColumns : density === 'medium' ? mediumColumns : appColumns
+  const save = () => action.run(async () => {
+    validateFields(fields, values)
+    const result = editor.record.id ? (await api.updateApp(editor.record.id, values), { id: editor.record.id }) : await api.createApp(values)
+    await netcatty.persist(result.id)
+    setEditor(null)
+    refresh()
+  }, '已保存')
+  return <div ref={tableRef} className="flex min-h-0 flex-1 flex-col"><Toolbar>
     {leadingControl}
-    <SelectControl className="w-36" value={type} onChange={(v) => { setType(v); setPage(1) }} options={choices(meta.app_types || [], '全部类型')} /><SelectControl className="w-36" value={status} onChange={(v) => { setStatus(v); setPage(1) }} options={choices(meta.app_statuses || [], '全部状态')} />
-    <div className="ml-auto flex gap-2"><Button variant="outline" size="sm" onClick={() => setServerOpen(true)}><Server size={14} className="mr-1" />承载设备</Button><ImportDialog title="设备信息导入" importer={api.importSangfor} onImported={refresh} /></div>
+    <SelectControl className="w-36" value={type} onChange={(v) => { setType(v); setPage(1) }} options={choices(categories.map((item) => item.name), '全部系统分类')} /><SelectControl className="w-36" value={groupId} onChange={(v) => { setGroupId(v); setPage(1) }} options={choices(groups.map((item) => ({ value: item.id, label: item.name })), '全部资产分组')} /><SelectControl className="w-36" value={status} onChange={(v) => { setStatus(v); setPage(1) }} options={choices(meta.app_statuses || [], '全部状态')} />
+    <div className="ml-auto flex gap-2"><ImportDialog title="设备信息导入" importer={api.importSangfor} onImported={refresh} /></div>
   </Toolbar>
-    {(query.error || directory.error) && <ErrorBanner message={query.error || directory.error} onRetry={refresh} />}
-    <DataTable loading={query.loading} rows={query.error ? [] : query.data?.list || []} columns={appColumns} />
+    {(query.error || directory.error || taxonomy.error) && <ErrorBanner message={query.error || directory.error || taxonomy.error} onRetry={refresh} />}
+    <DataTable loading={query.loading} rows={query.error ? [] : query.data?.list || []} columns={visibleColumns} compact={density !== 'wide'} />
     <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(p, s) => { setPage(p); setPageSize(s) }} />
-    <DetailSheet open={serverOpen} onOpenChange={setServerOpen} title="承载基础设施" actions={<Button size="sm" onClick={() => open('server')}>新增</Button>}><DataTable rows={(directory.data || []).slice((serverPage - 1) * 20, serverPage * 20)} columns={[
-      { key: 'device_name', label: '设备名称', render: (v, row) => <Button variant="link" onClick={() => { setServerOpen(false); setDetail({ tableKey: 'servers', id: row.id }) }}>{v}</Button> }, ...textFields([['biz_ip', '业务 IP'], ['mgmt_ip', '管理 IP'], ['status', '状态']]), { key: 'actions', label: '操作', render: (_, row) => <div className="flex"><ActionIcon label="编辑设备" onClick={() => open('server', row)}><Pencil size={15} /></ActionIcon><ActionIcon label="删除设备" danger onClick={() => setDeleting({ kind: 'server', record: row })}><Trash2 size={15} /></ActionIcon></div> },
-    ]} /><Pagination page={serverPage} pageSize={20} total={directory.data?.length || 0} onChange={setServerPage} /></DetailSheet>
-    <DetailSheet open={!!detail} onOpenChange={(v) => { if (!v) setDetail(null) }} title="业务系统与承载设备详情">
+    {detail && <AssetPanel open onClose={() => setDetail(null)} title={detailQuery.data?.app?.app_name || detail.app_name || '业务系统'} subtitle={detailQuery.data?.app?.app_type} status={detailQuery.data?.app?.status} icon={Workflow} onEdit={detailQuery.data?.app ? () => open(detailQuery.data.app) : undefined}>
       {detailQuery.error && <ErrorBanner message={detailQuery.error} onRetry={detailQuery.reload} />}
-      {detailQuery.data && <div className="space-y-4">{detailQuery.data.app && <DefinitionList items={[...APP_FIELDS, { key: 'status', label: '状态' }, { key: 'app_type', label: '系统类型' }].map((f) => [f.label, detailQuery.data.app[f.key]])} />}{detailQuery.data.server && <><h3 className="text-sm font-medium">承载基础设施</h3><DefinitionList items={SERVER_FIELDS.map((f) => [f.label, detailQuery.data.server[f.key]])} /><h3 className="text-sm font-medium">承载系统</h3><DataTable rows={detailQuery.data.apps || []} columns={appColumns} /></>}</div>}
-    </DetailSheet>
-    <ModalForm open={!!editor} onOpenChange={(v) => { if (!v) setEditor(null) }} title={`${editor?.record.id ? '编辑' : '新增'}${editor?.kind === 'server' ? '承载设备' : '业务系统'}`} wide busy={action.busy} onSubmit={() => action.run(async () => { validateFields(fields, values); if (editor.kind === 'server') { if (editor.record.id) await api.updateServer(editor.record.id, values); else await api.createServer(values) } else if (editor.record.id) await api.updateApp(editor.record.id, values); else await api.createApp(values.server_id, values); setEditor(null); refresh() }, '已保存')}><Fields fields={fields} value={values} onChange={setValues} /></ModalForm>
-    <ConfirmDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null) }} title="确认删除" message={deleting?.kind === 'server' ? '删除承载设备会同时删除其关联业务系统，请确认。' : '确认删除此业务系统？'} confirmLabel="删除" destructive busy={action.busy} onConfirm={() => action.run(async () => { if (deleting.kind === 'server') await api.deleteServer(deleting.record.id); else await api.deleteApp(deleting.record.id); setDeleting(null); refresh() }, '已删除')} />
+      {detailQuery.data?.app && <>
+        <AssetPanelSection title="系统配置" icon={Settings2}><AssetPanelFields items={[["系统名称", detailQuery.data.app.app_name], ["类型", detailQuery.data.app.app_type], ["所属分组", detailQuery.data.app.group_name], ["版本", detailQuery.data.app.version], ["供应商", detailQuery.data.app.provider], ["端口", detailQuery.data.app.port], ["访问地址", detailQuery.data.app.access_url], ["中间件", detailQuery.data.app.middleware], ["数据库", detailQuery.data.app.database_info]]} /></AssetPanelSection>
+        <AssetPanelSection title="归属与承载" icon={Server}><AssetPanelFields items={[["负责人", detailQuery.data.app.owner], ["承载服务器", detailQuery.data.infrastructure?.name || '未关联'], ["说明", detailQuery.data.app.description], ["备注", detailQuery.data.app.remark]]} /></AssetPanelSection>
+        <AssetPanelSection title="Netcatty 连接" icon={Link2}><NetcattyLinks assetType="application" assetId={detailQuery.data.app.id} embedded /></AssetPanelSection>
+      </>}
+    </AssetPanel>}
+    {editor && <AssetPanel open onClose={() => setEditor(null)} title={editor.record.id ? '编辑业务系统' : '新增业务系统'} subtitle={editor.record.app_name} icon={Workflow} footer={<AssetPanelSave onCancel={() => setEditor(null)} onSave={save} busy={action.busy || netcatty.loading} />}>
+      <AssetPanelSection title="系统配置与承载" icon={Settings2}><Fields fields={fields} value={values} onChange={setValues} /></AssetPanelSection>
+      <AssetPanelSection title="Netcatty 连接" icon={Link2}><NetcattyConnectionFields asset={{ name: values.app_name, ip: values.server_biz_ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection>
+    </AssetPanel>}
+    <ConfirmDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null) }} title="确认删除" message="确认删除此业务系统？" confirmLabel="删除" destructive busy={action.busy} onConfirm={() => action.run(async () => { await api.deleteApp(deleting.record.id); setDeleting(null); refresh() }, '已删除')} />
   </div>
 }

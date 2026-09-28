@@ -20,8 +20,7 @@ export default function CmdbWorkspace({ activeModule = 'assets', onModuleChange 
   const initialize = useCallback(async () => {
     await nativeStatus()
     const [meta, projects] = await Promise.all([api.meta(), api.projects()])
-    void projects
-    return meta
+    return { ...meta, projects: projects.list || [] }
   }, [])
   const query = useQuery(initialize)
   const navigate = useCallback((result) => {

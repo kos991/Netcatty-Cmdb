@@ -45,16 +45,27 @@ func (s *Store) QueryCmdbWorkOrdersForProject(scope ProjectScope, q CmdbWorkOrde
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
 	list := make([]CmdbWorkOrder, 0, q.PageSize)
 	for rows.Next() {
 		item, err := scanCmdbWorkOrder(rows)
 		if err != nil {
+			rows.Close()
 			return nil, 0, err
 		}
 		list = append(list, item)
 	}
-	return list, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, 0, err
+	}
+	rows.Close()
+	for index := range list {
+		list[index].Assets, err = s.listWorkOrderAssetRefs(scope, list[index].ID)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	return list, total, nil
 }
 
 func (s *Store) CreateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrder) (int64, error) {
@@ -96,6 +107,12 @@ func (s *Store) CreateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	w.OrderNo = orderNo
 	w.ID = id
 	w.ProjectID = scope.ProjectID
+	if len(w.Assets) == 0 && w.AssetID > 0 {
+		w.Assets = []WorkOrderAssetRef{{AssetType: "infrastructure", AssetID: w.AssetID}}
+	}
+	if err := s.replaceWorkOrderAssetRefs(tx, scope, id, w.Assets); err != nil {
+		return 0, err
+	}
 	if err := tx.QueryRow(`SELECT sync_id FROM cmdb_work_orders WHERE id=? AND project_id=?`, id, scope.ProjectID).Scan(&w.SyncID); err != nil {
 		return id, err
 	}
@@ -176,6 +193,10 @@ func (s *Store) GetCmdbWorkOrderForProject(scope ProjectScope, id int64) (*CmdbW
 	if err != nil {
 		return nil, err
 	}
+	item.Assets, err = s.listWorkOrderAssetRefs(scope, item.ID)
+	if err != nil {
+		return nil, err
+	}
 	return &item, nil
 }
 
@@ -190,7 +211,12 @@ func (s *Store) UpdateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 		return err
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	res, err := s.db.Exec(`UPDATE cmdb_work_orders SET order_no=?, priority=?, subject=?, biz_type=?, operation_type=?, work_minutes=?, status=?,
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE cmdb_work_orders SET order_no=?, priority=?, subject=?, biz_type=?, operation_type=?, work_minutes=?, status=?,
 		plan_time=?, actual_time=?, result=?, owner=?, maintainer=?, asset_id=?, remark=?, updated_at=?
 		WHERE id=? AND project_id=?`, w.OrderNo, w.Priority, w.Subject, w.BizType, w.OperationType, w.WorkMinutes, w.Status,
 		w.PlanTime, w.ActualTime, w.Result, w.Owner, w.Maintainer, w.AssetID, w.Remark, now, w.ID, scope.ProjectID)
@@ -200,19 +226,117 @@ func (s *Store) UpdateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("工单不属于当前项目: %w", ErrProjectScopedNotFound)
 	}
+	if len(w.Assets) == 0 && w.AssetID > 0 {
+		w.Assets = []WorkOrderAssetRef{{AssetType: "infrastructure", AssetID: w.AssetID}}
+	}
+	if err := s.replaceWorkOrderAssetRefs(tx, scope, w.ID, w.Assets); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) replaceWorkOrderAssetRefs(tx *sql.Tx, scope ProjectScope, workOrderID int64, refs []WorkOrderAssetRef) error {
+	if _, err := tx.Exec(`DELETE FROM cmdb_work_order_asset_links WHERE project_id=? AND work_order_id=?`, scope.ProjectID, workOrderID); err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		name, err := workOrderAssetName(tx, scope.ProjectID, ref.AssetType, ref.AssetID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO cmdb_work_order_asset_links(project_id,work_order_id,asset_type,asset_id,asset_name,created_at)
+			VALUES(?,?,?,?,?,?)`, scope.ProjectID, workOrderID, ref.AssetType, ref.AssetID, name, time.Now().Format("2006-01-02 15:04:05")); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func workOrderAssetName(q cmdbRelationQuerier, projectID int64, assetType string, assetID int64) (string, error) {
+	if assetID <= 0 {
+		return "", errors.New("关联资产 ID 无效")
+	}
+	var name string
+	var err error
+	switch assetType {
+	case "terminal":
+		err = q.QueryRow(`SELECT COALESCE(NULLIF(asset_code,''), NULLIF(device_type,''), '#' || id) FROM assets WHERE project_id=? AND id=?`, projectID, assetID).Scan(&name)
+	case "infrastructure":
+		err = q.QueryRow(`SELECT COALESCE(NULLIF(name,''), NULLIF(asset_code,''), '#' || id) FROM cmdb_assets WHERE project_id=? AND id=? AND deleted_at IS NULL`, projectID, assetID).Scan(&name)
+	case "application":
+		err = q.QueryRow(`SELECT app_name FROM server_apps WHERE project_id=? AND id=?`, projectID, assetID).Scan(&name)
+	default:
+		return "", fmt.Errorf("不支持的关联资产类型: %s", assetType)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("关联资产不存在或不属于当前项目: %w", ErrProjectScopedNotFound)
+	}
+	return name, err
+}
+
+func (s *Store) listWorkOrderAssetRefs(scope ProjectScope, workOrderID int64) ([]WorkOrderAssetRef, error) {
+	rows, err := s.db.Query(`SELECT asset_type,asset_id,asset_name FROM cmdb_work_order_asset_links
+		WHERE project_id=? AND work_order_id=? ORDER BY id`, scope.ProjectID, workOrderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	refs := make([]WorkOrderAssetRef, 0)
+	for rows.Next() {
+		var ref WorkOrderAssetRef
+		if err := rows.Scan(&ref.AssetType, &ref.AssetID, &ref.AssetName); err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
 }
 
 func (s *Store) DeleteCmdbWorkOrderForProject(scope ProjectScope, id int64) error {
 	if _, err := s.ResolveProject(scope); err != nil {
 		return err
 	}
-	res, err := s.db.Exec(`DELETE FROM cmdb_work_orders WHERE id=? AND project_id=?`, id, scope.ProjectID)
+	if _, err := s.GetCmdbWorkOrderForProject(scope, id); err != nil {
+		return err
+	}
+	originalDir, stagedDir, err := s.stageWorkOrderAttachmentDirectory(scope, id)
 	if err != nil {
 		return err
 	}
+	restoreAttachments := func() error {
+		return restoreStagedWorkOrderAttachments(originalDir, stagedDir)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		_ = restoreAttachments()
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM cmdb_work_order_attachments WHERE project_id=? AND work_order_id=?`, scope.ProjectID, id); err != nil {
+		_ = restoreAttachments()
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM cmdb_work_order_asset_links WHERE project_id=? AND work_order_id=?`, scope.ProjectID, id); err != nil {
+		_ = restoreAttachments()
+		return err
+	}
+	res, err := tx.Exec(`DELETE FROM cmdb_work_orders WHERE id=? AND project_id=?`, id, scope.ProjectID)
+	if err != nil {
+		_ = restoreAttachments()
+		return err
+	}
 	if n, _ := res.RowsAffected(); n == 0 {
+		_ = restoreAttachments()
 		return fmt.Errorf("工单不属于当前项目: %w", ErrProjectScopedNotFound)
+	}
+	if err := tx.Commit(); err != nil {
+		if restoreErr := restoreAttachments(); restoreErr != nil {
+			return fmt.Errorf("删除工单失败: %v；恢复附件目录失败: %w", err, restoreErr)
+		}
+		return err
+	}
+	if err := removeStagedWorkOrderAttachments(stagedDir); err != nil {
+		return fmt.Errorf("工单已删除，但清理附件目录失败: %w", err)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Combobox } from '@/components/ui/combobox'
 import { Spinner } from '@/components/ui/spinner'
+import { AsidePanel, AsidePanelContent } from '@/components/ui/aside-panel'
 import {
   Select,
   SelectContent,
@@ -55,9 +56,10 @@ export function SearchBox({ value, onChange, onSearch, placeholder, inputRef, cl
 }
 
 export function SelectControl({ value, onChange, options = [], placeholder = '请选择', className, disabled, id, searchable = false, 'aria-label': label }) {
+  const [open, setOpen] = React.useState(false)
   const normalized = value === undefined || value === null || value === '' ? EMPTY_VALUE : String(value)
   if (searchable) return <Combobox ariaLabel={label || placeholder} disabled={disabled} className={className} triggerClassName="h-[32px] text-[12px]" allowCreate={false} options={options.map((option) => typeof option === 'object' ? { ...option, value: String(option.value ?? '') } : { value: String(option), label: String(option) })} value={normalized === EMPTY_VALUE ? '' : normalized} onValueChange={onChange} placeholder={placeholder} emptyText="没有匹配选项" />
-  return <Select value={normalized} onValueChange={(next) => onChange?.(next === EMPTY_VALUE ? '' : next)} disabled={disabled}>
+  return <Select value={normalized} open={open} onOpenChange={setOpen} onValueChange={(next) => { if ((!next || next === EMPTY_VALUE) && normalized !== EMPTY_VALUE && !open) return; onChange?.(next === EMPTY_VALUE ? '' : next) }} disabled={disabled}>
     <SelectTrigger id={id} aria-label={label || placeholder} className={cn('h-[32px] min-w-[132px] text-[12px]', className)}><SelectValue placeholder={placeholder} /></SelectTrigger>
     <SelectContent>
       {options.map((option) => {
@@ -97,15 +99,20 @@ export function ModalForm({ open, onOpenChange, title, children, onSubmit, submi
 }
 
 export function DetailSheet({ open, onOpenChange, title, children, actions }) {
-  return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="grid-rows-[auto_1fr] gap-0 left-auto right-0 top-0 h-screen max-h-screen w-[min(760px,calc(100vw-1rem))] max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-none border-y-0 border-r-0 p-0 sm:rounded-none">
-      <DialogHeader className="sticky top-0 z-10 flex-row items-center justify-between border-b border-border bg-background px-4 py-3 pr-12">
-        <DialogTitle className="text-sm">{title}</DialogTitle>
-        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
-      </DialogHeader>
-      <div className="min-h-0 overflow-auto p-4">{children}</div>
-    </DialogContent>
-  </Dialog>
+  return <AsidePanel
+    open={open}
+    onClose={() => onOpenChange?.(false)}
+    title={title}
+    actions={actions}
+    width="w-[420px]"
+    layout="overlay"
+    resizable
+    persistWidthStorageKey="netcatty_cmdb_detail_panel_width_v1"
+    resizeAriaLabel="调整详情面板宽度"
+    dataSection="cmdb-detail-panel"
+  >
+    <AsidePanelContent>{children}</AsidePanelContent>
+  </AsidePanel>
 }
 
 export function StatusPill({ children, tone = 'neutral' }) {
@@ -126,12 +133,12 @@ export function statusTone(value = '') {
   return 'neutral'
 }
 
-export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = '暂无数据', selected = [], onSelectedChange, onRowClick }) {
+export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = '暂无数据', selected = [], onSelectedChange, onRowClick, compact = false }) {
   const selectable = typeof onSelectedChange === 'function'
   const selectedSet = new Set(selected)
   const allSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row[rowKey]))
   return <div className="min-h-0 flex-1 overflow-auto">
-    <table className="w-full min-w-[760px] border-collapse text-left text-[12px]">
+    <table className={cn('w-full border-collapse text-left text-[12px]', compact ? 'table-fixed' : 'min-w-[760px]')}>
       <thead className="sticky top-0 z-[1] bg-secondary/30 text-[11px] text-muted-foreground backdrop-blur">
         <tr className="border-b border-border/30">
           {selectable ? <th className="w-9 px-3 py-1"><input type="checkbox" aria-label="选择全部" checked={allSelected} onChange={(event) => onSelectedChange(event.target.checked ? rows.map((row) => row[rowKey]) : [])} /></th> : null}
@@ -175,9 +182,9 @@ export function ErrorBanner({ title = '加载失败', message, onRetry }) {
 }
 
 export function DefinitionList({ items }) {
-  return <dl className="grid grid-cols-1 overflow-hidden rounded-md border border-border sm:grid-cols-2">
-    {items.map(([label, value]) => <div key={label} className="grid grid-cols-[104px_1fr] border-b border-border/60 px-3 py-2 text-xs last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0">
-      <dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 break-words text-foreground">{value === '' || value === undefined || value === null ? '-' : value}</dd>
+  return <dl className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+    {items.map(([label, value]) => <div key={label} className="min-w-0 border-b border-border/40 py-2.5">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt><dd className="mt-1 min-w-0 break-words text-xs text-foreground">{value === '' || value === undefined || value === null ? '-' : value}</dd>
     </div>)}
   </dl>
 }

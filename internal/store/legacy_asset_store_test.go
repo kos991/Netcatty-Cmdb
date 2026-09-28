@@ -92,6 +92,77 @@ func TestLegacyAssetDeviceTypeRoundTripAndMaintenanceInheritance(t *testing.T) {
 	}
 }
 
+func TestLegacyAssetOperatingSystemRoundTripSearchAndMappedUpdate(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	id := createLegacyAsset(t, s, Asset{
+		AssetCode: "OS-PC-1", DeviceType: "台式电脑", OSType: "统信 UOS", OSVersion: "20 1070e", Status: "在用",
+	})
+
+	asset, _, err := s.GetAsset(id)
+	if err != nil {
+		t.Fatalf("读取终端系统信息失败: %v", err)
+	}
+	if asset.OSType != "统信 UOS" || asset.OSVersion != "20 1070e" {
+		t.Fatalf("新增后系统信息未保存: %+v", asset)
+	}
+	found, total, err := s.QueryAssetsWithArchived("1070e", "", "", "", 1, 20, false)
+	if err != nil || total != 1 || len(found) != 1 || found[0].ID != id {
+		t.Fatalf("系统版本关键词应能检索终端: list=%+v total=%d err=%v", found, total, err)
+	}
+	global, err := s.GlobalSearch("统信 UOS", 20)
+	if err != nil || len(global) != 1 || global[0].ID != id || global[0].TableKey != "assets" {
+		t.Fatalf("设备资产顶部搜索应能按系统类型找到终端: results=%+v err=%v", global, err)
+	}
+
+	if _, err := s.SyncLegacyToCmdb(); err != nil {
+		t.Fatalf("准备终端 CMDB 映射失败: %v", err)
+	}
+	asset.OSType = "银河麒麟"
+	asset.OSVersion = "V10 SP3"
+	if err := s.UpdateAsset(asset, "测试"); err != nil {
+		t.Fatalf("更新终端系统信息失败: %v", err)
+	}
+	updated, _, err := s.GetAsset(id)
+	if err != nil || updated.OSType != "银河麒麟" || updated.OSVersion != "V10 SP3" {
+		t.Fatalf("更新后系统信息未保存: asset=%+v err=%v", updated, err)
+	}
+	var mappedType, mappedVersion string
+	if err := s.db.QueryRow(`SELECT IFNULL(os_type,''), IFNULL(os_version,'') FROM cmdb_assets WHERE source_type='legacy_asset' AND source_id=?`, id).Scan(&mappedType, &mappedVersion); err != nil {
+		t.Fatalf("读取终端 CMDB 映射系统信息失败: %v", err)
+	}
+	if mappedType != "银河麒麟" || mappedVersion != "V10 SP3" {
+		t.Fatalf("终端系统信息未同步到 CMDB 映射: type=%q version=%q", mappedType, mappedVersion)
+	}
+}
+
+func TestLegacyAssetSerialFieldsFollowDeviceType(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	ordinaryID := createLegacyAsset(t, s, Asset{
+		AssetCode: "SERIAL-PC", DeviceType: "台式电脑", BoxSN: "PC-SN-1", DisplaySN: "DISPLAY-OLD", TerminalIP: "10.20.30.21", Status: "在用",
+	})
+	ordinary, _, err := s.GetAsset(ordinaryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ordinary.BoxSN != "PC-SN-1" || ordinary.DisplaySN != "" || ordinary.TerminalIP != "" {
+		t.Fatalf("普通终端只应保留设备 SN: %+v", ordinary)
+	}
+	if err := s.Maintenance(ordinaryID, MaintenanceReq{PartType: "display", NewSN: "DISPLAY-NEW", NewStatus: "在用"}); err == nil || !strings.Contains(err.Error(), "仅云桌面") {
+		t.Fatalf("普通终端不应允许显示器换件，实际错误=%v", err)
+	}
+
+	cloudID := createLegacyAsset(t, s, Asset{
+		AssetCode: "SERIAL-CLOUD", DeviceType: "云桌面盒子", BoxSN: "BOX-SN-1", DisplaySN: "DISPLAY-SN-1", TerminalIP: "10.20.30.22", Status: "在用",
+	})
+	cloud, _, err := s.GetAsset(cloudID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cloud.DisplaySN != "DISPLAY-SN-1" || cloud.TerminalIP != "10.20.30.22" {
+		t.Fatalf("云桌面应保留双 SN 和终端物理 IP: %+v", cloud)
+	}
+}
+
 func TestLegacyAssetDeviceTypeMigrationBackfillsExistingRows(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "legacy_device_type.db")
 	db, err := sql.Open("sqlite", dbPath)
@@ -122,12 +193,12 @@ func TestLegacyAssetDeviceTypeMigrationBackfillsExistingRows(t *testing.T) {
 		t.Fatalf("迁移旧数据库失败: %v", err)
 	}
 	defer s.Close()
-	var deviceType string
-	if err := s.db.QueryRow(`SELECT IFNULL(device_type,'') FROM assets WHERE asset_code='OLD-1'`).Scan(&deviceType); err != nil {
+	var deviceType, osType, osVersion string
+	if err := s.db.QueryRow(`SELECT IFNULL(device_type,''), IFNULL(os_type,''), IFNULL(os_version,'') FROM assets WHERE asset_code='OLD-1'`).Scan(&deviceType, &osType, &osVersion); err != nil {
 		t.Fatalf("读取迁移结果失败: %v", err)
 	}
-	if deviceType != "" {
-		t.Fatalf("旧终端资产类型未知时不应臆造分类，实际 %q", deviceType)
+	if deviceType != "" || osType != "" || osVersion != "" {
+		t.Fatalf("旧终端资产未知字段不应臆造，device_type=%q os_type=%q os_version=%q", deviceType, osType, osVersion)
 	}
 }
 

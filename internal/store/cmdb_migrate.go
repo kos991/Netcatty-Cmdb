@@ -14,6 +14,12 @@ type schemaExecutor interface {
 // MigrateCMDBFullSchema 负责检查并平滑补齐 CMDB 所需的所有扩展列与新建表。
 // 支持在全新数据库以及已有旧版本数据库上安全幂等执行。
 func MigrateCMDBFullSchema(db *sql.DB) error {
+	if err := addMissingColumns(db, "cmdb_device_categories", map[string]string{
+		"asset_scope": "TEXT NOT NULL DEFAULT 'infrastructure'",
+	}); err != nil {
+		return fmt.Errorf("migrate cmdb_device_categories columns: %w", err)
+	}
+
 	// 1. 扩充 cmdb_assets 表列
 	assetColsToAdd := map[string]string{
 		"device_type":       "TEXT DEFAULT ''",
@@ -50,6 +56,8 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 		"room":              "TEXT DEFAULT ''",
 		"owner_id":          "INTEGER DEFAULT 0",
 		"custom_fields":     "TEXT DEFAULT ''",
+		"front_image":       "TEXT NOT NULL DEFAULT ''",
+		"back_image":        "TEXT NOT NULL DEFAULT ''",
 	}
 
 	if err := addMissingColumns(db, "cmdb_assets", assetColsToAdd); err != nil {
@@ -66,6 +74,11 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 
 	if err := addMissingColumns(db, "cmdb_asset_interfaces", ifaceColsToAdd); err != nil {
 		return fmt.Errorf("migrate cmdb_asset_interfaces columns: %w", err)
+	}
+	if err := addMissingColumns(db, "ip_subnets", map[string]string{
+		"vni": "TEXT DEFAULT ''",
+	}); err != nil {
+		return fmt.Errorf("migrate ip_subnets columns: %w", err)
 	}
 	if err := addMissingColumns(db, "cmdb_work_orders", map[string]string{
 		"operation_type": "TEXT DEFAULT ''",

@@ -9,7 +9,8 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
 }
 
 func Open(path string) (*Store, error) {
@@ -60,7 +61,8 @@ func Open(path string) (*Store, error) {
 		}
 	}
 
-	s := &Store{db: db}
+	cleanPath, _ := databaseFilePath(path)
+	s := &Store{db: db, path: cleanPath}
 	if err := s.InitSchema(); err != nil {
 		return fail(err)
 	}
@@ -102,10 +104,15 @@ func (s *Store) InitSchema() error {
 		room TEXT,
 		ip TEXT,
 		terminal_ip TEXT,
+		os_type TEXT DEFAULT '',
+		os_version TEXT DEFAULT '',
 		security_software TEXT,
 		status TEXT,
 		net_type TEXT,
+		group_id INTEGER NOT NULL DEFAULT 0,
 		remark TEXT,
+		front_image TEXT NOT NULL DEFAULT '',
+		back_image TEXT NOT NULL DEFAULT '',
 		created_at TEXT,
 		updated_at TEXT
 	);
@@ -180,6 +187,7 @@ func (s *Store) InitSchema() error {
 		access_url TEXT,
 		middleware TEXT,
 		database_info TEXT,
+		provider TEXT,
 		owner TEXT,
 		status TEXT,
 		remark TEXT,
@@ -190,19 +198,31 @@ func (s *Store) InitSchema() error {
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("init schema: %w", err)
 	}
-	if err := addMissingColumns(s.db, "assets", map[string]string{"device_type": "TEXT DEFAULT ''"}); err != nil {
-		return fmt.Errorf("migrate assets device_type: %w", err)
+	if err := addMissingColumns(s.db, "assets", map[string]string{
+		"device_type": "TEXT DEFAULT ''", "os_type": "TEXT DEFAULT ''", "os_version": "TEXT DEFAULT ''",
+		"group_id":    "INTEGER NOT NULL DEFAULT 0",
+		"front_image": "TEXT NOT NULL DEFAULT ''", "back_image": "TEXT NOT NULL DEFAULT ''",
+	}); err != nil {
+		return fmt.Errorf("migrate assets columns: %w", err)
+	}
+	if err := addMissingColumns(s.db, "ip_pool", map[string]string{
+		"owner_type": "TEXT DEFAULT ''", "owner_id": "INTEGER NOT NULL DEFAULT 0", "owner_name": "TEXT DEFAULT ''",
+	}); err != nil {
+		return fmt.Errorf("migrate ip_pool owner columns: %w", err)
 	}
 	serverAppColumns := map[string]string{
 		"server_id":     "INTEGER",
+		"cmdb_asset_id": "INTEGER DEFAULT 0",
 		"app_name":      "TEXT",
 		"app_type":      "TEXT",
 		"port":          "TEXT DEFAULT ''",
 		"access_url":    "TEXT DEFAULT ''",
 		"middleware":    "TEXT DEFAULT ''",
 		"database_info": "TEXT DEFAULT ''",
+		"provider":      "TEXT DEFAULT ''",
 		"owner":         "TEXT DEFAULT ''",
 		"status":        "TEXT DEFAULT ''",
+		"group_id":      "INTEGER NOT NULL DEFAULT 0",
 		"remark":        "TEXT DEFAULT ''",
 		"created_at":    "TEXT DEFAULT ''",
 		"updated_at":    "TEXT DEFAULT ''",

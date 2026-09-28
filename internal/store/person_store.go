@@ -278,10 +278,19 @@ func (s *Store) UpdatePersonForProject(scope ProjectScope, p *Person) error {
 	if p.Status == "" {
 		p.Status = "在职"
 	}
+	current, err := s.GetPersonForProject(scope, p.ID)
+	if err != nil {
+		return fmt.Errorf("人员不属于当前项目: %w", ErrProjectScopedNotFound)
+	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	p.UpdatedAt = now
 
-	res, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`
 		UPDATE cmdb_persons
 		SET org_id=?, department_id=?, group_id=?, person_code = ?, name = ?, org_name = ?, group_name = ?, department = ?, title = ?, phone = ?, email = ?, status = ?, remark = ?, updated_at = ?
 		WHERE id = ? AND project_id = ?`,
@@ -296,6 +305,20 @@ func (s *Store) UpdatePersonForProject(scope ProjectScope, p *Person) error {
 	}
 	if n == 0 {
 		return fmt.Errorf("人员不属于当前项目: %w", ErrProjectScopedNotFound)
+	}
+	if _, err := tx.Exec(`UPDATE cmdb_assets
+		SET owner=?, department=?, organization=?, group_name=?, updated_at=?
+		WHERE project_id=? AND (owner_id=? OR (owner_id=0 AND TRIM(owner)=TRIM(?)))`,
+		p.Name, p.Department, p.OrgName, p.GroupName, now, scope.ProjectID, p.ID, current.Name); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE assets SET user_name=?, department=?, updated_at=?
+		WHERE project_id=? AND TRIM(IFNULL(user_name,''))=TRIM(?)`,
+		p.Name, p.Department, now, scope.ProjectID, current.Name); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	p.ProjectID = scope.ProjectID
 	return nil

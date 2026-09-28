@@ -1,4 +1,4 @@
-import { exportFile, importFile, requestJson } from './transport'
+import { exportFile, importFile, requestJson, uploadFile } from './transport'
 
 function toQuery(params = {}) {
   const query = new URLSearchParams()
@@ -38,22 +38,35 @@ export const api = {
   deleteServer: (id) => del(`/api/servers/${id}`),
   apps: (params = {}) => req(`/api/apps?${toQuery(params)}`),
   serverApps: (serverId) => req(`/api/servers/${serverId}/apps`),
-  createApp: (serverId, body) => post(`/api/servers/${serverId}/apps`, body),
+  createApp: (body) => post('/api/apps', body),
   updateApp: (id, body) => put(`/api/apps/${id}`, body),
   deleteApp: (id) => del(`/api/apps/${id}`),
   importSangfor: (commit = false, token) => importFile('/api/import/sangfor', { commit, token }),
 
   infrastructure: (params = {}) => req(`/api/cmdb/assets?${toQuery(params)}`),
   infrastructureAsset: (id) => req(`/api/cmdb/assets/${id}`),
+  assetImages: (kind, id) => req(`/api/cmdb/asset-images/${kind}/${id}`),
+  saveAssetImage: (kind, id, side, data) => put(`/api/cmdb/asset-images/${kind}/${id}`, { side, data }),
+  switchSnapshot: (id) => req(`/api/cmdb/assets/${id}/switch-snapshot`).then((value) => value || null),
+  saveSwitchSnapshot: (id, body) => put(`/api/cmdb/assets/${id}/switch-snapshot`, body),
   infrastructureFilters: () => req('/api/cmdb/assets/filters'),
   createInfrastructure: (body) => post('/api/cmdb/assets', body),
   updateInfrastructure: (id, body) => put(`/api/cmdb/assets/${id}`, body),
   replaceInfrastructure: (id, body) => put(`/api/cmdb/assets/${id}/full`, body),
+  infrastructureLinks: (id) => req(`/api/cmdb/assets/${id}/links`),
+  createInfrastructureLink: (id, body) => post(`/api/cmdb/assets/${id}/links`, body),
+  updateInfrastructureLink: (id, body) => put(`/api/cmdb/asset-links/${id}`, body),
+  deleteInfrastructureLink: (id) => del(`/api/cmdb/asset-links/${id}`),
   deleteInfrastructure: (id) => del(`/api/cmdb/assets/${id}`),
   batchInfrastructure: (ids, action, changes) => post('/api/cmdb/assets/batch', { ids, action, changes }),
   exportInfrastructure: (params = {}) => exportFile(`/api/cmdb/assets/export?${toQuery(params)}`, 'cmdb_assets.xlsx'),
   importInfrastructure: (commit = false, token) => importFile('/api/cmdb/assets/import', { commit, token }),
   syncInfrastructure: () => post('/api/cmdb/sync/legacy'),
+  netcattyLinks: (params = {}) => req(`/api/cmdb/netcatty-links?${toQuery(params)}`),
+  createNetcattyLink: (body) => post('/api/cmdb/netcatty-links', body),
+  updateNetcattyLink: (id, body) => put(`/api/cmdb/netcatty-links/${id}`, body),
+  updateNetcattyLinkState: (id, state) => put(`/api/cmdb/netcatty-links/${id}/state`, { state }),
+  deleteNetcattyLink: (id) => del(`/api/cmdb/netcatty-links/${id}`),
 
   persons: (params = {}) => req(`/api/cmdb/persons?${toQuery(params)}`),
   createPerson: (body) => post('/api/cmdb/persons', body),
@@ -67,6 +80,10 @@ export const api = {
   createConfig: (kind, body) => post(`/api/cmdb/config/${kind}`, body),
   updateConfig: (kind, id, body) => put(`/api/cmdb/config/${kind}/${id}`, body),
   deleteConfig: (kind, id) => del(`/api/cmdb/config/${kind}/${id}`),
+  taxonomy: (kind) => req(`/api/cmdb/taxonomy/${kind}`),
+  createTaxonomy: (kind, body) => post(`/api/cmdb/taxonomy/${kind}`, body),
+  updateTaxonomy: (kind, id, body) => put(`/api/cmdb/taxonomy/${kind}/${id}`, body),
+  deleteTaxonomy: (kind, id) => del(`/api/cmdb/taxonomy/${kind}/${id}`),
   customFields: () => req('/api/cmdb/custom-fields'),
   saveCustomField: (body) => post('/api/cmdb/custom-fields', body),
   deleteCustomField: (id) => del(`/api/cmdb/custom-fields/${id}`),
@@ -88,6 +105,8 @@ export const api = {
   allocateIP: (id, body) => post(`/api/ip_pool/${id}/allocate`, body),
   releaseIP: (id) => post(`/api/ip_pool/${id}/release`),
   exportIPs: (params = {}) => exportFile(`/api/ip_pool/export?${toQuery(params)}`, 'ip_pool.xlsx'),
+  importIPs: (commit = false, token) => importFile('/api/ip_pool/import', { commit, token }),
+  downloadIPTemplate: () => exportFile('/api/ip_pool/template', 'ipam_template.xlsx'),
 
   stats: () => req('/api/stats'),
   cmdbDashboard: () => req('/api/cmdb/dashboard'),
@@ -98,6 +117,10 @@ export const api = {
   updateWorkOrder: (id, body) => put(`/api/cmdb/work-orders/${id}`, body),
   deleteWorkOrder: (id) => del(`/api/cmdb/work-orders/${id}`),
   exportWorkOrders: (params = {}) => exportFile(`/api/cmdb/work-orders/export?${toQuery(params)}`, 'cmdb_work_orders.xlsx'),
+  workOrderAttachments: (id) => req(`/api/cmdb/work-orders/${id}/attachments`),
+  uploadWorkOrderAttachment: (id, file) => uploadFile(`/api/cmdb/work-orders/${id}/attachments`, file),
+  downloadWorkOrderAttachment: (workOrderId, attachment) => exportFile(`/api/cmdb/work-orders/${workOrderId}/attachments/${attachment.id}`, attachment.file_name),
+  deleteWorkOrderAttachment: (workOrderId, attachmentId) => del(`/api/cmdb/work-orders/${workOrderId}/attachments/${attachmentId}`),
 
   credentials: (params = {}) => req(`/api/cmdb/credentials?${toQuery(params)}`),
   createCredential: (body) => post('/api/cmdb/credentials', body),

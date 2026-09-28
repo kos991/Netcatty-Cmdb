@@ -16,14 +16,14 @@ func (s *Store) ListIPSubnetsForProject(scope ProjectScope) ([]IPSubnet, error) 
 	out := []IPSubnet{}
 	index := map[string]int{}
 	rows, err := s.db.Query(`SELECT id, project_id, IFNULL(sync_id,''), name, IFNULL(category,''), IFNULL(prefix,''), IFNULL(cidr,''),
-		IFNULL(gateway,''), IFNULL(vlan,''), IFNULL(purpose,''), sort_order, IFNULL(remark,'')
+		IFNULL(gateway,''), IFNULL(vlan,''), IFNULL(vni,''), IFNULL(purpose,''), sort_order, IFNULL(remark,'')
 		FROM ip_subnets WHERE project_id = ? ORDER BY sort_order, id`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var v IPSubnet
-		if err := rows.Scan(&v.ID, &v.ProjectID, &v.SyncID, &v.Name, &v.Category, &v.Prefix, &v.CIDR, &v.Gateway, &v.VLAN, &v.Purpose, &v.SortOrder, &v.Remark); err != nil {
+		if err := rows.Scan(&v.ID, &v.ProjectID, &v.SyncID, &v.Name, &v.Category, &v.Prefix, &v.CIDR, &v.Gateway, &v.VLAN, &v.VNI, &v.Purpose, &v.SortOrder, &v.Remark); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -38,17 +38,17 @@ func (s *Store) ListIPSubnetsForProject(scope ProjectScope) ([]IPSubnet, error) 
 		return nil, err
 	}
 
-	type subnetStat struct{ total, used int }
+	type subnetStat struct{ total, used, reserved, abnormal int }
 	stats := map[string]subnetStat{}
 	statOrder := []string{}
-	statRows, err := s.db.Query(`SELECT subnet,COUNT(*),SUM(CASE WHEN status IN ('在用','已占用','已分配','占用') THEN 1 ELSE 0 END) FROM ip_pool WHERE project_id=? GROUP BY subnet`, scope.ProjectID)
+	statRows, err := s.db.Query(`SELECT subnet,COUNT(*),SUM(CASE WHEN status IN ('在用','已占用','已分配','占用') THEN 1 ELSE 0 END),SUM(CASE WHEN status='保留' THEN 1 ELSE 0 END),SUM(CASE WHEN status IN ('不可用','冲突','异常') THEN 1 ELSE 0 END) FROM ip_pool WHERE project_id=? GROUP BY subnet`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	for statRows.Next() {
 		var name string
 		var stat subnetStat
-		if err := statRows.Scan(&name, &stat.total, &stat.used); err != nil {
+		if err := statRows.Scan(&name, &stat.total, &stat.used, &stat.reserved, &stat.abnormal); err != nil {
 			statRows.Close()
 			return nil, err
 		}
@@ -83,13 +83,15 @@ func (s *Store) ListIPSubnetsForProject(scope ProjectScope) ([]IPSubnet, error) 
 		if i, ok := index[name]; ok {
 			out[i].Total = stat.total
 			out[i].Used = stat.used
-			out[i].Free = stat.total - stat.used
+			out[i].Reserved = stat.reserved
+			out[i].Abnormal = stat.abnormal
+			out[i].Free = max(0, stat.total-stat.used-stat.reserved-stat.abnormal)
 		}
 	}
 	for i := range out {
 		if capacity, _, _, ok := usableIPv4Range(normalizeSubnetCIDR(out[i].CIDR, out[i].Prefix)); out[i].Defined && ok {
 			out[i].Total = capacity
-			out[i].Free = max(0, capacity-out[i].Used)
+			out[i].Free = max(0, capacity-out[i].Used-out[i].Reserved-out[i].Abnormal)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -122,9 +124,9 @@ func (s *Store) CreateIPSubnetForProject(scope ProjectScope, v *IPSubnet) (int64
 	v.CIDR = normalizeSubnetCIDR(v.CIDR, v.Prefix)
 	now := time.Now().Format("2006-01-02 15:04:05")
 	res, err := s.db.Exec(`INSERT INTO ip_subnets
-		(project_id, name, category, prefix, cidr, gateway, vlan, purpose, sort_order, remark, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		scope.ProjectID, v.Name, v.Category, v.Prefix, v.CIDR, v.Gateway, v.VLAN, v.Purpose, v.SortOrder, v.Remark, now, now)
+		(project_id, name, category, prefix, cidr, gateway, vlan, vni, purpose, sort_order, remark, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		scope.ProjectID, v.Name, v.Category, v.Prefix, v.CIDR, v.Gateway, v.VLAN, v.VNI, v.Purpose, v.SortOrder, v.Remark, now, now)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return 0, fmt.Errorf("网段「%s」已存在", v.Name)
@@ -177,7 +179,7 @@ func (s *Store) GetIPSubnetForProject(scope ProjectScope, id int64) (*IPSubnet, 
 		return nil, err
 	}
 	var v IPSubnet
-	err := s.db.QueryRow(`SELECT id,project_id,IFNULL(sync_id,''),name,IFNULL(category,''),IFNULL(prefix,''),IFNULL(cidr,''),IFNULL(gateway,''),IFNULL(vlan,''),IFNULL(purpose,''),sort_order,IFNULL(remark,'') FROM ip_subnets WHERE id=? AND project_id=?`, id, scope.ProjectID).Scan(&v.ID, &v.ProjectID, &v.SyncID, &v.Name, &v.Category, &v.Prefix, &v.CIDR, &v.Gateway, &v.VLAN, &v.Purpose, &v.SortOrder, &v.Remark)
+	err := s.db.QueryRow(`SELECT id,project_id,IFNULL(sync_id,''),name,IFNULL(category,''),IFNULL(prefix,''),IFNULL(cidr,''),IFNULL(gateway,''),IFNULL(vlan,''),IFNULL(vni,''),IFNULL(purpose,''),sort_order,IFNULL(remark,'') FROM ip_subnets WHERE id=? AND project_id=?`, id, scope.ProjectID).Scan(&v.ID, &v.ProjectID, &v.SyncID, &v.Name, &v.Category, &v.Prefix, &v.CIDR, &v.Gateway, &v.VLAN, &v.VNI, &v.Purpose, &v.SortOrder, &v.Remark)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("网段不属于当前项目: %w", ErrProjectScopedNotFound)
 	}
@@ -221,7 +223,7 @@ func (s *Store) UpdateIPSubnetForProject(scope ProjectScope, v *IPSubnet) error 
 			return err
 		}
 	}
-	res, err := tx.Exec(`UPDATE ip_subnets SET name=?,category=?,prefix=?,cidr=?,gateway=?,vlan=?,purpose=?,sort_order=?,remark=?,updated_at=? WHERE id=? AND project_id=?`, v.Name, v.Category, v.Prefix, v.CIDR, v.Gateway, v.VLAN, v.Purpose, v.SortOrder, v.Remark, time.Now().Format("2006-01-02 15:04:05"), v.ID, scope.ProjectID)
+	res, err := tx.Exec(`UPDATE ip_subnets SET name=?,category=?,prefix=?,cidr=?,gateway=?,vlan=?,vni=?,purpose=?,sort_order=?,remark=?,updated_at=? WHERE id=? AND project_id=?`, v.Name, v.Category, v.Prefix, v.CIDR, v.Gateway, v.VLAN, v.VNI, v.Purpose, v.SortOrder, v.Remark, time.Now().Format("2006-01-02 15:04:05"), v.ID, scope.ProjectID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return fmt.Errorf("网段「%s」已存在", v.Name)

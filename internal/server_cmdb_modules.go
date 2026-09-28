@@ -53,14 +53,19 @@ func (s *Server) handleListCmdbWorkOrders(w http.ResponseWriter, r *http.Request
 	page, pageSize := cmdbPaging(r)
 	q := r.URL.Query()
 	list, total, err := s.Store.QueryCmdbWorkOrdersForProject(scope, store.CmdbWorkOrderQuery{
-		Keyword:    q.Get("keyword"),
-		BizType:    q.Get("biz_type"),
-		Status:     q.Get("status"),
-		Result:     q.Get("result"),
-		Owner:      q.Get("owner"),
-		Maintainer: q.Get("maintainer"),
-		Page:       page,
-		PageSize:   pageSize,
+		Keyword:       q.Get("keyword"),
+		BizType:       q.Get("biz_type"),
+		Status:        q.Get("status"),
+		Result:        q.Get("result"),
+		Owner:         q.Get("owner"),
+		Maintainer:    q.Get("maintainer"),
+		OperationType: q.Get("operation_type"),
+		Priority:      q.Get("priority"),
+		DateFrom:      q.Get("date_from"),
+		DateTo:        q.Get("date_to"),
+		AssetKeyword:  q.Get("asset_keyword"),
+		Page:          page,
+		PageSize:      pageSize,
 	})
 	if err != nil {
 		writeErr(w, 500, err.Error())
@@ -84,7 +89,7 @@ func (s *Server) handleCreateCmdbWorkOrder(w http.ResponseWriter, r *http.Reques
 		writeErr(w, 400, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]interface{}{"id": id})
+	writeJSON(w, 200, map[string]interface{}{"id": id, "order_no": body.OrderNo})
 }
 
 func (s *Server) handleUpdateCmdbWorkOrder(w http.ResponseWriter, r *http.Request) {

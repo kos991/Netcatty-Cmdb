@@ -7,36 +7,48 @@ import (
 // ============================ 工单管理 ============================
 
 type CmdbWorkOrder struct {
-	ID            int64  `json:"id"`
-	ProjectID     int64  `json:"project_id"`
-	SyncID        string `json:"sync_id"`
-	OrderNo       string `json:"order_no"`
-	Priority      string `json:"priority"`
-	Subject       string `json:"subject"`
-	BizType       string `json:"biz_type"`
-	OperationType string `json:"operation_type"`
-	WorkMinutes   int64  `json:"work_minutes"`
-	Status        string `json:"status"`
-	PlanTime      string `json:"plan_time"`
-	ActualTime    string `json:"actual_time"`
-	Result        string `json:"result"`
-	Owner         string `json:"owner"`
-	Maintainer    string `json:"maintainer"`
-	AssetID       int64  `json:"asset_id"`
-	Remark        string `json:"remark"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	ID            int64               `json:"id"`
+	ProjectID     int64               `json:"project_id"`
+	SyncID        string              `json:"sync_id"`
+	OrderNo       string              `json:"order_no"`
+	Priority      string              `json:"priority"`
+	Subject       string              `json:"subject"`
+	BizType       string              `json:"biz_type"`
+	OperationType string              `json:"operation_type"`
+	WorkMinutes   int64               `json:"work_minutes"`
+	Status        string              `json:"status"`
+	PlanTime      string              `json:"plan_time"`
+	ActualTime    string              `json:"actual_time"`
+	Result        string              `json:"result"`
+	Owner         string              `json:"owner"`
+	Maintainer    string              `json:"maintainer"`
+	AssetID       int64               `json:"asset_id"`
+	Remark        string              `json:"remark"`
+	CreatedAt     string              `json:"created_at"`
+	UpdatedAt     string              `json:"updated_at"`
+	Assets        []WorkOrderAssetRef `json:"assets"`
+}
+
+type WorkOrderAssetRef struct {
+	AssetType string `json:"asset_type"`
+	AssetID   int64  `json:"asset_id"`
+	AssetName string `json:"asset_name"`
 }
 
 type CmdbWorkOrderQuery struct {
-	Keyword    string
-	BizType    string
-	Status     string
-	Result     string
-	Owner      string
-	Maintainer string
-	Page       int
-	PageSize   int
+	Keyword       string
+	BizType       string
+	Status        string
+	Result        string
+	Owner         string
+	Maintainer    string
+	OperationType string
+	Priority      string
+	DateFrom      string
+	DateTo        string
+	AssetKeyword  string
+	Page          int
+	PageSize      int
 }
 
 const cmdbWorkOrderSelect = `SELECT id, project_id, IFNULL(sync_id,''), IFNULL(order_no,''), IFNULL(priority,''), subject,
@@ -66,11 +78,25 @@ func (s *Store) buildWorkOrderWhere(q CmdbWorkOrderQuery) (string, []interface{}
 	}{
 		{"biz_type", q.BizType}, {"status", q.Status}, {"result", q.Result},
 		{"owner", q.Owner}, {"maintainer", q.Maintainer},
+		{"operation_type", q.OperationType}, {"priority", q.Priority},
 	} {
 		if v := strings.TrimSpace(f.val); v != "" && v != "所有类型" && v != "所有状态" && v != "所有结果" && v != "所有负责人" && v != "所有维护人员" {
 			where = append(where, f.col+" = ?")
 			args = append(args, v)
 		}
+	}
+	if value := strings.TrimSpace(q.DateFrom); value != "" {
+		where = append(where, "plan_time >= ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(q.DateTo); value != "" {
+		where = append(where, "plan_time <= ?")
+		args = append(args, value)
+	}
+	if value := strings.TrimSpace(q.AssetKeyword); value != "" {
+		where = append(where, `EXISTS (SELECT 1 FROM cmdb_work_order_asset_links link
+			WHERE link.project_id=cmdb_work_orders.project_id AND link.work_order_id=cmdb_work_orders.id AND link.asset_name LIKE ?)`)
+		args = append(args, "%"+value+"%")
 	}
 	if len(where) == 0 {
 		return "", args

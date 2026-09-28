@@ -106,3 +106,84 @@ func TestHandleReplaceCmdbAssetPersistsCompleteProfile(t *testing.T) {
 		t.Fatalf("网络接口未保存: %+v", interfaces)
 	}
 }
+
+func TestHandleCmdbAssetDetailAggregatesIPAMAndLinks(t *testing.T) {
+	s := newCmdbTestServer(t)
+	coreID, err := s.Store.CreateCmdbAssetManual(&store.CmdbAsset{
+		Name: "核心交换机 A", AssetCode: "NET-SW-001", Status: "在线", DeviceType: "switch",
+		MgmtIP: "10.20.30.2", Interfaces: []store.CmdbAssetInterface{{Name: "mgmt0", IP: "10.20.30.2", IsPrimary: 1}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverID, err := s.Store.CreateCmdbAssetManual(&store.CmdbAsset{
+		Name: "虚拟化节点 01", AssetCode: "SRV-001", Status: "在线", DeviceType: "server",
+		Interfaces: []store.CmdbAssetInterface{{Name: "eth0", IP: "10.20.30.10", IsPrimary: 1}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mux := http.NewServeMux()
+	s.RegisterRoutes(mux)
+	subnetBody := `{"name":"服务器业务网","category":"内网","prefix":"10.20.30","cidr":"10.20.30.0/24","gateway":"10.20.30.1","vlan":"230","vni":"10230","purpose":"生产业务"}`
+	subnetReq := httptest.NewRequest(http.MethodPost, "/api/ip_subnets", bytes.NewBufferString(subnetBody))
+	subnetReq.Header.Set("Content-Type", "application/json")
+	subnetRec := httptest.NewRecorder()
+	mux.ServeHTTP(subnetRec, subnetReq)
+	if subnetRec.Code != http.StatusOK {
+		t.Fatalf("创建网段失败: status=%d body=%s", subnetRec.Code, subnetRec.Body.String())
+	}
+	if _, err := s.Store.CreateIPEntry(&store.IPEntry{Subnet: "服务器业务网", IP: "10.20.30.2", Status: "空闲"}); err != nil {
+		t.Fatal(err)
+	}
+
+	linkBody := fmt.Sprintf(`{"local_interface_id":0,"local_port":"Gi1/0/12","direction":"downlink","peer_asset_id":%d,"peer_port":"eth0","vlan":"230","vni":"10230","status":"在线"}`, serverID)
+	linkReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/cmdb/assets/%d/links", coreID), bytes.NewBufferString(linkBody))
+	linkReq.Header.Set("Content-Type", "application/json")
+	linkRec := httptest.NewRecorder()
+	mux.ServeHTTP(linkRec, linkReq)
+	if linkRec.Code != http.StatusCreated {
+		t.Fatalf("新增资产链路失败: status=%d body=%s", linkRec.Code, linkRec.Body.String())
+	}
+
+	detailReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/cmdb/assets/%d", coreID), nil)
+	detailRec := httptest.NewRecorder()
+	mux.ServeHTTP(detailRec, detailReq)
+	if detailRec.Code != http.StatusOK {
+		t.Fatalf("读取资产详情失败: status=%d body=%s", detailRec.Code, detailRec.Body.String())
+	}
+	var detail struct {
+		IPAM []struct {
+			IP      string `json:"ip"`
+			Subnet  string `json:"subnet"`
+			CIDR    string `json:"cidr"`
+			VLAN    string `json:"vlan"`
+			VNI     string `json:"vni"`
+			Purpose string `json:"purpose"`
+		} `json:"ipam"`
+		Links []struct {
+			Direction     string `json:"direction"`
+			PeerAssetID   int64  `json:"peer_asset_id"`
+			PeerAssetName string `json:"peer_asset_name"`
+			PeerPort      string `json:"peer_port"`
+		} `json:"links"`
+		DownstreamAssets []store.CmdbAsset `json:"downstream_assets"`
+		History          []interface{}     `json:"history"`
+	}
+	if err := json.Unmarshal(detailRec.Body.Bytes(), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.IPAM) != 1 || detail.IPAM[0].Subnet != "服务器业务网" || detail.IPAM[0].CIDR != "10.20.30.0/24" || detail.IPAM[0].VLAN != "230" || detail.IPAM[0].VNI != "10230" || detail.IPAM[0].Purpose != "生产业务" {
+		t.Fatalf("IPAM 聚合不完整: %+v", detail.IPAM)
+	}
+	if len(detail.Links) != 1 || detail.Links[0].Direction != "downlink" || detail.Links[0].PeerAssetID != serverID || detail.Links[0].PeerAssetName != "虚拟化节点 01" || detail.Links[0].PeerPort != "eth0" {
+		t.Fatalf("链路聚合不完整: %+v", detail.Links)
+	}
+	if len(detail.DownstreamAssets) != 1 || detail.DownstreamAssets[0].ID != serverID {
+		t.Fatalf("下联设备聚合不完整: %+v", detail.DownstreamAssets)
+	}
+	if detail.History == nil {
+		t.Fatal("变更履历必须返回数组，不能返回 null")
+	}
+}

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS cmdb_groups (
 CREATE TABLE IF NOT EXISTS cmdb_device_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+	asset_scope TEXT NOT NULL DEFAULT 'infrastructure',
     parent_id INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
@@ -90,6 +91,8 @@ CREATE TABLE IF NOT EXISTS cmdb_assets (
     install_date TEXT,
     warranty_date TEXT,
     remark TEXT,
+    front_image TEXT NOT NULL DEFAULT '',
+    back_image TEXT NOT NULL DEFAULT '',
     source_type TEXT NOT NULL DEFAULT 'manual',
     source_id INTEGER NOT NULL DEFAULT 0,
     -- 48+ 扩展字段与对齐字段
@@ -163,6 +166,76 @@ CREATE TABLE IF NOT EXISTS cmdb_asset_interfaces (
 CREATE INDEX IF NOT EXISTS idx_cmdb_iface_asset ON cmdb_asset_interfaces(asset_id);
 CREATE INDEX IF NOT EXISTS idx_cmdb_iface_ip ON cmdb_asset_interfaces(ip);
 
+-- 资产物理/逻辑链路。一条记录同时描述链路两端，查询对端时由存储层反转方向。
+CREATE TABLE IF NOT EXISTS cmdb_asset_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    local_asset_id INTEGER NOT NULL,
+    local_interface_id INTEGER NOT NULL DEFAULT 0,
+    local_port TEXT NOT NULL,
+    direction TEXT NOT NULL DEFAULT 'downlink',
+    peer_asset_id INTEGER NOT NULL,
+    peer_port TEXT DEFAULT '',
+    vlan TEXT DEFAULT '',
+    vni TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT '在线',
+    remark TEXT DEFAULT '',
+    created_at TEXT,
+    updated_at TEXT,
+    FOREIGN KEY(local_asset_id) REFERENCES cmdb_assets(id) ON DELETE CASCADE,
+    FOREIGN KEY(peer_asset_id) REFERENCES cmdb_assets(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_cmdb_links_local_asset ON cmdb_asset_links(local_asset_id);
+CREATE INDEX IF NOT EXISTS idx_cmdb_links_peer_asset ON cmdb_asset_links(peer_asset_id);
+
+-- Cmdb 只保存 Netcatty 主机与钥匙串的稳定引用和展示摘要，禁止保存任何秘密值。
+CREATE TABLE IF NOT EXISTS cmdb_netcatty_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_type TEXT NOT NULL,
+    asset_id INTEGER NOT NULL,
+    asset_sync_id TEXT NOT NULL,
+    asset_name TEXT NOT NULL DEFAULT '',
+    host_id TEXT NOT NULL,
+    host_name TEXT NOT NULL DEFAULT '',
+    credential_id TEXT NOT NULL DEFAULT '',
+    credential_name TEXT NOT NULL DEFAULT '',
+    protocol TEXT NOT NULL DEFAULT '',
+    address TEXT NOT NULL DEFAULT '',
+    port INTEGER NOT NULL DEFAULT 0,
+    is_primary INTEGER NOT NULL DEFAULT 1,
+    state TEXT NOT NULL DEFAULT 'linked',
+    created_at TEXT,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cmdb_netcatty_links_asset ON cmdb_netcatty_links(asset_type, asset_id);
+
+-- 交换机只读配置只保留最近一次脱敏后的标准快照，不保存 CLI 原文。
+CREATE TABLE IF NOT EXISTS cmdb_switch_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL,
+    vendor TEXT NOT NULL DEFAULT '',
+    protocol TEXT NOT NULL DEFAULT '',
+    host_id TEXT NOT NULL DEFAULT '',
+    read_at TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at TEXT,
+    updated_at TEXT,
+    FOREIGN KEY(asset_id) REFERENCES cmdb_assets(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_switch_snapshot_asset ON cmdb_switch_snapshots(asset_id);
+
+CREATE TABLE IF NOT EXISTS cmdb_asset_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    operator TEXT DEFAULT '',
+    occurred_at TEXT NOT NULL,
+    created_at TEXT,
+    updated_at TEXT,
+    FOREIGN KEY(asset_id) REFERENCES cmdb_assets(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_cmdb_history_asset ON cmdb_asset_history(asset_id, occurred_at);
+
 -- ============ CMDB 其余模块（对应顶部 7 项导航中的 6 个非资源页） ============
 
 -- 工单管理（对应 /cmdb/work-orders 实测 11 列表格）
@@ -187,6 +260,30 @@ CREATE TABLE IF NOT EXISTS cmdb_work_orders (
 );
 CREATE INDEX IF NOT EXISTS idx_cmdb_wo_status ON cmdb_work_orders(status);
 CREATE INDEX IF NOT EXISTS idx_cmdb_wo_asset ON cmdb_work_orders(asset_id);
+
+CREATE TABLE IF NOT EXISTS cmdb_work_order_asset_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_order_id INTEGER NOT NULL,
+    asset_type TEXT NOT NULL,
+    asset_id INTEGER NOT NULL,
+    asset_name TEXT NOT NULL DEFAULT '',
+    created_at TEXT,
+    UNIQUE(work_order_id, asset_type, asset_id),
+    FOREIGN KEY(work_order_id) REFERENCES cmdb_work_orders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_cmdb_wo_asset_links_order ON cmdb_work_order_asset_links(work_order_id);
+
+CREATE TABLE IF NOT EXISTS cmdb_work_order_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_order_id INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    stored_name TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    content_type TEXT NOT NULL DEFAULT '',
+    created_at TEXT,
+    FOREIGN KEY(work_order_id) REFERENCES cmdb_work_orders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_cmdb_wo_attachments_order ON cmdb_work_order_attachments(work_order_id);
 
 -- 资产盘点（对应 /cmdb/inventory 实测 8 列表格）
 CREATE TABLE IF NOT EXISTS cmdb_inventory_tasks (

@@ -116,3 +116,55 @@ func TestQueryCmdbAssetsInfrastructureScope(t *testing.T) {
 		t.Fatalf("基础设施筛选异常: total=%d list=%+v", total, list)
 	}
 }
+
+func TestQueryCmdbAssetsInfrastructureScopeIncludesHyperconverged(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scopeA, scopeB := newCmdbProjectScopes(t, s)
+	categoryID, err := s.CreateCmdbTaxonomyForProject(scopeA, "categories", "超融合", 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[int64]bool{}
+	for _, fixture := range []struct {
+		deviceType string
+		categoryID int64
+	}{
+		{"超融合", categoryID},
+		{"超融合", 0},
+		{"hyperconverged", 0},
+		{"HCI", 0},
+		{"", categoryID},
+	} {
+		id, err := s.CreateCmdbAssetManualForProject(scopeA, &CmdbAsset{
+			Name: "超融合图标验收", AssetClass: "physical", DeviceType: fixture.deviceType, CategoryID: fixture.categoryID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want[id] = true
+	}
+	// 终端与其他项目的超融合设备不能混入当前项目的基础设施列表。
+	if _, err := s.CreateCmdbAssetManualForProject(scopeA, &CmdbAsset{Name: "终端", DeviceType: "台式电脑"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateCmdbAssetManualForProject(scopeB, &CmdbAsset{Name: "其他项目超融合", DeviceType: "hyperconverged"}); err != nil {
+		t.Fatal(err)
+	}
+	query := CmdbAssetQuery{ResourceScope: "infrastructure", Page: 1, PageSize: 20}
+	list, total, err := s.QueryCmdbAssetsForProject(scopeA, query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 5 || len(list) != 5 {
+		t.Fatalf("超融合设备被漏掉: total=%d list=%+v", total, list)
+	}
+	for _, asset := range list {
+		if !want[asset.ID] || asset.ProjectID != scopeA.ProjectID {
+			t.Fatalf("基础设施列表混入无关资产: %+v", asset)
+		}
+	}
+	exported, err := s.AllCmdbAssetsForProject(scopeA, query)
+	if err != nil || len(exported) != 5 {
+		t.Fatalf("导出与列表筛选范围不一致: len=%d err=%v", len(exported), err)
+	}
+}

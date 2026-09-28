@@ -30,7 +30,7 @@ func TestIPVisualizationAndAssetAllocationEndpoints(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &visual); err != nil {
 		t.Fatal(err)
 	}
-	if visual.Total != 6 || len(visual.List) != 6 || visual.List[0].IP != "192.0.2.1" || visual.List[0].ID != 0 {
+	if visual.Total != 8 || len(visual.List) != 8 || visual.List[0].IP != "192.0.2.0" || visual.List[0].Status != "网络地址" || visual.List[7].Status != "广播地址" || visual.List[0].ID != 0 {
 		t.Fatalf("可视化地址空间不完整: %+v", visual)
 	}
 

@@ -15,7 +15,7 @@ func TestInitCmdbSchemaCreatesAllTables(t *testing.T) {
 
 	want := []string{
 		"cmdb_orgs", "cmdb_groups", "cmdb_device_categories",
-		"cmdb_device_models", "cmdb_assets", "cmdb_asset_interfaces",
+		"cmdb_device_models", "cmdb_assets", "cmdb_asset_interfaces", "cmdb_asset_links", "cmdb_asset_history",
 	}
 	for _, table := range want {
 		var name string

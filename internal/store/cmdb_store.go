@@ -9,6 +9,28 @@ import (
 	"time"
 )
 
+func isCmdbServerAssetType(deviceType, categoryName string) bool {
+	typeName := strings.ToLower(strings.TrimSpace(deviceType + " " + categoryName))
+	return strings.Contains(typeName, "server") ||
+		strings.Contains(typeName, "服务器") ||
+		strings.Contains(typeName, "物理主机") ||
+		strings.Contains(typeName, "虚拟机") ||
+		strings.Contains(typeName, "virtual_machine") ||
+		strings.Contains(typeName, "云主机") ||
+		strings.Contains(typeName, "云资源") ||
+		strings.Contains(typeName, "ecs") ||
+		strings.Contains(typeName, "超融合") ||
+		strings.Contains(typeName, "hci")
+}
+
+func isCmdbApplicationHostType(deviceType, categoryName string) bool {
+	typeName := strings.ToLower(strings.TrimSpace(deviceType + " " + categoryName))
+	return !strings.Contains(typeName, "switch") &&
+		!strings.Contains(typeName, "router") &&
+		!strings.Contains(typeName, "交换机") &&
+		!strings.Contains(typeName, "路由器")
+}
+
 // CmdbAsset 对应 cmdb_assets 表，涵盖全部 48+ 主字段及 custom_fields 字典与 interfaces 数组。
 type CmdbAsset struct {
 	ID             int64   `json:"id"`
@@ -160,7 +182,7 @@ const cmdbAssetSelect = `
 SELECT a.id, a.project_id, IFNULL(a.sync_id,''), IFNULL(a.asset_code,''), a.name, a.status, a.asset_class,
        a.category_id, IFNULL(c.name,''), a.model_id, IFNULL(a.sn,''), IFNULL(a.vendor,''),
        IFNULL(a.model,''), IFNULL(a.tags,''), a.org_id, IFNULL(o.name,''), a.group_id,
-       IFNULL(g.name,''), IFNULL(a.department,''), IFNULL(a.owner,''), IFNULL(a.data_center,''),
+       COALESCE(NULLIF(g.name,''), IFNULL(a.group_name,'')), IFNULL(a.department,''), IFNULL(a.owner,''), IFNULL(a.data_center,''),
        IFNULL(a.floor,''), IFNULL(a.cabinet_name,''), IFNULL(a.cabinet_row,''), a.cabinet_col,
        a.start_u, a.height_u, IFNULL(a.province,''), IFNULL(a.city,''), IFNULL(a.district,''),
        IFNULL(a.longitude,0), IFNULL(a.latitude,0), IFNULL(a.address,''), IFNULL(a.mgmt_ip,''),
@@ -170,7 +192,7 @@ SELECT a.id, a.project_id, IFNULL(a.sync_id,''), IFNULL(a.asset_code,''), a.name
        a.source_type, a.source_id, IFNULL(a.created_at,''), IFNULL(a.updated_at,''),
        -- 48+ 扩展字段
        IFNULL(a.device_type,''), IFNULL(a.manage_ip,''), IFNULL(a.mac_address,''),
-       IFNULL(a.organization,''), IFNULL(a.group_name,''), IFNULL(a.area,''),
+       IFNULL(a.organization,''), IFNULL(a.area,''),
        IFNULL(a.cabinet_pos,''), a.u_height, a.u_start, IFNULL(a.purchase_at,''),
        IFNULL(a.warranty_at,''), IFNULL(a.description,''), IFNULL(a.country,'中国'),
        IFNULL(a.geo_address,''), IFNULL(a.provider,''), IFNULL(a.region,''),
@@ -203,7 +225,7 @@ func scanCmdbAsset(rows interface {
 		&a.SourceType, &a.SourceID, &a.CreatedAt, &a.UpdatedAt,
 		// 扩展字段
 		&a.DeviceType, &a.ManageIP, &a.MACAddress,
-		&a.Organization, &a.GroupName, &a.Area,
+		&a.Organization, &a.Area,
 		&a.CabinetPos, &a.UHeight, &a.UStart, &a.PurchaseAt,
 		&a.WarrantyAt, &a.Description, &a.Country,
 		&a.GeoAddress, &a.Provider, &a.Region,
@@ -359,13 +381,14 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 	if strings.EqualFold(strings.TrimSpace(q.ResourceScope), "infrastructure") {
 		where = append(where, `(a.source_type = 'legacy_server'
 			OR (a.source_type = 'manual' AND IFNULL(a.device_type,'') = '' AND IFNULL(a.category_id,0) = 0)
-			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage')
+			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage','hyperconverged','hci','超融合')
 			OR EXISTS (
 				SELECT 1 FROM cmdb_device_categories scope_category
 				WHERE scope_category.id = a.category_id
 				AND scope_category.project_id = a.project_id
 				AND (scope_category.name LIKE '%服务器%'
 					OR scope_category.name LIKE '%虚拟机%'
+					OR scope_category.name LIKE '%超融合%'
 					OR scope_category.name LIKE '%交换机%'
 					OR scope_category.name LIKE '%网络设备%'
 					OR scope_category.name LIKE '%路由器%'

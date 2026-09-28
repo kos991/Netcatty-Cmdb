@@ -457,64 +457,63 @@ func (s *Store) CloneCmdbAssetsForProject(scope ProjectScope, ids []int64) (int,
 	return cloned, nil
 }
 
-// linkInterfacesToIPPool 负责资产多网卡接口与 ip_pool 的联动：
-// 1. 对于解绑（原接口中有，现接口中没有）的 IP，若在 ip_pool 且在用，自动释放为空闲；
-// 2. 对于新绑定（现接口中有）的 IP，若在 ip_pool 中存在且处于空闲状态，自动占位更新为已分配并在用；
-func linkInterfacesToIPPool(tx *sql.Tx, projectID, assetID int64, assetName, owner, dept, room string, oldIfaces, newIfaces []CmdbAssetInterface) error {
-	oldIPs := make(map[string]bool)
-	for _, it := range oldIfaces {
-		ip := strings.TrimSpace(it.IP)
-		if ip != "" {
-			oldIPs[ip] = true
+func cmdbAssetIPs(asset *CmdbAsset, ifaces []CmdbAssetInterface) map[string]struct{} {
+	ips := make(map[string]struct{})
+	if asset != nil {
+		for _, value := range []string{asset.MgmtIP, asset.ManageIP, asset.BizIP, asset.PublicIP} {
+			if ip := strings.TrimSpace(value); ip != "" {
+				ips[ip] = struct{}{}
+			}
 		}
 	}
-
-	newIPs := make(map[string]CmdbAssetInterface)
-	for _, it := range newIfaces {
-		ip := strings.TrimSpace(it.IP)
-		if ip != "" {
-			newIPs[ip] = it
+	for _, iface := range ifaces {
+		if ip := strings.TrimSpace(iface.IP); ip != "" {
+			ips[ip] = struct{}{}
 		}
 	}
+	return ips
+}
 
-	// 1) 释放解绑的 IP
+// linkCmdbAssetIPsToIPPool 在资产写事务内同步直接 IP 字段和多网卡 IP。
+func linkCmdbAssetIPsToIPPool(tx *sql.Tx, projectID, assetID int64, oldAsset, newAsset *CmdbAsset, oldIfaces, newIfaces []CmdbAssetInterface) error {
+	oldIPs := cmdbAssetIPs(oldAsset, oldIfaces)
+	newIPs := cmdbAssetIPs(newAsset, newIfaces)
+
 	for ip := range oldIPs {
 		if _, exists := newIPs[ip]; !exists {
-			_, err := tx.Exec(`
-				UPDATE ip_pool
-				SET status = '空闲', department = '', account = '', room = '', remark = ''
-				WHERE project_id = ? AND ip = ? AND status = '在用'`, projectID, ip)
-			if err != nil {
+			if err := releaseUnreferencedIPInTx(tx, projectID, ip); err != nil {
 				return err
 			}
 		}
 	}
 
-	// 2) 占位新绑定的空闲 IP
-	for ip, iface := range newIPs {
-		var poolID int64
-		var poolStatus string
-		err := tx.QueryRow("SELECT id, IFNULL(status,'') FROM ip_pool WHERE project_id = ? AND ip = ?", projectID, ip).Scan(&poolID, &poolStatus)
-		if err != nil {
-			// IP 不在 ip_pool 中，跳过联动
+	if newAsset == nil {
+		return nil
+	}
+	for ip := range newIPs {
+		if err := ensureHostIPInDefinedSubnets(tx, projectID, ip); err != nil {
+			return err
+		}
+		var poolID, ownerID int64
+		var status, ownerType string
+		err := tx.QueryRow("SELECT id, IFNULL(status,''), IFNULL(owner_type,''), IFNULL(owner_id,0) FROM ip_pool WHERE project_id=? AND ip=?", projectID, ip).
+			Scan(&poolID, &status, &ownerType, &ownerID)
+		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}
-		if poolStatus == "空闲" || poolStatus == "" {
-			ifaceName := iface.Name
-			if ifaceName == "" {
-				ifaceName = iface.IfName
-			}
-			remark := fmt.Sprintf("CMDB资产绑定 [%s](%s)", assetName, ifaceName)
-			_, err := tx.Exec(`
-				UPDATE ip_pool
-				SET status = '在用', department = ?, account = ?, room = ?, remark = ?
-				WHERE id = ? AND project_id = ?`, dept, owner, room, remark, poolID, projectID)
-			if err != nil {
-				return err
-			}
+		if err != nil {
+			return err
+		}
+		_, alreadyUsedByAsset := oldIPs[ip]
+		if status == "在用" && (ownerType != "infrastructure" || ownerID != assetID) && !alreadyUsedByAsset {
+			return fmt.Errorf("IP %s 已被其他对象占用", ip)
+		}
+		remark := fmt.Sprintf("CMDB资产绑定 [%s]", newAsset.Name)
+		if _, err := tx.Exec(`UPDATE ip_pool SET status='在用',department=?,account=?,room=?,remark=?,owner_type='infrastructure',owner_id=?,owner_name=? WHERE id=? AND project_id=?`,
+			newAsset.Department, newAsset.Owner, newAsset.Room, remark, assetID, newAsset.Name, poolID, projectID); err != nil {
+			return err
 		}
 	}
-
 	return nil
 }
 
@@ -689,7 +688,10 @@ func (s *Store) CreateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 	}
 
 	// 联动 IP 池
-	if err := linkInterfacesToIPPool(tx, scope.ProjectID, newID, a.Name, a.Owner, a.Department, a.Room, nil, a.Interfaces); err != nil {
+	if err := linkCmdbAssetIPsToIPPool(tx, scope.ProjectID, newID, nil, a, nil, a.Interfaces); err != nil {
+		return 0, err
+	}
+	if err := appendCmdbAssetHistory(tx, scope.ProjectID, newID, "资产建档", fmt.Sprintf("建立资产档案：%s", a.Name), "系统"); err != nil {
 		return 0, err
 	}
 
@@ -847,37 +849,18 @@ func (s *Store) UpdateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 		return err
 	}
 
-	// 重新配置多网卡接口
+	// 保留既有接口编号，确保上下联关系继续引用同一接口。
 	if a.Interfaces != nil {
-		if _, err := tx.Exec("DELETE FROM cmdb_asset_interfaces WHERE asset_id = ? AND project_id = ?", a.ID, scope.ProjectID); err != nil {
+		if err := updateCmdbAssetInterfaces(tx, scope.ProjectID, a, oldIfaces, now); err != nil {
 			return err
 		}
-		for _, iface := range a.Interfaces {
-			ifaceName := iface.Name
-			if ifaceName == "" {
-				ifaceName = iface.IfName
-			}
-			netZone := iface.NetworkZone
-			if netZone == "" {
-				netZone = iface.NetZone
-			}
-			_, err := tx.Exec(`
-				INSERT INTO cmdb_asset_interfaces (
-					project_id, asset_id, asset_name, name, if_name, ip, mask, gateway, mac,
-					network_zone, net_zone, is_primary, vlan_id, remark, created_at, updated_at
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				scope.ProjectID, a.ID, a.Name, ifaceName, ifaceName, iface.IP, iface.Mask, iface.Gateway, iface.MAC,
-				netZone, netZone, iface.IsPrimary, iface.VlanID, iface.Remark, now, now,
-			)
-			if err != nil {
-				return err
-			}
-		}
-
-		// 联动 IP 池
-		if err := linkInterfacesToIPPool(tx, scope.ProjectID, a.ID, a.Name, a.Owner, a.Department, a.Room, oldIfaces, a.Interfaces); err != nil {
-			return err
-		}
+	}
+	effectiveIfaces := oldIfaces
+	if a.Interfaces != nil {
+		effectiveIfaces = a.Interfaces
+	}
+	if err := linkCmdbAssetIPsToIPPool(tx, scope.ProjectID, a.ID, cur, a, oldIfaces, effectiveIfaces); err != nil {
+		return err
 	}
 
 	// 源台账写穿
@@ -892,6 +875,9 @@ func (s *Store) UpdateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 		if err := writeThroughToLegacy(tx, scope.ProjectID, cur, ch); err != nil {
 			return err
 		}
+	}
+	if err := appendCmdbAssetHistory(tx, scope.ProjectID, a.ID, "资产修改", "更新资产基础信息或网络配置", "系统"); err != nil {
+		return err
 	}
 
 	return tx.Commit()
@@ -930,11 +916,6 @@ func (s *Store) DeleteCmdbAssetForProject(scope ProjectScope, id int64) error {
 	}
 	defer tx.Rollback()
 
-	// 释放多网卡在 IP 池中的占用
-	if err := linkInterfacesToIPPool(tx, scope.ProjectID, id, cur.Name, cur.Owner, cur.Department, cur.Room, ifaces, nil); err != nil {
-		return err
-	}
-
 	if _, err := tx.Exec(`DELETE FROM cmdb_asset_interfaces WHERE asset_id = ? AND project_id = ?`, id, scope.ProjectID); err != nil {
 		return err
 	}
@@ -944,6 +925,9 @@ func (s *Store) DeleteCmdbAssetForProject(scope ProjectScope, id int64) error {
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("资产不存在")
+	}
+	if err := linkCmdbAssetIPsToIPPool(tx, scope.ProjectID, id, cur, nil, ifaces, nil); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

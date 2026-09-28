@@ -10,7 +10,10 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-var legacyAssetImportHeaders = []string{"资产编码", "设备类型", "终端主机SN", "显示器SN", "当前使用人", "所属组织", "房间/位置", "设备/业务IP", "终端物理IP", "软件安装情况", "状态", "网络类型", "备注"}
+var legacyAssetImportHeaders = [][]string{
+	{"资产编码"}, {"设备类型"}, {"设备SN/终端主机SN", "终端主机SN"}, {"显示器SN（仅云桌面）", "显示器SN"},
+	{"当前使用人"}, {"所属组织"}, {"房间/位置"}, {"设备/业务IP"}, {"终端物理IP"}, {"状态"}, {"网络类型"}, {"备注"},
+}
 
 type legacyAssetImportRow struct {
 	Row     int         `json:"row"`
@@ -37,29 +40,40 @@ func parseLegacyAssetImport(r io.Reader) ([]legacyAssetImportRow, []string, erro
 		indexes[strings.TrimSpace(name)] = index
 	}
 	var missing []string
-	for _, header := range legacyAssetImportHeaders {
-		if _, ok := indexes[header]; !ok {
-			missing = append(missing, "缺少列："+header)
+	for _, aliases := range legacyAssetImportHeaders {
+		found := false
+		for _, alias := range aliases {
+			if _, ok := indexes[alias]; ok {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, "缺少列："+aliases[0])
 		}
 	}
 	if len(missing) > 0 {
 		return []legacyAssetImportRow{}, missing, nil
 	}
-	value := func(row []string, name string) string {
-		index := indexes[name]
-		if index >= len(row) {
-			return ""
+	value := func(row []string, names ...string) string {
+		for _, name := range names {
+			index, ok := indexes[name]
+			if !ok || index >= len(row) {
+				continue
+			}
+			return strings.TrimSpace(row[index])
 		}
-		return strings.TrimSpace(row[index])
+		return ""
 	}
 	parsed := make([]legacyAssetImportRow, 0, len(rows)-1)
 	errors := []string{}
 	seen := map[string]bool{}
 	for index, row := range rows[1:] {
 		asset := store.Asset{
-			AssetCode: value(row, "资产编码"), DeviceType: value(row, "设备类型"), BoxSN: value(row, "终端主机SN"), DisplaySN: value(row, "显示器SN"),
+			AssetCode: value(row, "资产编码"), DeviceType: value(row, "设备类型"), BoxSN: value(row, "设备SN/终端主机SN", "终端主机SN"), DisplaySN: value(row, "显示器SN（仅云桌面）", "显示器SN"),
 			UserName: value(row, "当前使用人"), Department: value(row, "所属组织"), Room: value(row, "房间/位置"), IP: value(row, "设备/业务IP"),
-			TerminalIP: value(row, "终端物理IP"), SecuritySoftware: value(row, "软件安装情况"), Status: value(row, "状态"), NetType: value(row, "网络类型"), Remark: value(row, "备注"),
+			TerminalIP: value(row, "终端物理IP"), OSType: value(row, "操作系统类型"), OSVersion: value(row, "操作系统版本"),
+			Status: value(row, "状态"), NetType: value(row, "网络类型"), Remark: value(row, "备注"),
 		}
 		if asset.AssetCode == "" && asset.DeviceType == "" && asset.BoxSN == "" && asset.UserName == "" {
 			continue
@@ -78,10 +92,23 @@ func parseLegacyAssetImport(r io.Reader) ([]legacyAssetImportRow, []string, erro
 		if asset.NetType == "" {
 			asset.NetType = "专网"
 		}
+		if asset.DeviceType != "" && !isCloudDesktopImportDeviceType(asset.DeviceType) {
+			asset.DisplaySN = ""
+			asset.TerminalIP = ""
+		}
 		seen[asset.AssetCode] = asset.AssetCode != ""
 		parsed = append(parsed, legacyAssetImportRow{Row: index + 2, Name: asset.AssetCode, Asset: asset, Message: message})
 	}
 	return parsed, errors, nil
+}
+
+func isCloudDesktopImportDeviceType(deviceType string) bool {
+	for _, keyword := range []string{"云桌面", "云盒", "盒子"} {
+		if strings.Contains(deviceType, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleImportAssets(w http.ResponseWriter, r *http.Request) {

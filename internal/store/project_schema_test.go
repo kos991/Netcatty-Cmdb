@@ -206,8 +206,63 @@ func insertProjectScopedRow(t *testing.T, db *sql.DB, table, prefix string) int6
 			t.Fatalf("读取 cmdb_asset_interfaces 的关联资产: %v", err)
 		}
 		result, err = db.Exec(`INSERT INTO cmdb_asset_interfaces(asset_id, updated_at) VALUES (?, '')`, assetID)
+	case "cmdb_asset_links":
+		var localAssetID int64
+		err = db.QueryRow(`SELECT id FROM cmdb_assets ORDER BY id LIMIT 1`).Scan(&localAssetID)
+		if err == sql.ErrNoRows {
+			localAssetID = insertProjectScopedRow(t, db, "cmdb_assets", prefix+"-link-local")
+		} else if err != nil {
+			t.Fatalf("读取 cmdb_asset_links 的本端资产: %v", err)
+		}
+		peerAssetID := insertProjectScopedRow(t, db, "cmdb_assets", prefix+"-link-peer")
+		result, err = db.Exec(`INSERT INTO cmdb_asset_links(local_asset_id, local_port, peer_asset_id, updated_at) VALUES (?, ?, ?, '')`, localAssetID, value, peerAssetID)
+	case "cmdb_netcatty_links":
+		var assetID int64
+		err = db.QueryRow(`SELECT id FROM cmdb_assets ORDER BY id LIMIT 1`).Scan(&assetID)
+		if err == sql.ErrNoRows {
+			assetID = insertProjectScopedRow(t, db, "cmdb_assets", prefix+"-netcatty-link")
+		} else if err != nil {
+			t.Fatalf("读取 cmdb_netcatty_links 的关联资产: %v", err)
+		}
+		result, err = db.Exec(`INSERT INTO cmdb_netcatty_links(asset_type, asset_id, asset_sync_id, host_id, updated_at) VALUES ('infrastructure', ?, ?, ?, '')`, assetID, value, value)
+	case "cmdb_switch_snapshots":
+		var assetID int64
+		err = db.QueryRow(`SELECT id FROM cmdb_assets ORDER BY id LIMIT 1`).Scan(&assetID)
+		if err == sql.ErrNoRows {
+			assetID = insertProjectScopedRow(t, db, "cmdb_assets", prefix+"-switch-snapshot")
+		} else if err != nil {
+			t.Fatalf("读取 cmdb_switch_snapshots 的关联资产: %v", err)
+		}
+		result, err = db.Exec(`INSERT INTO cmdb_switch_snapshots(asset_id, vendor, protocol, host_id, read_at, snapshot_json, updated_at) VALUES (?, 'huawei', 'ssh', ?, '', '{}', '')`, assetID, value)
+	case "cmdb_asset_history":
+		var assetID int64
+		err = db.QueryRow(`SELECT id FROM cmdb_assets ORDER BY id LIMIT 1`).Scan(&assetID)
+		if err == sql.ErrNoRows {
+			assetID = insertProjectScopedRow(t, db, "cmdb_assets", prefix+"-history")
+		} else if err != nil {
+			t.Fatalf("读取 cmdb_asset_history 的关联资产: %v", err)
+		}
+		result, err = db.Exec(`INSERT INTO cmdb_asset_history(asset_id, event_type, occurred_at, updated_at) VALUES (?, ?, ?, '')`, assetID, value, value)
 	case "cmdb_work_orders":
 		result, err = db.Exec(`INSERT INTO cmdb_work_orders(subject, updated_at) VALUES (?, '')`, value)
+	case "cmdb_work_order_asset_links":
+		var workOrderID int64
+		err = db.QueryRow(`SELECT id FROM cmdb_work_orders ORDER BY id LIMIT 1`).Scan(&workOrderID)
+		if err == sql.ErrNoRows {
+			workOrderID = insertProjectScopedRow(t, db, "cmdb_work_orders", prefix+"-asset-link-order")
+		} else if err != nil {
+			t.Fatalf("读取工单关联的工单 ID: %v", err)
+		}
+		result, err = db.Exec(`INSERT INTO cmdb_work_order_asset_links(work_order_id, asset_type, asset_id, asset_name, created_at) VALUES (?, 'infrastructure', 1, ?, '')`, workOrderID, value)
+	case "cmdb_work_order_attachments":
+		var workOrderID int64
+		err = db.QueryRow(`SELECT id FROM cmdb_work_orders ORDER BY id LIMIT 1`).Scan(&workOrderID)
+		if err == sql.ErrNoRows {
+			workOrderID = insertProjectScopedRow(t, db, "cmdb_work_orders", prefix+"-attachment-order")
+		} else if err != nil {
+			t.Fatalf("读取附件关联的工单 ID: %v", err)
+		}
+		result, err = db.Exec(`INSERT INTO cmdb_work_order_attachments(work_order_id, file_name, stored_name, size_bytes, content_type, created_at) VALUES (?, ?, ?, 1, 'text/plain', '')`, workOrderID, value+".txt", value+".stored")
 	case "cmdb_inventory_tasks":
 		result, err = db.Exec(`INSERT INTO cmdb_inventory_tasks(name, updated_at) VALUES (?, '')`, value)
 	case "cmdb_credentials":

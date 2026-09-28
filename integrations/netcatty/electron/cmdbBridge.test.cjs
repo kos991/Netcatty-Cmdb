@@ -214,6 +214,32 @@ test("allows native terminal asset import with preview and commit", async () => 
   ]);
 });
 
+test("allows native IPAM import with preview and commit", async () => {
+  const requestedUrls = [];
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: false, filePaths: ["C:/imports/ipam.xlsx"] }),
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+    fetchImpl: async (url) => {
+      requestedUrls.push(url);
+      return new Response('{"valid":1}', { status: 200 });
+    },
+  });
+
+  const preview = await handlers.get(CMDB_CHANNELS.importFile)({}, { path: "/api/ip_pool/import" });
+  await handlers.get(CMDB_CHANNELS.importFile)({}, {
+    path: "/api/ip_pool/import",
+    commit: true,
+    token: preview.token,
+  });
+
+  assert.deepEqual(requestedUrls, [
+    "http://127.0.0.1:18080/api/ip_pool/import",
+    "http://127.0.0.1:18080/api/ip_pool/import?commit=1",
+  ]);
+});
+
 test("returns cancellation without writing when export selection is cancelled", async () => {
   let writes = 0;
   const handlers = registerTestBridge({
@@ -252,4 +278,76 @@ test("writes downloaded binary only to the path accepted by the save dialog", as
 
   assert.deepEqual(result, { cancelled: false, filePath: "C:/exports/assets.xlsx" });
   assert.deepEqual(writes, [{ filePath: "C:/exports/assets.xlsx", data: [9, 8] }]);
+});
+
+test("uploads a selected file only to a work-order attachment endpoint", async () => {
+  let requestedUrl = "";
+  let requestedBody;
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: false, filePaths: ["C:/attachments/photo.txt"] }),
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+    readFile: async () => Buffer.from("attachment-data"),
+    fetchImpl: async (url, options) => {
+      requestedUrl = url;
+      requestedBody = options.body;
+      return new Response('{"id":7,"file_name":"photo.txt"}', { status: 201 });
+    },
+  });
+
+  const result = await handlers.get(CMDB_CHANNELS.uploadFile)({}, {
+    path: "/api/cmdb/work-orders/12/attachments",
+  });
+
+  assert.equal(requestedUrl, "http://127.0.0.1:18080/api/cmdb/work-orders/12/attachments");
+  assert.ok(requestedBody instanceof FormData);
+  assert.deepEqual(result, { id: 7, file_name: "photo.txt", cancelled: false });
+  await assert.rejects(
+    handlers.get(CMDB_CHANNELS.uploadFile)({}, { path: "/api/cmdb/assets/import" }),
+    /工单附件上传路径不允许/,
+  );
+});
+
+test("uploads a staged attachment without reopening the file dialog", async () => {
+  let opened = 0;
+  let uploaded;
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async () => { opened += 1; throw new Error("不应重新选择附件"); },
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+    fetchImpl: async (_url, options) => {
+      uploaded = options.body;
+      return new Response('{"id":8,"file_name":"before-submit.txt"}', { status: 201 });
+    },
+  });
+
+  const result = await handlers.get(CMDB_CHANNELS.uploadFile)({}, {
+    path: "/api/cmdb/work-orders/12/attachments",
+    fileName: "before-submit.txt",
+    bytes: Uint8Array.from([65, 66]),
+  });
+
+  assert.equal(opened, 0);
+  assert.equal(uploaded.get("file").name, "before-submit.txt");
+  assert.equal(await uploaded.get("file").text(), "AB");
+  assert.deepEqual(result, { id: 8, file_name: "before-submit.txt", cancelled: false });
+});
+
+test("rejects malformed staged attachments before sending a request", async () => {
+  let requested = false;
+  const handlers = registerTestBridge({
+    fetchImpl: async () => { requested = true; return new Response("{}", { status: 201 }); },
+  });
+
+  await assert.rejects(
+    handlers.get(CMDB_CHANNELS.uploadFile)({}, {
+      path: "/api/cmdb/work-orders/12/attachments",
+      fileName: "invalid.txt",
+      bytes: [65, 66],
+    }),
+    /附件内容无效/,
+  );
+  assert.equal(requested, false);
 });

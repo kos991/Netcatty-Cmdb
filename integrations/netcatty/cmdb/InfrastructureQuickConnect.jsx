@@ -1,0 +1,49 @@
+import React, { useState } from 'react'
+import { PlugZap } from 'lucide-react'
+import { api } from './api'
+import { useAction } from './hooks'
+import { connectionFromLinks, persistNetcattyConnection } from './NetcattyConnection'
+import NetcattyConnectionFields from './NetcattyConnectionFields'
+import { useNetcattyDirectory } from './NetcattyDirectory'
+import { ActionIcon, ModalForm } from './ui'
+
+export default function InfrastructureQuickConnect({ asset }) {
+  const { hosts, credentials, connectHost } = useNetcattyDirectory()
+  const [connection, setConnection] = useState(null)
+  const [referenceError, setReferenceError] = useState('')
+  const action = useAction()
+
+  const connect = () => action.run(async () => {
+    const result = await api.netcattyLinks({ asset_type: 'infrastructure', asset_id: asset.id })
+    const links = result.list || []
+    const link = links.find(item => item.is_primary && item.host_id) || links.find(item => item.host_id)
+    const host = hosts.find(item => item.id === link?.host_id)
+    if (host) {
+      await connectHost(host.id)
+      return
+    }
+    setReferenceError(link?.host_id ? '原关联主机已不存在，请重新选择或创建 Netcatty 主机。' : '')
+    setConnection(connectionFromLinks(link ? [link] : links))
+  })
+
+  const saveAndConnect = () => action.run(async () => {
+    if (!hosts.some(host => host.id === connection?.host_id)) throw new Error('请选择或新建 Netcatty 主机')
+    await persistNetcattyConnection(api, {
+      assetType: 'infrastructure',
+      assetId: asset.id,
+      connection,
+      hosts,
+      credentials,
+    })
+    setConnection(null)
+    await connectHost(connection.host_id)
+  })
+
+  return <>
+    <ActionIcon label={`快速连接主机：${asset.name || asset.mgmt_ip || asset.id}`} disabled={action.busy} onClick={event => { event.stopPropagation(); void connect() }}><PlugZap size={15} className="text-primary" /></ActionIcon>
+    {connection ? <ModalForm title="关联主机并连接" open onOpenChange={open => { if (!open && !action.busy) setConnection(null) }} busy={action.busy} onSubmit={saveAndConnect} submitLabel="保存关联并连接">
+      <p className="text-xs text-muted-foreground">{asset.name} · {asset.mgmt_ip || asset.manage_ip || '未填写管理 IP'}</p>
+      <NetcattyConnectionFields asset={asset} value={connection} onChange={value => { setConnection(value); setReferenceError('') }} hosts={hosts} credentials={credentials} error={referenceError} />
+    </ModalForm> : null}
+  </>
+}

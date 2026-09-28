@@ -290,3 +290,52 @@ func TestTransferPersonAssets(t *testing.T) {
 		t.Fatalf("资产属性未正确同步为新接收人: %+v", toAssets[0])
 	}
 }
+
+// 拖拽人员到新组织节点最终调用 UpdatePerson；人员名下资产必须在同一事务内跟随归属。
+func TestUpdatePersonOrganizationMovesOwnedAssets(t *testing.T) {
+	s := newPersonTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orgID, _ := s.CreateOrgNode(scope, &OrgNode{NodeType: OrgNodeOrganization, Name: "常州中院"})
+	oldDeptID, _ := s.CreateOrgNode(scope, &OrgNode{ParentID: orgID, NodeType: OrgNodeDepartment, Name: "信息处"})
+	newDeptID, _ := s.CreateOrgNode(scope, &OrgNode{ParentID: orgID, NodeType: OrgNodeDepartment, Name: "办公室"})
+	personID, err := s.CreatePersonForProject(scope, &Person{Name: "张三", OrgID: orgID, DepartmentID: oldDeptID, Status: "在职"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmdbID, err := s.CreateCmdbAssetManualForProject(scope, &CmdbAsset{Name: "核心交换机", OwnerID: personID, Owner: "张三", Department: "信息处"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyID, err := s.CreateAssetForProject(scope, &Asset{AssetCode: "PC-001", UserName: "张三", Department: "信息处", Status: "在用"}, "测试")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	person, err := s.GetPersonForProject(scope, personID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	person.DepartmentID = newDeptID
+	person.GroupID = 0
+	if err := s.UpdatePersonForProject(scope, person); err != nil {
+		t.Fatal(err)
+	}
+
+	cmdbAsset, _, err := s.GetCmdbAssetForProject(scope, cmdbID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmdbAsset.Department != "办公室" {
+		t.Fatalf("基础设施没有跟随人员组织变更: %+v", cmdbAsset)
+	}
+	legacyAsset, _, err := s.GetAssetForProject(scope, legacyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacyAsset.Department != "办公室" {
+		t.Fatalf("终端资产没有跟随人员组织变更: %+v", legacyAsset)
+	}
+}
