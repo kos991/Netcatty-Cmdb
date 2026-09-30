@@ -158,6 +158,50 @@ func (s *Store) ListCmdbNetcattyLinksForProject(scope ProjectScope, assetType st
 	return list, rows.Err()
 }
 
+func (s *Store) CountOtherCmdbNetcattyHostReferences(scope ProjectScope, hostID, assetType string, assetID int64) (int64, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
+	hostID = strings.TrimSpace(hostID)
+	if hostID == "" || assetType == "" || assetID <= 0 {
+		return 0, fmt.Errorf("主机和当前资产不能为空")
+	}
+	var count int64
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_netcatty_links WHERE host_id=? AND deleted_at IS NULL AND NOT (project_id=? AND asset_type=? AND asset_id=?)`, hostID, scope.ProjectID, assetType, assetID).Scan(&count)
+	return count, err
+}
+
+func (s *Store) SetDefaultCmdbNetcattyLinkForProject(scope ProjectScope, id int64) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var assetType, hostID string
+	var assetID int64
+	err = tx.QueryRow(`SELECT asset_type,asset_id,host_id FROM cmdb_netcatty_links WHERE id=? AND project_id=? AND deleted_at IS NULL`, id, scope.ProjectID).Scan(&assetType, &assetID, &hostID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("主机关联不存在: %w", ErrProjectScopedNotFound)
+	}
+	if err != nil {
+		return err
+	}
+	if hostID == "" {
+		return fmt.Errorf("请选择可连接的 Netcatty 主机")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err = tx.Exec(`UPDATE cmdb_netcatty_links SET is_primary=0,revision=revision+1,updated_at=? WHERE project_id=? AND asset_type=? AND asset_id=? AND is_primary=1 AND deleted_at IS NULL`, now, scope.ProjectID, assetType, assetID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE cmdb_netcatty_links SET is_primary=1,revision=revision+1,updated_at=? WHERE id=? AND project_id=? AND deleted_at IS NULL`, now, id, scope.ProjectID); err != nil {
+		return classifyNetcattyLinkError(err)
+	}
+	return tx.Commit()
+}
+
 func (s *Store) MarkCmdbNetcattyLinkStateForProject(scope ProjectScope, id int64, state string) error {
 	if _, err := s.ResolveProject(scope); err != nil {
 		return err

@@ -6,6 +6,8 @@ import {
   persistNetcattyConnection,
   selectNetcattyHost,
   setDefaultNetcattyLink,
+  netcattyLinkStatus,
+  assertNetcattyLinkReady,
 } from './NetcattyConnection.js'
 
 const hosts = [
@@ -72,6 +74,7 @@ test('同一设备的第二个连接可保持非默认状态', () => {
 test('资产表单保存时创建、更新或解除现有 Netcatty 关联', async () => {
   const calls = []
   const api = {
+    netcattyHostUsage: async () => ({ other_references: 0 }),
     createNetcattyLink: async (payload) => { calls.push(['create', payload]); return { id: 8 } },
     updateNetcattyLink: async (id, payload) => { calls.push(['update', id, payload]) },
     deleteNetcattyLink: async (id) => { calls.push(['delete', id]) },
@@ -94,39 +97,67 @@ test('资产表单保存时创建、更新或解除现有 Netcatty 关联', asyn
 
 test('保存主机连接先让所选身份生效，备用凭证只保存引用', async () => {
   const calls = []
-  const api = { createNetcattyLink: async payload => { calls.push(['link', payload.host_id, payload.credential_id]); return { id: 5 } } }
+  const api = { netcattyHostUsage: async () => ({ other_references: 0 }), createNetcattyLink: async payload => { calls.push(['link', payload.host_id, payload.credential_id]); return { id: 5 } } }
   const bindHostCredential = async (hostID, credentialID) => { calls.push(['bind', hostID, credentialID]) }
-  await persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: 'host-1', credential_id: 'identity-1' }, hosts, credentials, bindHostCredential })
+  await persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: 'host-1', credential_id: 'key-1' }, hosts, credentials, bindHostCredential })
   await persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: '', credential_id: 'key-1' }, hosts, credentials, bindHostCredential })
   assert.deepEqual(calls, [
-    ['bind', 'host-1', 'identity-1'],
-    ['link', 'host-1', 'identity-1'],
+    ['bind', 'host-1', 'key-1'],
+    ['link', 'host-1', 'key-1'],
     ['link', '', 'key-1'],
   ])
 })
 
 test('一个资产多个账号主机时可切换唯一默认连接', async () => {
   const calls = []
-  const api = { updateNetcattyLink: async (id, payload) => { calls.push([id, payload.is_primary]) } }
+  const api = { setDefaultNetcattyLink: async (id) => { calls.push(id) } }
   const links = [{ id: 3, host_id: 'admin-host', is_primary: true }, { id: 4, host_id: 'read-host', is_primary: false }]
   await setDefaultNetcattyLink(api, links[1], links)
-  assert.deepEqual(calls, [[4, true], [3, false]])
+  assert.deepEqual(calls, [4])
 })
 
 test('原生主机已绑定但 Cmdb 引用失败时给出实际状态和可重试 ID', async () => {
-  const api = { createNetcattyLink: async () => { throw new Error('数据库不可写') } }
+  const api = { netcattyHostUsage: async () => ({ other_references: 0 }), createNetcattyLink: async () => { throw new Error('数据库不可写') } }
   await assert.rejects(
-    persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: 'host-1', credential_id: 'identity-1' }, hosts, credentials, bindHostCredential: async () => {} }),
-    /主机认证已保存.*Cmdb 引用保存失败.*host-1.*identity-1.*重试关联/,
+    persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: 'host-1', credential_id: 'key-1' }, hosts, credentials, bindHostCredential: async () => {} }),
+    /主机认证已保存.*Cmdb 引用保存失败.*host-1.*key-1.*重试关联/,
   )
 })
 
 test('共享主机被其他资产引用时拒绝改绑身份，避免影响另一台设备', async () => {
   let updated = false
-  const api = { netcattyLinks: async () => ({ list: [{ id: 8, asset_type: 'application', asset_id: 2, host_id: 'host-1' }] }) }
+  const api = { netcattyHostUsage: async () => ({ other_references: 1 }) }
   await assert.rejects(
-    persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: 'host-1', credential_id: 'identity-1' }, hosts, credentials, bindHostCredential: async () => { updated = true } }),
+    persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: 'host-1', credential_id: 'key-1' }, hosts, credentials, bindHostCredential: async () => { updated = true } }),
     /其他资产.*新建.*主机/,
   )
   assert.equal(updated, false)
+})
+
+test('主机当前认证与关联身份不一致时不可作为已联动连接', () => {
+  const link = { host_id: 'host-1', credential_id: 'identity-1' }
+  assert.equal(netcattyLinkStatus(link, { ...hosts[0], credentialId: 'key-1' }, credentials), 'auth-mismatch')
+  assert.throws(() => assertNetcattyLinkReady(link, { ...hosts[0], credentialId: 'key-1' }, credentials), /认证未应用|已失效/)
+  assert.equal(netcattyLinkStatus(link, hosts[0], credentials), 'linked')
+  assert.equal(netcattyLinkStatus({ host_id: '', credential_id: 'key-1' }, null, credentials), 'linked')
+})
+
+test('跨项目仍引用同一主机时仅在认证改变时阻止改绑', async () => {
+  let bound = 0
+  const api = {
+    netcattyHostUsage: async () => ({ other_references: 1 }),
+    createNetcattyLink: async () => ({ id: 5 }),
+  }
+  await assert.rejects(persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: 'host-1', credential_id: 'key-1' }, hosts, credentials, bindHostCredential: async () => { bound++ } }), /其他资产.*新建.*主机/)
+  assert.equal(bound, 0)
+  await persistNetcattyConnection(api, { assetType: 'terminal', assetId: 9, connection: { host_id: 'host-1', credential_id: 'identity-1' }, hosts, credentials, bindHostCredential: async () => { bound++ } })
+  assert.equal(bound, 0)
+})
+
+test('默认连接切换失败时不留下两个默认连接', async () => {
+  const links = [{ id: 3, host_id: 'admin-host', is_primary: true }, { id: 4, host_id: 'read-host', is_primary: false }]
+  const state = new Map([[3, true], [4, false]])
+  const api = { setDefaultNetcattyLink: async () => { throw new Error('写入失败') } }
+  await assert.rejects(setDefaultNetcattyLink(api, links[1], links), /写入失败/)
+  assert.deepEqual([...state.values()], [true, false])
 })

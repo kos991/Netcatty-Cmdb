@@ -803,9 +803,11 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("POST /api/cmdb/sync/preflight", s.handlePreflightCmdbSnapshot)
 	scoped("POST /api/cmdb/sync/apply", s.handleApplyCmdbSnapshot)
 	scoped("GET /api/cmdb/netcatty-links", s.handleListCmdbNetcattyLinks)
+	scoped("GET /api/cmdb/netcatty-links/host-usage", s.handleCmdbNetcattyHostUsage)
 	scoped("POST /api/cmdb/netcatty-links", s.handleCreateCmdbNetcattyLink)
 	scoped("PUT /api/cmdb/netcatty-links/{id}", s.handleUpdateCmdbNetcattyLink)
 	scoped("PUT /api/cmdb/netcatty-links/{id}/state", s.handleUpdateCmdbNetcattyLink)
+	scoped("PUT /api/cmdb/netcatty-links/{id}/default", s.handleSetDefaultCmdbNetcattyLink)
 	scoped("DELETE /api/cmdb/netcatty-links/{id}", s.handleDeleteCmdbNetcattyLink)
 
 	// CMDB 仪表盘

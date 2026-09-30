@@ -30,6 +30,7 @@ import {
 } from '../ui/tooltip';
 import CmdbWorkspace from './CmdbWorkspace';
 import { NetcattyDirectoryProvider } from './NetcattyDirectory';
+import { assertNetcattyLinkReady } from './NetcattyConnection';
 import { MODULES, netcattyDirectorySummaries } from './state';
 import { buildSwitchCommand, normalizeSwitchVendor, parseSwitchOutput } from './switchConfig';
 import { createNetcattyVaultActions } from './netcattyVaultActions';
@@ -79,24 +80,28 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
     const summaries = netcattyDirectorySummaries({ hosts: [...vaultHosts], keys: [...vaultKeys], identities: [...vaultIdentities] });
     return {
       ...summaries,
-      connectHost: (hostId: string) => {
-        const host = vaultHosts.find((item) => item.id === hostId);
+      connectHost: (hostId: string, credentialId = '') => {
+        const snapshot = getVaultSnapshot();
+        const host = snapshot.hosts.find((item) => item.id === hostId);
         if (!host) throw new Error('关联的 Netcatty 主机已不存在，请重新关联');
+        if (credentialId) assertNetcattyLinkReady({ host_id: hostId, credential_id: credentialId }, host, [...snapshot.identities, ...snapshot.keys]);
         if (!onConnectHost) throw new Error('Netcatty 连接入口未初始化');
         onConnectHost(host);
       },
       ...createNetcattyVaultActions(vaultActions, getVaultSnapshot),
       refreshDirectory: () => {},
-      readSwitch: async (hostId: string, vendorName: string) => {
-        const host = vaultHosts.find((item) => item.id === hostId);
+      readSwitch: async (hostId: string, vendorName: string, credentialId = '') => {
+        const snapshot = getVaultSnapshot();
+        const host = snapshot.hosts.find((item) => item.id === hostId);
         if (!host) throw new Error('关联的 Netcatty 主机不存在');
+        if (credentialId) assertNetcattyLinkReady({ host_id: hostId, credential_id: credentialId }, host, [...snapshot.identities, ...snapshot.keys]);
         const vendor = normalizeSwitchVendor(vendorName);
         if (!vendor) throw new Error(`交换机厂商未适配：${vendorName || '未填写'}`);
         const protocol = String(host.protocol || 'ssh').toLowerCase();
         const commands = buildSwitchCommand(vendor, protocol);
         let output = '';
         if (protocol === 'telnet') {
-          const telnetIdentity = vaultIdentities.find((item) => item.id === host.telnetIdentityId);
+          const telnetIdentity = snapshot.identities.find((item) => item.id === host.telnetIdentityId);
           if (host.telnetIdentityId && (!telnetIdentity || telnetIdentity.authMethod !== 'password' || !telnetIdentity.username?.trim() || !telnetIdentity.password)) throw new Error('Telnet 登录身份不可用，请检查用户名和密码');
           output = await readTelnetConfiguration(
             terminalBackend,
@@ -107,7 +112,7 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
           );
         } else {
           if (!terminalBackend.execCommand) throw new Error('当前 Netcatty 不支持 SSH 配置读取');
-          const auth = resolveHostAuth({ host, keys: [...vaultKeys], identities: [...vaultIdentities] });
+          const auth = resolveHostAuth({ host, keys: [...snapshot.keys], identities: [...snapshot.identities] });
           const keyAuth = resolveBridgeKeyAuth({ key: auth.key, fallbackIdentityFilePaths: host.identityFilePaths, passphrase: auth.passphrase });
           const agentAuth = resolveBridgeSshAgentAuth(host, auth.key, auth.authMethod);
           const chunks: string[] = [];

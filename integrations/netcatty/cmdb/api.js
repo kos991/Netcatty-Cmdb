@@ -63,9 +63,11 @@ export const api = {
   importInfrastructure: (commit = false, token) => importFile('/api/cmdb/assets/import', { commit, token }),
   syncInfrastructure: () => post('/api/cmdb/sync/legacy'),
   netcattyLinks: (params = {}) => req(`/api/cmdb/netcatty-links?${toQuery(params)}`),
+  netcattyHostUsage: (params) => req(`/api/cmdb/netcatty-links/host-usage?${toQuery(params)}`),
   createNetcattyLink: (body) => post('/api/cmdb/netcatty-links', body),
   updateNetcattyLink: (id, body) => put(`/api/cmdb/netcatty-links/${id}`, body),
   updateNetcattyLinkState: (id, state) => put(`/api/cmdb/netcatty-links/${id}/state`, { state }),
+  setDefaultNetcattyLink: (id) => put(`/api/cmdb/netcatty-links/${id}/default`),
   deleteNetcattyLink: (id) => del(`/api/cmdb/netcatty-links/${id}`),
 
   persons: (params = {}) => req(`/api/cmdb/persons?${toQuery(params)}`),

@@ -26,6 +26,33 @@ func (s *Server) handleListCmdbNetcattyLinks(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, 200, map[string]interface{}{"list": list})
 }
 
+func (s *Server) handleCmdbNetcattyHostUsage(w http.ResponseWriter, r *http.Request) {
+	assetID, err := strconv.ParseInt(r.URL.Query().Get("asset_id"), 10, 64)
+	if err != nil || assetID <= 0 {
+		writeErr(w, 400, "无效的资产 ID")
+		return
+	}
+	count, err := s.Store.CountOtherCmdbNetcattyHostReferences(requestProjectScope(r), r.URL.Query().Get("host_id"), r.URL.Query().Get("asset_type"), assetID)
+	if err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]int64{"other_references": count})
+}
+
+func (s *Server) handleSetDefaultCmdbNetcattyLink(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeErr(w, 400, "无效的关联 ID")
+		return
+	}
+	if err := s.Store.SetDefaultCmdbNetcattyLinkForProject(requestProjectScope(r), id); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"message": "默认连接已更新"})
+}
+
 func (s *Server) handleCreateCmdbNetcattyLink(w http.ResponseWriter, r *http.Request) {
 	var link store.CmdbNetcattyLink
 	if err := decodeStrictJSON(r, &link); err != nil {

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api } from './api'
+import { assertNetcattyLinkReady } from './NetcattyConnection'
 import DeviceOwnershipBar from './DeviceOwnershipBar'
 import DeviceRelations from './DeviceRelations'
 import DeviceImages from './DeviceImages'
@@ -115,7 +116,7 @@ function DeviceOverview({ detail, kind, snapshot }) {
 }
 
 export default function DeviceWorkspace({ id, projects = [], expanded, onExpandedChange, onClose, onEdit, onClone, onArchive, onOpenAsset, onOpenIP, onOpenApplication }) {
-  const { hosts, connectHost, readSwitch } = useNetcattyDirectory()
+  const { hosts, credentials, connectHost, readSwitch } = useNetcattyDirectory()
   const loader = useCallback(() => api.infrastructureAsset(id), [id])
   const query = useQuery(loader)
   const [snapshot, setSnapshot] = useState(null)
@@ -136,12 +137,13 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
   const detail = query.data
   const primaryLink = detail.netcatty_links?.find?.((item) => item.is_primary && item.host_id) || detail.netcatty_links?.find?.((item) => item.host_id)
   const primaryHost = hosts.find(host => host.id === primaryLink?.host_id)
-  const connect = () => { try { connectHost(primaryHost?.id) } catch (error) { toast.error(error.message) } }
+  const connect = () => { try { assertNetcattyLinkReady(primaryLink, primaryHost, credentials); connectHost(primaryHost.id, primaryLink.credential_id) } catch (error) { toast.error(error.message); setActiveTab('relations') } }
   const readSwitchConfig = async () => {
     if (!primaryLink?.host_id) { setReadError('请先在凭证中心关联主机'); setActiveTab('relations'); return }
     setReadBusy(true); setReadError('')
     try {
-      const result = await readSwitch(primaryLink.host_id, asset.vendor || asset.provider || asset.category_name || asset.device_type)
+      assertNetcattyLinkReady(primaryLink, primaryHost, credentials)
+      const result = await readSwitch(primaryLink.host_id, asset.vendor || asset.provider || asset.category_name || asset.device_type, primaryLink.credential_id)
       await api.saveSwitchSnapshot(id, { vendor: result.vendor, protocol: result.protocol, host_id: result.hostId, read_at: result.snapshot.readAt, snapshot: result.snapshot })
       setSnapshot({ ...result, snapshot: result.snapshot, read_at: result.snapshot.readAt })
       query.reload()

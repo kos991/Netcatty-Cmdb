@@ -3,14 +3,14 @@ import { PlugZap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api } from './api'
 import { useAction } from './hooks'
-import { connectionFromLinks, persistNetcattyConnection } from './NetcattyConnection'
+import { connectionFromLinks, netcattyLinkStatus, persistNetcattyConnection } from './NetcattyConnection'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
 import { useNetcattyDirectory } from './NetcattyDirectory'
 import { quickConnectControlPresentation } from './state'
 import { ModalForm } from './ui'
 
 export default function InfrastructureQuickConnect({ asset }) {
-  const { hosts, credentials, connectHost } = useNetcattyDirectory()
+  const { hosts, credentials, connectHost, bindHostCredential } = useNetcattyDirectory()
   const [connection, setConnection] = useState(null)
   const [referenceError, setReferenceError] = useState('')
   const action = useAction()
@@ -21,12 +21,12 @@ export default function InfrastructureQuickConnect({ asset }) {
     const links = result.list || []
     const link = links.find(item => item.is_primary && item.host_id) || links.find(item => item.host_id)
     const host = hosts.find(item => item.id === link?.host_id)
-    if (host) {
-      await connectHost(host.id)
+    if (host && netcattyLinkStatus(link, host, credentials) === 'linked') {
+      await connectHost(host.id, link.credential_id)
       return
     }
-    setReferenceError(link?.host_id ? '原关联主机已不存在，请重新选择或创建 Netcatty 主机。' : '')
-    setConnection(connectionFromLinks(link ? [link] : links))
+    setReferenceError(host ? '主机认证未应用或身份引用已失效，请重新保存关联后连接。' : link?.host_id ? '原关联主机已不存在，请重新选择或创建 Netcatty 主机。' : '')
+    setConnection({ ...connectionFromLinks(link ? [link] : links), is_primary: link?.is_primary ?? true })
   })
 
   const saveAndConnect = () => action.run(async () => {
@@ -37,9 +37,10 @@ export default function InfrastructureQuickConnect({ asset }) {
       connection,
       hosts,
       credentials,
+      bindHostCredential,
     })
     setConnection(null)
-    await connectHost(connection.host_id)
+    await connectHost(connection.host_id, connection.credential_id)
   })
 
   return <>
