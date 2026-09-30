@@ -316,6 +316,30 @@ func scanCmdbAsset(rows interface {
 	return a, nil
 }
 
+func cmdbDeviceTypeAliases(value string) []string {
+	typeName := strings.ToLower(strings.TrimSpace(value))
+	switch typeName {
+	case "server", "physical_server", "服务器", "物理服务器", "物理主机":
+		return []string{"server", "physical_server", "服务器", "物理服务器", "物理主机"}
+	case "virtual_machine", "vm", "虚拟机", "云主机", "云资源", "ecs":
+		return []string{"virtual_machine", "vm", "虚拟机", "云主机", "云资源", "ecs"}
+	case "hyperconverged", "hci", "超融合", "超融合集群", "超融合节点":
+		return []string{"hyperconverged", "hci", "超融合", "超融合集群", "超融合节点"}
+	case "switch", "交换机":
+		return []string{"switch", "交换机"}
+	case "router", "路由器":
+		return []string{"router", "路由器"}
+	case "security_device", "security", "安全设备", "防火墙", "网闸", "负载均衡":
+		return []string{"security_device", "security", "安全设备", "防火墙", "网闸", "负载均衡"}
+	case "storage", "存储", "存储设备":
+		return []string{"storage", "存储", "存储设备"}
+	case "cloud_desktop", "云桌面", "云桌面平台", "桌面池":
+		return []string{"cloud_desktop", "云桌面", "云桌面平台", "桌面池"}
+	default:
+		return []string{typeName}
+	}
+}
+
 func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 	var where []string
 	var args []interface{}
@@ -326,15 +350,33 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 			OR a.mgmt_ip LIKE ? OR a.manage_ip LIKE ? OR a.model LIKE ? OR a.owner LIKE ? OR a.department LIKE ?)`)
 		args = append(args, pat, pat, pat, pat, pat, pat, pat, pat)
 	}
-	if q.CategoryID > 0 {
-		where = append(where, "a.category_id = ?")
-		args = append(args, q.CategoryID)
+	deviceType := strings.TrimSpace(q.DeviceType)
+	if q.CategoryID > 0 || (deviceType != "" && deviceType != "全部") {
+		var typeWhere []string
+		var typeArgs []interface{}
+		if q.CategoryID > 0 {
+			typeWhere = append(typeWhere, "a.category_id = ?")
+			typeArgs = append(typeArgs, q.CategoryID)
+		}
+		if deviceType != "" && deviceType != "全部" {
+			aliases := cmdbDeviceTypeAliases(deviceType)
+			placeholders := make([]string, len(aliases))
+			for i, alias := range aliases {
+				placeholders[i] = "?"
+				typeArgs = append(typeArgs, alias)
+			}
+			typeWhere = append(typeWhere, "lower(trim(IFNULL(a.device_type,''))) IN ("+strings.Join(placeholders, ",")+")")
+		}
+		where = append(where, "("+strings.Join(typeWhere, " OR ")+")")
+		args = append(args, typeArgs...)
 	}
 	if q.OrgID > 0 {
 		where = append(where, "a.org_id = ?")
 		args = append(args, q.OrgID)
 	}
-	if q.GroupID > 0 {
+	if q.GroupID == -1 {
+		where = append(where, "IFNULL(a.group_id,0) = 0")
+	} else if q.GroupID > 0 {
 		where = append(where, "a.group_id = ?")
 		args = append(args, q.GroupID)
 	}
@@ -358,10 +400,6 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		where = append(where, "a.asset_class = ?")
 		args = append(args, cls)
 	}
-	if dt := strings.TrimSpace(q.DeviceType); dt != "" && dt != "全部" {
-		where = append(where, "a.device_type = ?")
-		args = append(args, dt)
-	}
 	if v := strings.TrimSpace(q.OSType); v != "" && v != "全部" {
 		where = append(where, "IFNULL(a.os_type,'') = ?")
 		args = append(args, v)
@@ -381,7 +419,7 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 	if strings.EqualFold(strings.TrimSpace(q.ResourceScope), "infrastructure") {
 		where = append(where, `(a.source_type = 'legacy_server'
 			OR (a.source_type = 'manual' AND IFNULL(a.device_type,'') = '' AND IFNULL(a.category_id,0) = 0)
-			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage','hyperconverged','hci','超融合')
+			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage','hyperconverged','hci','超融合','cloud_desktop')
 			OR EXISTS (
 				SELECT 1 FROM cmdb_device_categories scope_category
 				WHERE scope_category.id = a.category_id
@@ -393,7 +431,9 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 					OR scope_category.name LIKE '%网络设备%'
 					OR scope_category.name LIKE '%路由器%'
 					OR scope_category.name LIKE '%安全设备%'
-					OR scope_category.name LIKE '%存储设备%')
+					OR scope_category.name LIKE '%存储设备%'
+					OR scope_category.name LIKE '%云桌面平台%'
+					OR scope_category.name LIKE '%桌面池%')
 			))`)
 	}
 

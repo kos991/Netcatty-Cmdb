@@ -51,6 +51,27 @@ func TestCmdbAssetFilterOptionsAndExportAll(t *testing.T) {
 	}
 }
 
+func TestCmdbAssetFilterOptionsOnlyExposeInfrastructureDeviceTypes(t *testing.T) {
+	s := newCmdbTestStore(t)
+	insertCmdbAsset(t, s, CmdbAsset{Name: "核心交换机", DeviceType: "switch"})
+	insertCmdbAsset(t, s, CmdbAsset{Name: "云桌面平台", DeviceType: "cloud_desktop"})
+	insertCmdbAsset(t, s, CmdbAsset{Name: "办公终端", DeviceType: "台式电脑"})
+
+	opts, err := s.CmdbAssetFilterOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"cloud_desktop", "switch"}
+	if len(opts["device_type"]) != len(want) {
+		t.Fatalf("基础设施设备类型选项不应混入终端类型: got=%v want=%v", opts["device_type"], want)
+	}
+	for i := range want {
+		if opts["device_type"][i] != want[i] {
+			t.Fatalf("基础设施设备类型选项错误: got=%v want=%v", opts["device_type"], want)
+		}
+	}
+}
+
 func TestCmdbImportTemplateRoundTrip(t *testing.T) {
 	s := newCmdbTestStore(t)
 

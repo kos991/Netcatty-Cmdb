@@ -168,3 +168,65 @@ func TestQueryCmdbAssetsInfrastructureScopeIncludesHyperconverged(t *testing.T) 
 		t.Fatalf("导出与列表筛选范围不一致: len=%d err=%v", len(exported), err)
 	}
 }
+
+func TestQueryCmdbAssetsTypeFilterIncludesCategoryAndLegacyDeviceType(t *testing.T) {
+	s := newCmdbTestStore(t)
+	result, err := s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('交换机', 0, 0)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	categoryID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	categoryAssetID := insertCmdbAsset(t, s, CmdbAsset{Name: "分类交换机", CategoryID: categoryID})
+	legacyAssetID := insertCmdbAsset(t, s, CmdbAsset{Name: "历史交换机", DeviceType: "switch"})
+	insertCmdbAsset(t, s, CmdbAsset{Name: "历史路由器", DeviceType: "router"})
+
+	query := CmdbAssetQuery{CategoryID: categoryID, DeviceType: "switch", Page: 1, PageSize: 20}
+	list, total, err := s.QueryCmdbAssets(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 || len(list) != 2 {
+		t.Fatalf("交换机筛选应同时返回分类记录和历史类型记录: total=%d list=%+v", total, list)
+	}
+	want := map[int64]bool{categoryAssetID: true, legacyAssetID: true}
+	for _, asset := range list {
+		if !want[asset.ID] {
+			t.Fatalf("交换机筛选混入其他设备: %+v", asset)
+		}
+	}
+	exported, err := s.AllCmdbAssets(query)
+	if err != nil || len(exported) != 2 {
+		t.Fatalf("导出与列表的设备类型筛选不一致: len=%d err=%v", len(exported), err)
+	}
+}
+
+func TestQueryCmdbAssetsUnassignedGroup(t *testing.T) {
+	s := newCmdbTestStore(t)
+	insertCmdbAsset(t, s, CmdbAsset{Name: "未分组服务器一", DeviceType: "server"})
+	insertCmdbAsset(t, s, CmdbAsset{Name: "未分组服务器二", DeviceType: "server"})
+	result, err := s.db.Exec(`INSERT INTO cmdb_groups(name, sort_order) VALUES ('已分组设备', 0)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groupID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertCmdbAsset(t, s, CmdbAsset{Name: "已分组服务器", DeviceType: "server", GroupID: groupID})
+
+	query := CmdbAssetQuery{GroupID: -1, Page: 1, PageSize: 20}
+	list, total, err := s.QueryCmdbAssets(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 || len(list) != 2 {
+		t.Fatalf("未分组筛选只应返回 group_id 为空或为零的记录: total=%d list=%+v", total, list)
+	}
+	exported, err := s.AllCmdbAssets(query)
+	if err != nil || len(exported) != 2 {
+		t.Fatalf("导出与列表的未分组筛选不一致: len=%d err=%v", len(exported), err)
+	}
+}

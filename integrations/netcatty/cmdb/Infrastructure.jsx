@@ -19,7 +19,7 @@ import { infrastructureSavePayload, saveInfrastructureDraftPhotos } from './infr
 import { deviceTypeLabel, infrastructureListPresentation, resolveOperatingSystemPresentation } from './deviceWorkspaceModel'
 import { buildNetcattyLinkPayload } from './NetcattyConnection'
 import { useNetcattyConnectionEditor } from './NetcattyConnectionFields'
-import { supportsInfrastructurePhotos } from './state'
+import { infrastructureGroupFilterOptions, infrastructureListFilterParams, infrastructureTypeFilterOptions, supportsInfrastructurePhotos } from './state'
 import { VendorBrandValue } from './VendorBrandIcon'
 import { resolveVendorBrand } from './vendorBrandModel'
 
@@ -46,7 +46,7 @@ function InfrastructureTechnicalCell({ record }) {
 export default function Infrastructure({ keyword, focusTarget, onNavigate, command, leadingControl, meta: workspaceMeta, onPanelOpenChange }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  const [filters, setFilters] = useState({ status: '', category_id: '', org_id: '', group_id: '', source_type: '', os_type: '', os_version: '' })
+  const [filters, setFilters] = useState({ status: '', type_filter: '', org_id: '', group_id: '', source_type: '', os_type: '', os_version: '' })
   const [sort, setSort] = useState('')
   const [selected, setSelected] = useState([])
   const [selectedDeviceID, setSelectedDeviceID] = useState(null)
@@ -63,8 +63,8 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
   const action = useAction()
   const netcatty = useNetcattyConnectionEditor('infrastructure')
   const beginNetcattyConnection = netcatty.begin
-  const params = { keyword, scope: 'infrastructure', ...filters, ...(sort ? { sort_by: sort, sort_order: 'asc' } : {}) }
-  const loader = useCallback(() => api.infrastructure({ keyword, scope: 'infrastructure', ...filters, ...(sort ? { sort_by: sort, sort_order: 'asc' } : {}), page, page_size: pageSize }), [keyword, filters, sort, page, pageSize])
+  const params = { keyword, scope: 'infrastructure', ...infrastructureListFilterParams(filters), ...(sort ? { sort_by: sort, sort_order: 'asc' } : {}) }
+  const loader = useCallback(() => api.infrastructure({ keyword, scope: 'infrastructure', ...infrastructureListFilterParams(filters), ...(sort ? { sort_by: sort, sort_order: 'asc' } : {}), page, page_size: pageSize }), [keyword, filters, sort, page, pageSize])
   const query = useQuery(loader)
   const meta = directory.data?.meta || {}
   const advancedFilterCount = ['org_id', 'source_type', 'os_type', 'os_version'].filter((key) => filters[key]).length + (sort ? 1 : 0)
@@ -132,9 +132,9 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
   return <div ref={tableRef} className="flex min-h-0 flex-1 flex-col">
     <Toolbar>
       {leadingControl}
-      <SelectControl className="w-36" value={filters.category_id} onChange={(value) => changeFilter('category_id', value)} options={choices((meta.categories || []).map((item) => ({ value: item.id, label: item.name })), '全部设备类型')} />
+      <SelectControl className="w-36" value={filters.type_filter} onChange={(value) => changeFilter('type_filter', value)} options={choices(infrastructureTypeFilterOptions(meta.categories || [], directory.data?.filters.device_type || []), '全部设备类型')} />
       <SelectControl className="w-32" value={filters.status} onChange={(value) => changeFilter('status', value)} options={choices(meta.statuses || [], '全部状态')} />
-      <SelectControl className="w-36" value={filters.group_id} onChange={(value) => changeFilter('group_id', value)} options={choices((meta.groups || []).map((item) => ({ value: item.id, label: item.name })), '全部资产分组')} />
+      <SelectControl className="w-36" value={filters.group_id} onChange={(value) => changeFilter('group_id', value)} options={infrastructureGroupFilterOptions(meta.groups || [])} />
       <Popover><PopoverTrigger asChild><Button variant="outline" size="sm"><SlidersHorizontal size={14} className="mr-1" />更多筛选{advancedFilterCount ? ` (${advancedFilterCount})` : ''}</Button></PopoverTrigger><PopoverContent align="start" className="w-72 space-y-3">
         {[['org_id', '组织', 'orgs']].map(([key, label, kind]) => <div key={key}><p className="mb-1 text-xs text-muted-foreground">{label}</p><SelectControl className="w-full" value={filters[key]} onChange={(value) => changeFilter(key, value)} options={choices((meta[kind] || []).map((item) => ({ value: item.id, label: item.name })), `全部${label}`)} /></div>)}
         <div><p className="mb-1 text-xs text-muted-foreground">来源</p><SelectControl className="w-full" value={filters.source_type} onChange={(value) => changeFilter('source_type', value)} options={choices([{ value: 'manual', label: '手工登记' }, { value: 'legacy_server', label: '基础设施台账' }], '全部来源')} /></div>

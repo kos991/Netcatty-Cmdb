@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as state from './state.js'
-const { customFieldDefinitions, formatLocalDateTimeInput, infrastructureDeviceTypeOptions, infrastructureFieldProfile, ipAddressPresentation, isApplicationHostInfrastructure, isServerInfrastructure, netcattyDirectorySummaries, normalizeAsset, normalizeWorkOrderFilters, resolveSearchTarget, terminalSerialProfile } = state
+const { customFieldDefinitions, formatLocalDateTimeInput, infrastructureDeviceTypeOptions, infrastructureFieldProfile, infrastructureGroupFilterOptions, infrastructureListFilterParams, infrastructureTypeFilterOptions, ipAddressPresentation, isApplicationHostInfrastructure, isServerInfrastructure, netcattyDirectorySummaries, normalizeAsset, normalizeWorkOrderFilters, quickConnectControlPresentation, resolveSearchTarget, terminalSerialProfile } = state
 import { requestJson, importFile, exportFile, nativeStatus } from './transport.js'
 
 test('普通设备清除物理终端 IP，云桌面保留双 IP 和网络类型', () => {
@@ -114,6 +114,43 @@ test('基础设施编辑保留尚未纳入字典的历史设备类型', () => {
   assert.deepEqual(infrastructureDeviceTypeOptions(configured, { category_id: 7, device_type: 'server' }), [
     { value: 7, label: '服务器' },
   ])
+})
+
+test('基础设施设备类型筛选合并配置分类与历史类型且不重复', () => {
+  assert.deepEqual(infrastructureTypeFilterOptions([
+    { id: 4, name: '服务器' },
+    { id: 7, name: '交换机' },
+  ], ['server', 'switch', 'router', 'security_device']), [
+    { value: 'category:4|type:server', label: '服务器' },
+    { value: 'category:7|type:switch', label: '交换机' },
+    { value: 'type:router', label: '路由器' },
+    { value: 'type:security_device', label: '安全设备' },
+  ])
+})
+
+test('基础设施列表和导出共用设备类型筛选参数并保留未分组条件', () => {
+  assert.deepEqual(infrastructureListFilterParams({ type_filter: 'category:7|type:switch', group_id: '-1', status: '在库' }), {
+    category_id: 7,
+    device_type: 'switch',
+    group_id: '-1',
+    status: '在库',
+  })
+  assert.deepEqual(infrastructureListFilterParams({ type_filter: 'type:router', group_id: '' }), {
+    device_type: 'router',
+    group_id: '',
+  })
+  assert.deepEqual(infrastructureGroupFilterOptions([{ id: 3, name: '网络设备' }]), [
+    { value: '', label: '全部资产分组' },
+    { value: -1, label: '未分组' },
+    { value: 3, label: '网络设备' },
+  ])
+})
+
+test('快速连接入口显示动作文字而不是无含义方块', () => {
+  assert.deepEqual(quickConnectControlPresentation({ name: '核心交换机', id: 9 }), {
+    label: '连接',
+    ariaLabel: '快速连接主机：核心交换机',
+  })
 })
 
 test('配置中心扩展字段转换为资产抽屉字段且保持嵌套存储', () => {

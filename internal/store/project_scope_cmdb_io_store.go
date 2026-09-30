@@ -68,6 +68,25 @@ func (s *Store) CmdbAssetFilterOptionsForProject(scope ProjectScope) (map[string
 		}
 		out[key] = vals
 	}
+	where, args := s.buildCmdbWhereForProject(scope, CmdbAssetQuery{ResourceScope: "infrastructure"})
+	rows, err := s.db.Query(`SELECT DISTINCT IFNULL(a.device_type,'') FROM cmdb_assets a`+where+`
+		AND IFNULL(a.device_type,'') <> '' ORDER BY a.device_type`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	deviceTypes := []string{}
+	for rows.Next() {
+		var value string
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		deviceTypes = append(deviceTypes, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out["device_type"] = deviceTypes
 	return out, nil
 }
 

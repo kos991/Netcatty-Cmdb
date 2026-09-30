@@ -1,17 +1,20 @@
 import React, { useState } from 'react'
 import { PlugZap } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { api } from './api'
 import { useAction } from './hooks'
 import { connectionFromLinks, persistNetcattyConnection } from './NetcattyConnection'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
 import { useNetcattyDirectory } from './NetcattyDirectory'
-import { ActionIcon, ModalForm } from './ui'
+import { quickConnectControlPresentation } from './state'
+import { ModalForm } from './ui'
 
 export default function InfrastructureQuickConnect({ asset }) {
   const { hosts, credentials, connectHost } = useNetcattyDirectory()
   const [connection, setConnection] = useState(null)
   const [referenceError, setReferenceError] = useState('')
   const action = useAction()
+  const control = quickConnectControlPresentation(asset)
 
   const connect = () => action.run(async () => {
     const result = await api.netcattyLinks({ asset_type: 'infrastructure', asset_id: asset.id })
@@ -40,7 +43,7 @@ export default function InfrastructureQuickConnect({ asset }) {
   })
 
   return <>
-    <ActionIcon label={`快速连接主机：${asset.name || asset.mgmt_ip || asset.id}`} disabled={action.busy} onClick={event => { event.stopPropagation(); void connect() }}><PlugZap size={15} className="text-primary" /></ActionIcon>
+    <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-1.5 text-[11px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={control.ariaLabel} title={control.ariaLabel} disabled={action.busy} onClick={event => { event.stopPropagation(); void connect() }}><PlugZap size={13} /><span>{control.label}</span></Button>
     {connection ? <ModalForm title="关联主机并连接" open onOpenChange={open => { if (!open && !action.busy) setConnection(null) }} busy={action.busy} onSubmit={saveAndConnect} submitLabel="保存关联并连接">
       <p className="text-xs text-muted-foreground">{asset.name} · {asset.mgmt_ip || asset.manage_ip || '未填写管理 IP'}</p>
       <NetcattyConnectionFields asset={asset} value={connection} onChange={value => { setConnection(value); setReferenceError('') }} hosts={hosts} credentials={credentials} error={referenceError} />

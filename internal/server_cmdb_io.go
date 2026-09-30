@@ -22,6 +22,7 @@ func cmdbQueryFromRequest(r *http.Request, page, pageSize int) store.CmdbAssetQu
 	return store.CmdbAssetQuery{
 		Keyword:       q.Get("keyword"),
 		CategoryID:    categoryID,
+		DeviceType:    q.Get("device_type"),
 		OrgID:         orgID,
 		GroupID:       groupID,
 		Status:        q.Get("status"),
@@ -56,10 +57,11 @@ func (s *Server) handleCmdbAssetFilters(w http.ResponseWriter, r *http.Request) 
 		cats = append(cats, map[string]interface{}{"id": c.ID, "name": c.Name})
 	}
 	writeJSON(w, 200, map[string]interface{}{
-		"statuses":   store.CmdbAssetStatuses,
-		"os_type":    opts["os_type"],
-		"os_version": opts["os_version"],
-		"categories": cats,
+		"statuses":    store.CmdbAssetStatuses,
+		"device_type": opts["device_type"],
+		"os_type":     opts["os_type"],
+		"os_version":  opts["os_version"],
+		"categories":  cats,
 	})
 }
 

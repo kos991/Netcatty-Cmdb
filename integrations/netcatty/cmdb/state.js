@@ -92,6 +92,70 @@ const INFRASTRUCTURE_TYPE_LABELS = {
   router: '路由器',
   security_device: '安全设备',
   storage: '存储设备',
+  cloud_desktop: '云桌面',
+}
+
+function canonicalInfrastructureType(value = '') {
+  const type = String(value).trim().toLowerCase()
+  if (!type) return ''
+  if (/^(server|physical_server|服务器|物理服务器|物理主机)$/.test(type)) return 'server'
+  if (/^(virtual_machine|vm|虚拟机|云主机|云资源|ecs)$/.test(type)) return 'virtual_machine'
+  if (/^(hyperconverged|hci|超融合|超融合集群|超融合节点)$/.test(type)) return 'hyperconverged'
+  if (/^(switch|交换机)$/.test(type)) return 'switch'
+  if (/^(router|路由器)$/.test(type)) return 'router'
+  if (/^(security_device|security|安全设备|防火墙|网闸|负载均衡)$/.test(type)) return 'security_device'
+  if (/^(storage|存储|存储设备)$/.test(type)) return 'storage'
+  if (/^(cloud_desktop|云桌面|云桌面平台|桌面池)$/.test(type)) return 'cloud_desktop'
+  return String(value).trim()
+}
+
+export function infrastructureTypeFilterOptions(categories = [], deviceTypes = []) {
+  const options = []
+  const coveredTypes = new Set()
+  categories.forEach((category) => {
+    const type = canonicalInfrastructureType(category.name)
+    if (!type) return
+    coveredTypes.add(type.toLocaleLowerCase())
+    options.push({ value: `category:${category.id}|type:${encodeURIComponent(type)}`, label: category.name })
+  })
+  deviceTypes.forEach((rawType) => {
+    const type = canonicalInfrastructureType(rawType)
+    const key = type.toLocaleLowerCase()
+    if (!type || coveredTypes.has(key)) return
+    coveredTypes.add(key)
+    options.push({ value: `type:${encodeURIComponent(type)}`, label: INFRASTRUCTURE_TYPE_LABELS[type] || rawType })
+  })
+  return options
+}
+
+export function infrastructureListFilterParams(filters = {}) {
+  const { type_filter: typeFilter = '', ...params } = filters
+  String(typeFilter).split('|').forEach((part) => {
+    if (part.startsWith('category:')) {
+      const categoryID = Number(part.slice('category:'.length))
+      if (categoryID > 0) params.category_id = categoryID
+    }
+    if (part.startsWith('type:')) {
+      const deviceType = decodeURIComponent(part.slice('type:'.length))
+      if (deviceType) params.device_type = deviceType
+    }
+  })
+  return params
+}
+
+export function infrastructureGroupFilterOptions(groups = []) {
+  return [
+    { value: '', label: '全部资产分组' },
+    { value: -1, label: '未分组' },
+    ...groups.map((group) => ({ value: group.id, label: group.name })),
+  ]
+}
+
+export function quickConnectControlPresentation(asset = {}) {
+  return {
+    label: '连接',
+    ariaLabel: `快速连接主机：${asset.name || asset.mgmt_ip || asset.manage_ip || asset.id}`,
+  }
 }
 
 export function infrastructureDeviceTypeOptions(deviceTypes = [], current = {}) {
