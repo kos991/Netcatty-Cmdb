@@ -6,6 +6,7 @@ import { api } from './api'
 import { choices, Fields, textFields } from './Fields'
 import { allPages } from './hooks'
 import NetcattyLinks from './NetcattyLinks'
+import { networkAddressRows } from './infrastructureEditorModel'
 import { deviceTypeLabel, sourceLabel } from './deviceWorkspaceModel'
 import { infrastructureFieldProfile } from './state'
 import { ActionIcon, DefinitionList, ModalForm } from './ui'
@@ -33,7 +34,16 @@ function LinkRows({ rows, onOpen, onDelete }) {
   return <div className="divide-y divide-border/50 border-y border-border/50">{rows.map((link) => <div key={link.id} className="grid grid-cols-[82px_minmax(0,1fr)_28px] items-center gap-2 py-2 text-xs"><div><p className="font-mono text-foreground">{link.local_port || '-'}</p><span className="text-[10px] text-muted-foreground">{link.direction === 'uplink' ? '上联' : '下联'}</span></div><button type="button" className="min-w-0 text-left" disabled={!link.peer_asset_id} onClick={() => onOpen(link)}><p className="truncate text-primary hover:underline">{link.peer_asset_name || '-'}</p><span className="block truncate font-mono text-[10px] text-muted-foreground">{link.peer_port || '-'}{link.vlan ? ` · VLAN ${link.vlan}` : ''}{link.vni ? ` · VNI ${link.vni}` : ''} · {link.status || '-'}</span></button><ActionIcon label="删除链路" danger onClick={() => onDelete(link)}><Trash2 size={14} /></ActionIcon></div>)}</div>
 }
 
-export default function DeviceRelations({ id, detail, kind, view = 'all', onReload, onOpenAsset, onOpenIP, requestedLocalPort = '', onLinkRequestHandled }) {
+function AddressRows({ rows, ipam, connections, onConnect }) {
+  if (!rows.length) return <p className="py-2 text-xs text-muted-foreground">暂未登记地址</p>
+  return <div className="divide-y divide-border/50 border-y border-border/50">{rows.map(row => {
+    const pool = ipam.find(item => item.ip === row.ip)
+    const connection = connections.find(item => item.host?.hostname === row.ip)
+    return <details key={row.ip} className="group py-2 text-xs"><summary className="flex min-w-0 cursor-pointer list-none items-center gap-2"><span className="min-w-0 flex-1 break-all font-mono text-foreground">{row.ip}</span><span className="shrink-0 text-[10px] text-muted-foreground">{row.purposes.join(' / ')}</span><span className="text-muted-foreground">⌄</span></summary><div className="mt-2 space-y-1 pl-2 text-[11px] text-muted-foreground"><p>接口：{row.interfaceName || '未指定'}{row.interfaceID ? ` #${row.interfaceID}` : ''}</p><p>网络分区：{row.networkZone || '-'} · 网段：{pool?.subnet || pool?.cidr || (row.mask ? `${row.ip}/${row.mask}` : '-')}</p><p>VLAN：{row.vlanID || '-'} · 网关：{row.gateway || '-'}</p><p className="break-all">关联连接：{connection ? `${connection.host.label || connection.link.host_name || 'Netcatty 主机'} · ${connection.host.protocol}://${connection.host.hostname}` : '未关联此地址'}</p><Button type="button" variant="outline" size="sm" className="mt-1 h-7 text-[11px]" onClick={() => onConnect?.(row.ip)}>连接此地址</Button></div></details>
+  })}</div>
+}
+
+export default function DeviceRelations({ id, detail, kind, view = 'all', onReload, onOpenAsset, onOpenIP, requestedLocalPort = '', onLinkRequestHandled, connections = [], onConnectAddress, connectionWarning, onGoConnections }) {
   const [linkEditor, setLinkEditor] = useState(false)
   const [linkValues, setLinkValues] = useState({})
   const [allAssets, setAllAssets] = useState([])
@@ -88,6 +98,7 @@ export default function DeviceRelations({ id, detail, kind, view = 'all', onRelo
   ]
   const ipamRows = (detail.ipam || []).map((item) => ({ ...item, label: item.subnet || 'IP 地址', value: item.ip, metaLabel: 'VLAN / VNI', meta: [item.vlan ? `VLAN ${item.vlan}` : '', item.vni ? `VNI ${item.vni}` : ''].filter(Boolean).join(' · ') || item.status, actionLabel: `${item.cidr || '-'}${item.purpose ? ` · ${item.purpose}` : ''}` }))
   const interfaceRows = (detail.interfaces || []).map((item) => ({ id: item.id, label: item.name || item.if_name || '网络接口', value: item.ip, metaLabel: item.network_zone || item.net_zone || '网络区域', meta: [item.mask, item.gateway ? `网关 ${item.gateway}` : '', item.vlan_id ? `VLAN ${item.vlan_id}` : ''].filter(Boolean).join(' · ') || '-', actionLabel: item.mac ? `MAC ${item.mac}` : '' }))
+  const addressRows = networkAddressRows({ ...asset, interfaces: detail.interfaces || [] })
   const historyRows = (detail.history || []).map((item, index) => ({ id: item.id || index + 1, label: item.type || '变更', value: item.description, metaLabel: item.occurred_at || '发生时间', meta: item.operator || '-', actionLabel: item.remark || '' }))
 
   const showNetwork = view === 'all' || view === 'network'
@@ -96,7 +107,7 @@ export default function DeviceRelations({ id, detail, kind, view = 'all', onRelo
 
   return <div className="space-y-5">
     {showNetwork ? <WorkspaceSection title="IPAM、接口与上下联链路" dataSection="device-network-relations" action={<Button type="button" size="sm" variant="outline" className="h-7 gap-1 text-[11px]" onClick={() => void openLinkEditor()}><Plus size={13} />添加链路</Button>}>
-      <div className="space-y-4"><div><h3 className="mb-2 text-[11px] font-medium text-muted-foreground">IPAM 地址</h3><CompactRows rows={ipamRows} empty="未在 IPAM 中找到关联地址" onOpen={(item) => onOpenIP?.(item)} /></div><div><h3 className="mb-2 text-[11px] font-medium text-muted-foreground">网络接口</h3><CompactRows rows={interfaceRows} empty="暂未登记网络接口" /></div><div><h3 className="mb-2 text-[11px] font-medium text-muted-foreground">上下联链路</h3><LinkRows rows={detail.links || []} onOpen={(item) => item.peer_asset_id && onOpenAsset?.(item.peer_asset_id)} onDelete={setDeletingLink} /></div></div>
+      <div className="space-y-4">{connectionWarning ? <div className="rounded border border-destructive/50 bg-destructive/10 p-2 text-xs text-destructive"><p>{connectionWarning}</p><Button type="button" variant="outline" size="sm" className="mt-2 h-7" onClick={onGoConnections}>前往凭证中心调整</Button></div> : null}<div><h3 className="mb-2 text-[11px] font-medium text-muted-foreground">已登记地址</h3><AddressRows rows={addressRows} ipam={detail.ipam || []} connections={connections} onConnect={onConnectAddress} /></div><div><h3 className="mb-2 text-[11px] font-medium text-muted-foreground">IPAM 地址</h3><CompactRows rows={ipamRows} empty="未在 IPAM 中找到关联地址" onOpen={(item) => onOpenIP?.(item)} /></div><div><h3 className="mb-2 text-[11px] font-medium text-muted-foreground">网络接口</h3><CompactRows rows={interfaceRows} empty="暂未登记网络接口" /></div><div><h3 className="mb-2 text-[11px] font-medium text-muted-foreground">上下联链路</h3><LinkRows rows={detail.links || []} onOpen={(item) => item.peer_asset_id && onOpenAsset?.(item.peer_asset_id)} onDelete={setDeletingLink} /></div></div>
     </WorkspaceSection> : null}
     {showRelations ? <div data-section="device-netcatty-links"><NetcattyLinks asset={asset} assetType="infrastructure" assetId={id} onChanged={onReload} /></div> : null}
     {showRecords ? <WorkspaceSection title="变更履历" dataSection="device-asset-history"><CompactRows rows={historyRows} empty="暂无变更履历" /></WorkspaceSection> : null}

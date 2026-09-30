@@ -17,30 +17,10 @@ export function prepareInfrastructureEditorValues(record = {}, models = []) {
     values.model_id = resolveInfrastructureModelID(models, values.vendor, values.model)
   }
 
-  const managementIP = String(values.mgmt_ip || values.manage_ip || '').trim()
-  if (managementIP || !values.interfaces.some((item) => item.is_primary)) {
-    if (managementIP) values.interfaces = values.interfaces.map(item => ({ ...item, is_primary: 0 }))
-    const matchingIndex = values.interfaces.findIndex((item) => String(item.ip || '').trim() === managementIP && managementIP)
-    if (matchingIndex >= 0) {
-      values.interfaces[matchingIndex] = { ...values.interfaces[matchingIndex], is_primary: 1 }
-    } else if (managementIP) {
-      values.interfaces.unshift({
-        name: '管理口',
-        if_name: '管理口',
-        ip: managementIP,
-        mask: '',
-        gateway: '',
-        mac: '',
-        network_zone: '未分类',
-        net_zone: '未分类',
-        is_primary: 1,
-        vlan_id: 0,
-        remark: '',
-      })
-    } else if (values.interfaces.length) {
-      values.interfaces[0] = { ...values.interfaces[0], is_primary: 1 }
-    }
-  }
+  const managementIP = String(values.mgmt_ip || values.manage_ip || managementIPFromInterfaces(values.interfaces)).trim()
+  values.mgmt_ip = managementIP
+  values.manage_ip = managementIP
+  if (managementIP) values.interfaces = values.interfaces.map(item => ({ ...item, is_primary: String(item.ip || '').trim() === managementIP ? 1 : 0 }))
 
   return values
 }
@@ -50,8 +30,53 @@ export function managementIPFromInterfaces(interfaces = []) {
 }
 
 export function infrastructureSavePayload(values) {
-  const managementIP = managementIPFromInterfaces(values.interfaces)
-  return { ...values, mgmt_ip: managementIP, manage_ip: managementIP }
+  const managementIP = String(values.mgmt_ip || '').trim()
+  const interfaces = (values.interfaces || []).map(item => {
+    const seen = new Set([String(item.ip || '').trim()])
+    const additional = parseAdditionalIPs(item.additional_ips_json).filter(address => {
+      const ip = String(address.ip || '').trim()
+      if (!ip || seen.has(ip)) return false
+      seen.add(ip)
+      return true
+    }).map(address => ({ ip: String(address.ip).trim(), purpose: address.purpose || 'business' }))
+    return { ...item, ip: String(item.ip || '').trim(), purpose: item.purpose || 'business', additional_ips_json: JSON.stringify(additional), is_primary: managementIP && String(item.ip || '').trim() === managementIP ? 1 : 0 }
+  })
+  return { ...values, interfaces, mgmt_ip: managementIP, manage_ip: managementIP }
+}
+
+export function parseAdditionalIPs(value) {
+  if (!value) return []
+  const parsed = JSON.parse(value)
+  if (!Array.isArray(parsed)) throw new Error('接口附加地址格式无效')
+  return parsed
+}
+
+export function networkAddressRows(asset = {}) {
+  const rows = new Map()
+  const add = (value, purpose, iface) => {
+    const ip = String(value || '').trim()
+    if (!ip) return
+    const labels = { management: '管理', business: '业务', out_of_band: '带外' }
+    const label = labels[purpose] || '业务'
+    const row = rows.get(ip) || { ip, purposes: [], interfaceName: '', interfaceID: 0, networkZone: '', mask: '', gateway: '', vlanID: 0 }
+    if (!row.purposes.includes(label)) row.purposes.push(label)
+    if (iface && !row.interfaceName) {
+      row.interfaceName = iface.name || iface.if_name || ''
+      row.interfaceID = iface.id || 0
+      row.networkZone = iface.network_zone || iface.net_zone || ''
+      row.mask = iface.mask || ''
+      row.gateway = iface.gateway || ''
+      row.vlanID = iface.vlan_id || 0
+    }
+    rows.set(ip, row)
+  }
+  add(asset.mgmt_ip || asset.manage_ip, 'management')
+  add(asset.biz_ip, 'business')
+  for (const iface of asset.interfaces || []) {
+    add(iface.ip, !asset.mgmt_ip && !asset.manage_ip && iface.is_primary ? 'management' : (iface.purpose || 'business'), iface)
+    for (const address of parseAdditionalIPs(iface.additional_ips_json)) add(address.ip, address.purpose, iface)
+  }
+  return [...rows.values()]
 }
 
 export async function saveInfrastructureDraftPhotos(id, draft = {}, saveImage) {

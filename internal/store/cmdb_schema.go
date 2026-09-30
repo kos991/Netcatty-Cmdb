@@ -151,6 +151,8 @@ CREATE TABLE IF NOT EXISTS cmdb_asset_interfaces (
     name TEXT DEFAULT '',
     if_name TEXT,
     ip TEXT,
+    purpose TEXT NOT NULL DEFAULT 'business',
+    additional_ips_json TEXT NOT NULL DEFAULT '[]',
     mask TEXT,
     gateway TEXT,
     mac TEXT,

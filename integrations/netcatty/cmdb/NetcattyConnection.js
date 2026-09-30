@@ -1,5 +1,17 @@
 export const EMPTY_NETCATTY_CONNECTION = Object.freeze({ host_id: '', credential_id: '' })
 
+export function connectionTargetMismatch(address, host) {
+  const selected = String(address || '').trim()
+  const actual = String(host?.hostname || '').trim()
+  return selected && actual && selected !== actual ? { selected, actual } : null
+}
+
+export function connectionForAddress(address, links = [], hosts = []) {
+  const selected = String(address || '').trim()
+  if (!selected) return null
+  return links.find(link => hosts.some(host => host.id === link.host_id && String(host.hostname || '').trim() === selected)) || null
+}
+
 export function netcattyLinkStatus(link, host, credentials = []) {
   if (!link?.host_id && !link?.credential_id) return 'unresolved'
   if (link.host_id && !host) return 'unresolved'

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api } from './api'
-import { assertNetcattyLinkReady } from './NetcattyConnection'
+import { assertNetcattyLinkReady, connectionForAddress, connectionTargetMismatch } from './NetcattyConnection'
 import DeviceOwnershipBar from './DeviceOwnershipBar'
 import DeviceRelations from './DeviceRelations'
 import DeviceImages from './DeviceImages'
@@ -62,13 +62,14 @@ function DeviceWorkspaceHeader({ asset, kind, expanded, onExpandedChange, onClos
   </header>
 }
 
-function DeviceActionBar({ asset, kind, primaryHostID, readBusy, lastRead, onConnect, onRead, onAssociate }) {
+function DeviceActionBar({ asset, kind, primaryHost, readBusy, lastRead, onConnect, onRead, onAssociate }) {
   const managementIP = asset.mgmt_ip || asset.manage_ip
+  const primaryHostID = primaryHost?.id
   return <section className="flex h-[44px] shrink-0 items-center gap-2 border-b border-border/70 px-4" data-section="device-action-bar">
     <span className="shrink-0 text-[11px] text-muted-foreground">管理 IP</span>
     <Button type="button" size="sm" variant="ghost" className="h-7 min-w-0 gap-1.5 px-1 font-mono text-[11px] text-primary" title={primaryHostID ? '使用 Netcatty 连接' : '关联或新建 Netcatty 主机'} onClick={primaryHostID ? onConnect : onAssociate}><PlugZap size={13} className="shrink-0" /><span className="truncate">{managementIP || '关联连接'}</span></Button>
     {kind === 'switch' ? <Button type="button" size="sm" className="h-7 text-[11px]" disabled={readBusy || !primaryHostID} title={!primaryHostID ? '请先关联可用的 Netcatty 主机' : '只读采集设备配置'} onClick={onRead}>{readBusy ? '读取中' : '读取配置'}</Button> : null}
-    <span className="ml-auto truncate text-[10px] text-muted-foreground">{kind === 'switch' ? <>最近读取 <span className="ml-1 font-mono text-foreground">{formatTime(lastRead)}</span></> : primaryHostID ? '已关联 Netcatty 主机' : '尚未关联 Netcatty 主机'}</span>
+    <span className="ml-auto min-w-0 truncate text-[10px] text-muted-foreground" title={primaryHost?.hostname || ''}>{primaryHost ? `实际目标 ${primaryHost.hostname}${kind === 'switch' ? ` · 最近读取 ${formatTime(lastRead)}` : ''}` : kind === 'switch' ? <>最近读取 <span className="ml-1 font-mono text-foreground">{formatTime(lastRead)}</span></> : '尚未关联 Netcatty 主机'}</span>
   </section>
 }
 
@@ -124,12 +125,13 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
   const [readError, setReadError] = useState('')
   const [requestedLocalPort, setRequestedLocalPort] = useState('')
   const [activeTab, setActiveTab] = useState('operations')
+  const [connectionWarning, setConnectionWarning] = useState('')
   const clearLinkRequest = useCallback(() => setRequestedLocalPort(''), [])
   const asset = query.data?.asset || {}
   const projectName = projects.find((project) => Number(project.id) === Number(asset.project_id))?.name || ''
   const model = buildDeviceWorkspaceModel(asset, { projectName })
   const navigation = buildDeviceWorkspaceTabs(model.kind, supportsInfrastructurePhotos(asset))
-  useEffect(() => { setSnapshot(query.data?.switch_snapshot || null); setReadError(''); setRequestedLocalPort('') }, [id, query.data])
+  useEffect(() => { setSnapshot(query.data?.switch_snapshot || null); setReadError(''); setRequestedLocalPort(''); setConnectionWarning('') }, [id, query.data])
   useEffect(() => { setActiveTab(navigation.defaultTab) }, [id, model.kind, navigation.defaultTab])
   if (query.error) return <div className="flex min-h-0 flex-1 flex-col"><div className="flex justify-end border-b border-border/70 p-2"><ActionIcon label="关闭设备工作区" onClick={onClose}><X size={16} /></ActionIcon></div><ErrorBanner message={query.error} onRetry={query.reload} /></div>
   if (!query.data) return <div className="grid min-h-0 flex-1 place-items-center text-xs text-muted-foreground">正在加载设备档案…</div>
@@ -137,7 +139,25 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
   const detail = query.data
   const primaryLink = detail.netcatty_links?.find?.((item) => item.is_primary && item.host_id) || detail.netcatty_links?.find?.((item) => item.host_id)
   const primaryHost = hosts.find(host => host.id === primaryLink?.host_id)
-  const connect = () => { try { assertNetcattyLinkReady(primaryLink, primaryHost, credentials); connectHost(primaryHost.id, primaryLink.credential_id) } catch (error) { toast.error(error.message); setActiveTab('relations') } }
+  const connections = (detail.netcatty_links || []).map(link => ({ link, host: hosts.find(host => host.id === link.host_id) })).filter(item => item.host)
+  const connectAddress = (address) => {
+    const link = connectionForAddress(address, detail.netcatty_links || [], hosts)
+    const host = hosts.find(item => item.id === link?.host_id)
+    if (!link) {
+      const difference = connectionTargetMismatch(address, primaryHost)
+      setConnectionWarning(difference ? `所点地址 ${difference.selected} 与默认主机实际目标 ${difference.actual} 不同，未发起连接。` : `地址 ${address} 没有关联目标相同的 Netcatty 主机，未发起连接。`)
+      setActiveTab('network')
+      return
+    }
+    try { assertNetcattyLinkReady(link, host, credentials); setConnectionWarning(''); connectHost(host.id, link.credential_id) } catch (error) { setConnectionWarning(error.message); setActiveTab('network') }
+  }
+  const connect = () => {
+    const managementIP = asset.mgmt_ip || asset.manage_ip
+    if (!managementIP) { setConnectionWarning('尚未填写管理 IP，请在网络配置中填写后再连接。'); setActiveTab('network'); return }
+    const difference = connectionTargetMismatch(managementIP, primaryHost)
+    if (difference) { setConnectionWarning(`所点管理地址 ${difference.selected} 与默认主机实际目标 ${difference.actual} 不同，未发起连接。`); setActiveTab('network'); return }
+    try { assertNetcattyLinkReady(primaryLink, primaryHost, credentials); setConnectionWarning(''); connectHost(primaryHost.id, primaryLink.credential_id) } catch (error) { toast.error(error.message); setActiveTab('relations') }
+  }
   const readSwitchConfig = async () => {
     if (!primaryLink?.host_id) { setReadError('请先在凭证中心关联主机'); setActiveTab('relations'); return }
     setReadBusy(true); setReadError('')
@@ -156,7 +176,7 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
 
   return <div className="flex min-h-0 flex-1 flex-col" data-section="device-workspace" data-device-kind={model.kind}>
     <DeviceWorkspaceHeader asset={asset} kind={model.kind} expanded={expanded} onExpandedChange={onExpandedChange} onClose={onClose} onEdit={onEdit} onClone={onClone} onArchive={onArchive} />
-    <DeviceActionBar asset={asset} kind={model.kind} primaryHostID={primaryHost?.id} readBusy={readBusy} lastRead={snapshot?.read_at || snapshot?.snapshot?.readAt} onRead={readSwitchConfig} onConnect={connect} onAssociate={() => setActiveTab('relations')} />
+    <DeviceActionBar asset={asset} kind={model.kind} primaryHost={primaryHost} readBusy={readBusy} lastRead={snapshot?.read_at || snapshot?.snapshot?.readAt} onRead={readSwitchConfig} onConnect={connect} onAssociate={() => setActiveTab('relations')} />
     <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
       <TabsList className="h-[38px] w-full shrink-0 justify-start overflow-x-auto rounded-none border-b border-border/70 bg-transparent p-0 px-3" data-section="device-workspace-tabs">
         {navigation.tabs.map((tab) => <TabsTrigger key={tab.key} value={tab.key} className="h-[38px] rounded-none border-b-2 border-transparent px-3 text-[11px] shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none">{tab.label}</TabsTrigger>)}
@@ -168,7 +188,7 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
         {activeTab === 'operations' && model.kind === 'router' ? <RouterOperations detail={detail} /> : null}
         {activeTab === 'operations' && model.kind === 'server' ? <ServerOperations detail={detail} onOpenApplication={onOpenApplication} /> : null}
         {activeTab === 'operations' && model.kind === 'generic' ? <DeviceOverview detail={detail} kind={model.kind} snapshot={snapshot} /> : null}
-        {activeTab === 'network' ? <DeviceRelations view="network" id={id} detail={detail} kind={model.kind} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} requestedLocalPort={requestedLocalPort} onLinkRequestHandled={clearLinkRequest} /> : null}
+        {activeTab === 'network' ? <DeviceRelations view="network" id={id} detail={detail} kind={model.kind} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} requestedLocalPort={requestedLocalPort} onLinkRequestHandled={clearLinkRequest} connections={connections} onConnectAddress={connectAddress} connectionWarning={connectionWarning} onGoConnections={() => setActiveTab('relations')} /> : null}
         {activeTab === 'relations' ? <DeviceRelations view="relations" id={id} detail={detail} kind={model.kind} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} /> : null}
         {activeTab === 'records' ? <DeviceRelations view="records" id={id} detail={detail} kind={model.kind} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} /> : null}
         {activeTab === 'photos' && supportsInfrastructurePhotos(asset) ? <section data-section="device-photos"><DeviceImages kind="infrastructure" id={asset.id} /></section> : null}

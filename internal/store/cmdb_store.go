@@ -124,20 +124,22 @@ type CmdbAsset struct {
 
 // CmdbAssetInterface 对应 cmdb_asset_interfaces 表。
 type CmdbAssetInterface struct {
-	ID          int64  `json:"id"`
-	AssetID     int64  `json:"asset_id"`
-	AssetName   string `json:"asset_name"`
-	Name        string `json:"name"`
-	IfName      string `json:"if_name"`
-	IP          string `json:"ip"`
-	Mask        string `json:"mask"`
-	Gateway     string `json:"gateway"`
-	MAC         string `json:"mac"`
-	NetworkZone string `json:"network_zone"`
-	NetZone     string `json:"net_zone"`
-	IsPrimary   int64  `json:"is_primary"`
-	VlanID      int64  `json:"vlan_id"`
-	Remark      string `json:"remark"`
+	ID                int64  `json:"id"`
+	AssetID           int64  `json:"asset_id"`
+	AssetName         string `json:"asset_name"`
+	Name              string `json:"name"`
+	IfName            string `json:"if_name"`
+	IP                string `json:"ip"`
+	Purpose           string `json:"purpose"`
+	AdditionalIPsJSON string `json:"additional_ips_json"`
+	Mask              string `json:"mask"`
+	Gateway           string `json:"gateway"`
+	MAC               string `json:"mac"`
+	NetworkZone       string `json:"network_zone"`
+	NetZone           string `json:"net_zone"`
+	IsPrimary         int64  `json:"is_primary"`
+	VlanID            int64  `json:"vlan_id"`
+	Remark            string `json:"remark"`
 }
 
 // CmdbAssetQuery 是资源列表的查询条件。

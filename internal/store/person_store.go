@@ -677,7 +677,7 @@ func (s *Store) getAssetInterfacesForProject(scope ProjectScope, assetID int64) 
 	}
 	rows, err := s.db.Query(`
 		SELECT id, asset_id, IFNULL(asset_name,''), IFNULL(name,''), IFNULL(if_name,''),
-		       IFNULL(ip,''), IFNULL(mask,''), IFNULL(gateway,''), IFNULL(mac,''),
+		       IFNULL(ip,''), IFNULL(purpose,'business'), IFNULL(additional_ips_json,'[]'), IFNULL(mask,''), IFNULL(gateway,''), IFNULL(mac,''),
 		       IFNULL(network_zone,''), IFNULL(net_zone,''), is_primary, vlan_id, IFNULL(remark,'')
 		FROM cmdb_asset_interfaces i
 		WHERE i.asset_id = ? AND i.project_id = ?
@@ -693,7 +693,7 @@ func (s *Store) getAssetInterfacesForProject(scope ProjectScope, assetID int64) 
 		var it CmdbAssetInterface
 		if err := rows.Scan(
 			&it.ID, &it.AssetID, &it.AssetName, &it.Name, &it.IfName,
-			&it.IP, &it.Mask, &it.Gateway, &it.MAC,
+			&it.IP, &it.Purpose, &it.AdditionalIPsJSON, &it.Mask, &it.Gateway, &it.MAC,
 			&it.NetworkZone, &it.NetZone, &it.IsPrimary, &it.VlanID, &it.Remark,
 		); err != nil {
 			return nil, err

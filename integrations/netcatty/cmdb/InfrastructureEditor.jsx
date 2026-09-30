@@ -7,7 +7,7 @@ import { AsidePanel, AsidePanelFooter } from '@/components/ui/aside-panel'
 import { Card } from '@/components/ui/card'
 import { toast } from '@/components/ui/toast'
 import { choices, Fields, textFields, validateFields } from './Fields'
-import { managementIPFromInterfaces, prepareInfrastructureEditorValues, resolveInfrastructureModelID } from './infrastructureEditorModel'
+import { parseAdditionalIPs, prepareInfrastructureEditorValues, resolveInfrastructureModelID } from './infrastructureEditorModel'
 import { customFieldDefinitions, infrastructureDeviceTypeOptions, infrastructureFieldProfile, supportsInfrastructurePhotos } from './state'
 import { Field, SelectControl } from './ui'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
@@ -24,19 +24,19 @@ function Section({ sectionKey, title, sectionRefs, children }) {
 
 function NetworkInterfaces({ interfaces, zones, onChange }) {
   const update = (index, patch) => onChange(interfaces.map((item, current) => current === index ? { ...item, ...patch } : item))
-  const add = () => onChange([...interfaces, { name: `eth${interfaces.length}`, ip: '', mask: '', gateway: '', mac: '', network_zone: '未分类', is_primary: interfaces.length ? 0 : 1, remark: '' }])
-  const remove = (index) => {
-    const next = interfaces.filter((_, current) => current !== index)
-    if (interfaces[index]?.is_primary && next.length) next[0] = { ...next[0], is_primary: 1 }
-    onChange(next)
-  }
-  const setPrimary = (index) => onChange(interfaces.map((item, current) => ({ ...item, is_primary: current === index ? 1 : 0 })))
+  const add = () => onChange([...interfaces, { name: `eth${interfaces.length}`, ip: '', purpose: 'business', additional_ips_json: '[]', mask: '', gateway: '', mac: '', network_zone: '未分类', is_primary: 0, remark: '' }])
+  const remove = (index) => onChange(interfaces.filter((_, current) => current !== index))
+  const updateAdditional = (index, addresses) => update(index, { additional_ips_json: JSON.stringify(addresses) })
+  const purposeOptions = [{ value: 'business', label: '业务' }, { value: 'out_of_band', label: '带外' }]
   return <div className="space-y-3">
-    {interfaces.map((item, index) => <div key={item.id || `new-${index}`} className="border-b border-border/60 pb-4 last:border-b-0">
-      <div className="mb-3 flex items-center justify-between gap-3"><button type="button" onClick={() => setPrimary(index)} className={`text-xs font-medium ${item.is_primary ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}>{item.is_primary ? '主接口' : '设为主接口'}</button><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="删除网卡" onClick={() => remove(index)}><Trash2 size={14} /></Button></div>
+    {interfaces.map((item, index) => {
+      const additional = parseAdditionalIPs(item.additional_ips_json)
+      return <div key={item.id || `new-${index}`} className="border-b border-border/60 pb-4 last:border-b-0">
+      <div className="mb-3 flex items-center justify-between gap-3"><span className="text-xs font-medium text-muted-foreground">接口 {index + 1}</span><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="删除接口" onClick={() => remove(index)}><Trash2 size={14} /></Button></div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Field label="接口名称"><Input className="h-9" value={item.name || item.if_name || ''} onChange={(event) => update(index, { name: event.target.value, if_name: event.target.value })} /></Field>
-        <Field label={item.is_primary ? '管理 IP / 接口 IP' : 'IP 地址'} required><Input className="h-9 font-mono" value={item.ip || ''} onChange={(event) => update(index, { ip: event.target.value })} /></Field>
+        <Field label="接口 IP（可留空）"><Input className="h-9 font-mono" value={item.ip || ''} onChange={(event) => update(index, { ip: event.target.value })} /></Field>
+        <Field label="接口 IP 用途"><SelectControl className="w-full" value={item.purpose || 'business'} onChange={(purpose) => update(index, { purpose })} options={purposeOptions} /></Field>
         <Field label="网络分区"><SelectControl className="w-full" value={item.network_zone || item.net_zone || ''} onChange={(value) => update(index, { network_zone: value, net_zone: value })} options={choices(zones)} /></Field>
         <Field label="掩码 / 前缀"><Input className="h-9 font-mono" value={item.mask || ''} onChange={(event) => update(index, { mask: event.target.value })} /></Field>
         <Field label="网关"><Input className="h-9 font-mono" value={item.gateway || ''} onChange={(event) => update(index, { gateway: event.target.value })} /></Field>
@@ -44,8 +44,9 @@ function NetworkInterfaces({ interfaces, zones, onChange }) {
         <Field label="VLAN"><Input className="h-9" type="number" min="0" value={item.vlan_id || 0} onChange={(event) => update(index, { vlan_id: Number(event.target.value) })} /></Field>
         <Field label="备注" className="md:col-span-2"><Input className="h-9" value={item.remark || ''} onChange={(event) => update(index, { remark: event.target.value })} /></Field>
       </div>
-    </div>)}
-    <Button type="button" variant="outline" size="sm" onClick={add}><Plus size={14} className="mr-1" />添加网卡</Button>
+      <div className="mt-3 space-y-2"><span className="text-[11px] text-muted-foreground">同一接口的附加地址</span>{additional.map((address, addressIndex) => <div key={addressIndex} className="flex min-w-0 gap-2"><Input className="h-8 min-w-0 flex-1 font-mono" aria-label={`接口 ${index + 1} 附加 IP ${addressIndex + 1}`} value={address.ip || ''} onChange={(event) => updateAdditional(index, additional.map((current, currentIndex) => currentIndex === addressIndex ? { ...current, ip: event.target.value } : current))} /><SelectControl className="w-24 shrink-0" value={address.purpose || 'business'} onChange={(purpose) => updateAdditional(index, additional.map((current, currentIndex) => currentIndex === addressIndex ? { ...current, purpose } : current))} options={purposeOptions} /><Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" title="删除附加地址" onClick={() => updateAdditional(index, additional.filter((_, currentIndex) => currentIndex !== addressIndex))}><Trash2 size={14} /></Button></div>)}<Button type="button" variant="outline" size="sm" onClick={() => updateAdditional(index, [...additional, { ip: '', purpose: 'business' }])}><Plus size={14} className="mr-1" />添加此接口地址</Button></div>
+    </div>})}
+    <Button type="button" variant="outline" size="sm" onClick={add}><Plus size={14} className="mr-1" />添加接口</Button>
   </div>
 }
 
@@ -131,9 +132,6 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
     try {
       if (photoBusy) throw new Error('请等待照片处理完成')
       validateFields(basicFields, values)
-      for (const [index, item] of (values.interfaces || []).entries()) {
-        if (!String(item.ip || '').trim()) throw new Error(`请填写第 ${index + 1} 个网卡的 IP 地址`)
-      }
       onSubmit(values)
     } catch (error) {
       toast.error(error.message)
@@ -155,7 +153,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
           <Section sectionKey="connection" title="凭证中心" sectionRefs={sectionRefs}><NetcattyConnectionFields asset={values} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} createHost={netcatty.createHost} createCredential={netcatty.createCredential} /></Section>
           <Section sectionKey="ownership" title="归属关系" sectionRefs={sectionRefs}><Fields fields={ownershipFields} value={values} onChange={setValues} /></Section>
           {profile.kind !== 'virtual' ? <Section sectionKey="location" title="安装位置" sectionRefs={sectionRefs}><Fields fields={locationFields} value={values} onChange={setValues} /></Section> : null}
-          <Section sectionKey="network" title="网络配置" sectionRefs={sectionRefs}>{profile.deviceMac ? <div className="mb-4 max-w-md"><Field label="设备级 MAC 地址"><Input className="h-9 font-mono" value={values.mac || ''} onChange={(event) => setValues({ ...values, mac: event.target.value })} /></Field></div> : null}<NetworkInterfaces interfaces={values.interfaces || []} zones={meta.net_zones || []} onChange={(interfaces) => setValues({ ...values, interfaces, mgmt_ip: managementIPFromInterfaces(interfaces) })} />{!(values.interfaces || []).length ? <p className="text-xs text-muted-foreground">添加第一个网络接口后，可直接在该接口填写管理 IP。</p> : null}</Section>
+          <Section sectionKey="network" title="网络配置" sectionRefs={sectionRefs}><div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Field label="管理 IP"><Input className="h-9 font-mono" value={values.mgmt_ip || ''} onChange={(event) => setValues({ ...values, mgmt_ip: event.target.value })} /></Field><Field label="业务 IP（兼容字段）"><Input className="h-9 font-mono" value={values.biz_ip || ''} onChange={(event) => setValues({ ...values, biz_ip: event.target.value })} /></Field></div><p className="text-[11px] text-muted-foreground">管理 IP 用于默认连接。带外和多个业务地址登记在下方接口中；相同 IP 可同时用于管理和业务。</p>{profile.deviceMac ? <div className="max-w-md"><Field label="设备级 MAC 地址"><Input className="h-9 font-mono" value={values.mac || ''} onChange={(event) => setValues({ ...values, mac: event.target.value })} /></Field></div> : null}<NetworkInterfaces interfaces={values.interfaces || []} zones={meta.net_zones || []} onChange={(interfaces) => setValues({ ...values, interfaces })} /></Section>
           {profile.systemSection ? <Section sectionKey="system" title={profile.systemSection} sectionRefs={sectionRefs}><Fields fields={systemFields} value={values} onChange={setValues} /></Section> : null}
           {photosSupported ? <Section sectionKey="photos" title="设备照片" sectionRefs={sectionRefs}><DeviceImages kind="infrastructure" id={record.id} draftMode={!record.id || Object.keys(photoDraft).length > 0} draftImages={photoDraft} onDraftChange={onPhotoDraftChange} onBusyChange={setPhotoBusy} /></Section> : null}
         </form>

@@ -1,10 +1,77 @@
 package store
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestCmdbInterfaceAddressPurposesSurviveCreateAndEdit(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "interface-addresses.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var iface CmdbAssetInterface
+	if err := json.Unmarshal([]byte(`{"name":"eth0","ip":"192.0.2.10","purpose":"business","additional_ips_json":"[{\"ip\":\"192.0.2.11\",\"purpose\":\"out_of_band\"}]"}`), &iface); err != nil {
+		t.Fatal(err)
+	}
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "安全设备", MgmtIP: "192.0.2.1", Interfaces: []CmdbAssetInterface{iface}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset, ifaces, err := s.GetCmdbAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ifaces) != 1 {
+		t.Fatalf("接口数错误: %+v", ifaces)
+	}
+	encoded, _ := json.Marshal(ifaces[0])
+	var actual map[string]interface{}
+	if err := json.Unmarshal(encoded, &actual); err != nil {
+		t.Fatal(err)
+	}
+	if actual["purpose"] != "business" || actual["additional_ips_json"] != `[{"ip":"192.0.2.11","purpose":"out_of_band"}]` {
+		t.Fatalf("接口地址未恢复: %s", encoded)
+	}
+	asset.Interfaces = ifaces
+	if err := s.UpdateCmdbAssetManual(asset); err != nil {
+		t.Fatal(err)
+	}
+	_, again, err := s.GetCmdbAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reencoded, _ := json.Marshal(again[0])
+	if string(reencoded) != string(encoded) {
+		t.Fatalf("二次保存覆盖地址: %s -> %s", encoded, reencoded)
+	}
+}
+
+func TestCmdbInterfaceAdditionalAddressesAreValidatedAndDeduplicated(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "interface-address-validation.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_, err = s.CreateCmdbAssetManual(&CmdbAsset{Name: "无效地址", Interfaces: []CmdbAssetInterface{{Name: "eth0", AdditionalIPsJSON: `{"ip":"192.0.2.2"}`}}})
+	if err == nil {
+		t.Fatal("非数组附加地址应明确拒绝")
+	}
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "多地址服务器", Interfaces: []CmdbAssetInterface{{Name: "eth0", IP: "192.0.2.10", AdditionalIPsJSON: `[{"ip":"192.0.2.10","purpose":"business"},{"ip":"192.0.2.11","purpose":"out_of_band"},{"ip":"192.0.2.11","purpose":"out_of_band"}]`}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, ifaces, err := s.GetCmdbAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.11","purpose":"out_of_band"}]` {
+		t.Fatalf("附加地址未按 IP 去重: %s", got)
+	}
+}
 
 func TestCmdbFullSavePreservesInterfacesAndLinks(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "interface-update.db"))

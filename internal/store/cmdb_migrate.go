@@ -66,10 +66,12 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 
 	// 2. 扩充 cmdb_asset_interfaces 表列
 	ifaceColsToAdd := map[string]string{
-		"asset_name":   "TEXT DEFAULT ''",
-		"name":         "TEXT DEFAULT ''",
-		"network_zone": "TEXT DEFAULT ''",
-		"vlan_id":      "INTEGER DEFAULT 0",
+		"purpose":             "TEXT NOT NULL DEFAULT 'business'",
+		"additional_ips_json": "TEXT NOT NULL DEFAULT '[]'",
+		"asset_name":          "TEXT DEFAULT ''",
+		"name":                "TEXT DEFAULT ''",
+		"network_zone":        "TEXT DEFAULT ''",
+		"vlan_id":             "INTEGER DEFAULT 0",
 	}
 
 	if err := addMissingColumns(db, "cmdb_asset_interfaces", ifaceColsToAdd); err != nil {

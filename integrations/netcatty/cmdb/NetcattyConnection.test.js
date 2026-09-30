@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  connectionForAddress,
+  connectionTargetMismatch,
   buildNetcattyLinkPayload,
   connectionFromLinks,
   persistNetcattyConnection,
@@ -9,6 +11,17 @@ import {
   netcattyLinkStatus,
   assertNetcattyLinkReady,
 } from './NetcattyConnection.js'
+
+test('快捷连接识别所点地址与 Netcatty 实际目标的差异', () => {
+  assert.deepEqual(connectionTargetMismatch('10.0.0.12', hosts[0]), { selected: '10.0.0.12', actual: '10.0.0.10' })
+  assert.equal(connectionTargetMismatch('10.0.0.10', hosts[0]), null)
+})
+
+test('地址快捷连接只选择目标相同的主机引用', () => {
+  const links = [{ id: 1, host_id: 'host-1', is_primary: true }, { id: 2, host_id: 'host-2' }]
+  assert.equal(connectionForAddress('10.0.0.11', links, hosts)?.id, 2)
+  assert.equal(connectionForAddress('10.0.0.12', links, hosts), null)
+})
 
 const hosts = [
   { id: 'host-1', label: '核心服务器', hostname: '10.0.0.10', port: 22, protocol: 'ssh', credentialId: 'identity-1' },
