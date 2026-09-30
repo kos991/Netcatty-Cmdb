@@ -178,6 +178,11 @@ test('Netcatty 主机和钥匙串进入 Cmdb 前移除全部秘密字段', () =>
   assert.doesNotMatch(JSON.stringify(result), /secret|PRIVATE/)
 })
 
+test('Telnet 主机摘要显示其实际 Telnet 身份而非 SSH 身份', () => {
+  const result = netcattyDirectorySummaries({ hosts: [{ id: 'h1', label: '终端', protocol: 'telnet', identityId: 'ssh-user', telnetIdentityId: 'telnet-user' }] })
+  assert.equal(result.hosts[0].credentialId, 'telnet-user')
+})
+
 test('原生通道失败明确报错，导入提交保留预览令牌，导出保留取消状态', async () => {
   const previous = globalThis.window
   try {

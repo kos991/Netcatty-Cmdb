@@ -2,6 +2,37 @@
 export function createNetcattyVaultActions(actions, getSnapshot) {
   const requireActions = () => { if (!actions) throw new Error('Netcatty 密钥库尚未初始化') }
   return {
+    async bindHostCredential(hostId, credentialId) {
+      requireActions()
+      const snapshot = getSnapshot()
+      const host = snapshot.hosts.find(item => item.id === hostId)
+      if (!host) throw new Error('关联的 Netcatty 主机已不存在，请重新选择')
+      const identity = snapshot.identities.find(item => item.id === credentialId)
+      const key = snapshot.keys.find(item => item.id === credentialId)
+      if (!identity && !key) throw new Error('选择的身份或密钥已不存在，请重新选择')
+      const protocol = host.protocol || 'ssh'
+      if (protocol !== 'ssh' && protocol !== 'telnet') throw new Error(`${protocol} 主机暂不支持从 Cmdb 绑定认证`)
+      if (protocol === 'telnet') {
+        if (!identity || identity.authMethod !== 'password') throw new Error('Telnet 不支持密钥认证，请使用密码身份')
+        if (!identity.username?.trim() || !identity.password) throw new Error('Telnet 登录身份需要用户名和密码')
+      } else if (identity) {
+        if (!identity.username?.trim()) throw new Error('SSH 登录身份缺少用户名')
+        if (identity.authMethod === 'key' && !snapshot.keys.some(item => item.id === identity.keyId)) throw new Error('SSH 登录身份引用的密钥已不存在')
+        if (identity.authMethod !== 'key' && identity.authMethod !== 'password') throw new Error(`SSH 暂不支持 ${identity.authMethod || '未知'} 身份认证`)
+        if (identity.authMethod === 'password' && !identity.password) throw new Error('SSH 登录身份尚未填写密码')
+      } else if (!host.username?.trim()) throw new Error('使用密钥连接前请先为主机填写用户名')
+      const result = await actions.updateHosts(current => {
+        if (!current.some(item => item.id === hostId)) throw new Error('关联的 Netcatty 主机已不存在，请重新选择')
+        return current.map(item => {
+          if (item.id !== hostId) return item
+          if (protocol === 'telnet') return { ...item, telnetIdentityId: identity.id, telnetUsername: undefined, telnetPassword: undefined }
+          return identity
+            ? { ...item, identityId: identity.id, identityFileId: undefined, authMethod: identity.authMethod, authPolicyVersion: 1, password: undefined }
+            : { ...item, identityId: '', identityFileId: key.id, authMethod: 'key', authPolicyVersion: 1, password: undefined }
+        })
+      })
+      if (result === 'failed') throw new Error('Netcatty 主机保存失败，请检查密钥库后重试')
+    },
     async createCredential(draft) {
       requireActions()
       const label = String(draft.label || '').trim()
@@ -35,7 +66,7 @@ export function createNetcattyVaultActions(actions, getSnapshot) {
       const identity = snapshot.identities.find(item => item.id === draft.credentialId)
       const key = snapshot.keys.find(item => item.id === draft.credentialId)
       if (draft.credentialId && !identity && !key) throw new Error('选择的身份或密钥已不存在')
-      if (protocol === 'telnet' && (key || identity?.authMethod === 'key')) throw new Error('Telnet 不支持密钥认证，请使用密码身份')
+      if (protocol === 'telnet' && (key || (identity && identity.authMethod !== 'password'))) throw new Error('Telnet 不支持密钥认证，请使用密码身份')
       if (protocol === 'telnet' && identity && !identity.password) throw new Error('Telnet 登录身份尚未填写密码，请先在 Netcatty 钥匙串中补全')
       const username = String(identity?.username || draft.username || '').trim()
       if (!username) throw new Error('请填写用户名或选择已配置用户名的身份')
@@ -45,8 +76,9 @@ export function createNetcattyVaultActions(actions, getSnapshot) {
         ...(draft.group ? { group: String(draft.group).trim() } : {}),
         ...(draft.os ? { os: draft.os } : {}),
       }
-      if (protocol === 'telnet') Object.assign(host, { telnetEnabled: true, telnetPort: port, telnetUsername: username, ...(identity ? { telnetIdentityId: identity.id } : { telnetPassword: draft.password || undefined }) })
-      await actions.updateHosts(current => [...current, host])
+      if (protocol === 'telnet') Object.assign(host, { telnetEnabled: true, telnetPort: port, ...(identity ? { telnetIdentityId: identity.id } : { telnetUsername: username, telnetPassword: draft.password || undefined }) })
+      const result = await actions.updateHosts(current => [...current, host])
+      if (result === 'failed') throw new Error('Netcatty 主机保存失败，请检查密钥库后重试')
       return host
     },
   }

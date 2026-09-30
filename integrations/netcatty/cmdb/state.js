@@ -185,7 +185,7 @@ export function netcattyDirectorySummaries({ hosts = [], identities = [], keys =
       hostname: host.hostname || '',
       port: Number(host.port || 0),
       protocol: host.protocol || 'ssh',
-      credentialId: host.identityId || host.identityFileId || '',
+      credentialId: host.protocol === 'telnet' ? (host.telnetIdentityId || '') : (host.identityId || host.identityFileId || ''),
       ...(host.os ? { os: host.os } : {}),
       ...(host.distro ? { distro: host.distro } : {}),
       ...(host.distroMode ? { distroMode: host.distroMode } : {}),

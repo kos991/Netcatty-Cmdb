@@ -100,12 +100,12 @@ export default function Systems({ keyword, focusTarget, meta, command, leadingCo
       {detailQuery.data?.app && <>
         <AssetPanelSection title="系统配置" icon={Settings2}><AssetPanelFields items={[["系统名称", detailQuery.data.app.app_name], ["类型", detailQuery.data.app.app_type], ["所属分组", detailQuery.data.app.group_name], ["版本", detailQuery.data.app.version], ["供应商", detailQuery.data.app.provider], ["端口", detailQuery.data.app.port], ["访问地址", detailQuery.data.app.access_url], ["中间件", detailQuery.data.app.middleware], ["数据库", detailQuery.data.app.database_info]]} /></AssetPanelSection>
         <AssetPanelSection title="归属与承载" icon={Server}><AssetPanelFields items={[["负责人", detailQuery.data.app.owner], ["承载服务器", detailQuery.data.infrastructure?.name || '未关联'], ["说明", detailQuery.data.app.description], ["备注", detailQuery.data.app.remark]]} /></AssetPanelSection>
-        <AssetPanelSection title="Netcatty 连接" icon={Link2}><NetcattyLinks assetType="application" assetId={detailQuery.data.app.id} embedded /></AssetPanelSection>
+        <AssetPanelSection title="凭证中心" icon={Link2}><NetcattyLinks assetType="application" assetId={detailQuery.data.app.id} embedded /></AssetPanelSection>
       </>}
     </AssetPanel>}
     {editor && <AssetPanel open onClose={() => setEditor(null)} title={editor.record.id ? '编辑业务系统' : '新增业务系统'} subtitle={editor.record.app_name} icon={Workflow} footer={<AssetPanelSave onCancel={() => setEditor(null)} onSave={save} busy={action.busy || netcatty.loading} />}>
       <AssetPanelSection title="系统配置与承载" icon={Settings2}><Fields fields={fields} value={values} onChange={setValues} /></AssetPanelSection>
-      <AssetPanelSection title="Netcatty 连接" icon={Link2}><NetcattyConnectionFields asset={{ name: values.app_name, ip: values.server_biz_ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection>
+      <AssetPanelSection title="凭证中心" icon={Link2}><NetcattyConnectionFields asset={{ name: values.app_name, ip: values.server_biz_ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection>
     </AssetPanel>}
     <ConfirmDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null) }} title="确认删除" message="确认删除此业务系统？" confirmLabel="删除" destructive busy={action.busy} onConfirm={() => action.run(async () => { await api.deleteApp(deleting.record.id); setDeleting(null); refresh() }, '已删除')} />
   </div>

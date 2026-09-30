@@ -297,7 +297,7 @@ export function buildDeviceWorkspaceTabs(kind = 'generic', showPhotos = true) {
       { key: 'overview', label: '概览' },
       ...(kind === 'generic' ? [] : [{ key: 'operations', label: OPERATION_LABELS[kind] || OPERATION_LABELS.generic }]),
       { key: 'network', label: '网络' },
-      { key: 'relations', label: '关联' },
+      { key: 'relations', label: '凭证中心' },
       { key: 'records', label: '履历档案' },
       ...(showPhotos ? [{ key: 'photos', label: '设备照片' }] : []),
     ],

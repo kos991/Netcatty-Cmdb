@@ -19,7 +19,7 @@ import { ErrorBanner, Field, SelectControl } from './ui'
 export function useNetcattyConnectionEditor(assetType) {
   const directory = useNetcattyDirectory()
   const { hosts, credentials } = directory
-  const { createHost, createCredential } = directory
+  const { createHost, createCredential, bindHostCredential } = directory
   const [connection, setConnection] = useState({ ...EMPTY_NETCATTY_CONNECTION })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -45,7 +45,8 @@ export function useNetcattyConnectionEditor(assetType) {
     connection,
     hosts,
     credentials,
-  }), [assetType, connection, credentials, hosts])
+    bindHostCredential,
+  }), [assetType, bindHostCredential, connection, credentials, hosts])
 
   return { connection, setConnection, begin, persist, hosts, credentials, loading, error, createHost, createCredential }
 }
@@ -67,7 +68,7 @@ export default function NetcattyConnectionFields({ value, onChange, asset = {}, 
         onChange({ ...value, credential_id: created.id })
       } else {
         const created = await createHost({ ...draft, deviceType: infrastructureFieldProfile(asset.category_name || asset.device_type).kind === 'network' ? 'network' : 'general' })
-        onChange({ ...value, host_id: created.id, credential_id: created.identityId || created.identityFileId || value.credential_id || '' })
+        onChange({ ...value, host_id: created.id, credential_id: created.telnetIdentityId || created.identityId || created.identityFileId || '' })
       }
       setDialog(null)
     } catch (nextError) { setLocalError(nextError?.message || String(nextError)) } finally { setSaving(false) }
@@ -75,7 +76,7 @@ export default function NetcattyConnectionFields({ value, onChange, asset = {}, 
   return <section className="border-t border-border/60 pt-4" data-section="cmdb-netcatty-connection-fields">
     <div className="mb-3 flex items-start gap-2">
       <Server className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-      <p className="text-[11px] text-muted-foreground">主机、身份和密钥保存到 Netcatty，资产仅保存关联引用。</p>
+      <p className="text-[11px] text-muted-foreground">选中主机时，身份或密钥将用于该主机连接；不选主机时仅保存备用凭证引用。同一设备使用多个账号时，请为每个账号关联独立的 Netcatty 主机。</p>
     </div>
     {error || localError ? <ErrorBanner message={error || localError} /> : null}
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -89,7 +90,7 @@ export default function NetcattyConnectionFields({ value, onChange, asset = {}, 
         <Field label="主机地址" required><Input className="font-mono" value={draft.hostname || ''} onChange={(event) => setDraft({ ...draft, hostname: event.target.value })} /></Field>
         <Field label="协议"><SelectControl className="w-full" value={draft.protocol} onChange={(protocol) => setDraft({ ...draft, protocol, port: protocol === 'telnet' ? 23 : 22, credentialId: '' })} options={[{ value: 'ssh', label: 'SSH' }, { value: 'telnet', label: 'Telnet' }]} /></Field>
         <Field label="端口"><Input type="number" min="1" max="65535" value={draft.port || ''} onChange={(event) => setDraft({ ...draft, port: Number(event.target.value) })} /></Field>
-        <Field label="绑定身份 / 密钥" className="sm:col-span-2"><SelectControl searchable className="w-full" value={draft.credentialId || ''} onChange={(credentialId) => setDraft({ ...draft, credentialId })} options={choices(credentials.filter(credential => draft.protocol !== 'telnet' || (credential.kind === 'identity' && credential.type !== 'key')).map((credential) => ({ value: credential.id, label: credential.label })), '不绑定')} /></Field>
+        <Field label="绑定身份 / 密钥" className="sm:col-span-2"><SelectControl searchable className="w-full" value={draft.credentialId || ''} onChange={(credentialId) => setDraft({ ...draft, credentialId })} options={choices(credentials.filter(credential => draft.protocol !== 'telnet' || (credential.kind === 'identity' && credential.type === 'password')).map((credential) => ({ value: credential.id, label: credential.label })), '不绑定')} /></Field>
         {!credentials.find(item => item.id === draft.credentialId && item.kind === 'identity') ? <Field label="用户名" required><Input value={draft.username || ''} onChange={(event) => setDraft({ ...draft, username: event.target.value })} /></Field> : null}
         {!draft.credentialId ? <Field label="密码"><Input type="password" autoComplete="new-password" value={draft.password || ''} onChange={(event) => setDraft({ ...draft, password: event.target.value })} /></Field> : null}
       </> : <>

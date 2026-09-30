@@ -97,11 +97,12 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
         let output = '';
         if (protocol === 'telnet') {
           const telnetIdentity = vaultIdentities.find((item) => item.id === host.telnetIdentityId);
+          if (host.telnetIdentityId && (!telnetIdentity || telnetIdentity.authMethod !== 'password' || !telnetIdentity.username?.trim() || !telnetIdentity.password)) throw new Error('Telnet 登录身份不可用，请检查用户名和密码');
           output = await readTelnetConfiguration(
             terminalBackend,
             host,
-            host.telnetUsername || telnetIdentity?.username || host.username || '',
-            host.telnetPassword || telnetIdentity?.password || host.password,
+            telnetIdentity ? telnetIdentity.username : host.telnetUsername || host.username || '',
+            telnetIdentity ? telnetIdentity.password : host.telnetPassword || host.password,
             commands,
           );
         } else {

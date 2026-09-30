@@ -236,7 +236,7 @@ test('终端资产按主关联找到 Netcatty 主机系统信息', () => {
   assert.equal(lookup.has(9), false)
 })
 
-test('网络与关联使用独立页签且实体设备照片保持独立', () => {
+test('网络与凭证中心使用独立页签且实体设备照片保持独立', () => {
   assert.equal(typeof deviceModel.buildDeviceWorkspaceTabs, 'function')
 
   assert.deepEqual(deviceModel.buildDeviceWorkspaceTabs('switch'), {
@@ -245,7 +245,7 @@ test('网络与关联使用独立页签且实体设备照片保持独立', () =>
       { key: 'overview', label: '概览' },
       { key: 'operations', label: '端口与配置' },
       { key: 'network', label: '网络' },
-      { key: 'relations', label: '关联' },
+      { key: 'relations', label: '凭证中心' },
       { key: 'records', label: '履历档案' },
       { key: 'photos', label: '设备照片' },
     ],
@@ -256,7 +256,7 @@ test('网络与关联使用独立页签且实体设备照片保持独立', () =>
       { key: 'overview', label: '概览' },
       { key: 'operations', label: '接口运行' },
       { key: 'network', label: '网络' },
-      { key: 'relations', label: '关联' },
+      { key: 'relations', label: '凭证中心' },
       { key: 'records', label: '履历档案' },
       { key: 'photos', label: '设备照片' },
     ],
@@ -267,7 +267,7 @@ test('网络与关联使用独立页签且实体设备照片保持独立', () =>
       { key: 'overview', label: '概览' },
       { key: 'operations', label: '硬件与业务' },
       { key: 'network', label: '网络' },
-      { key: 'relations', label: '关联' },
+      { key: 'relations', label: '凭证中心' },
       { key: 'records', label: '履历档案' },
       { key: 'photos', label: '设备照片' },
     ],

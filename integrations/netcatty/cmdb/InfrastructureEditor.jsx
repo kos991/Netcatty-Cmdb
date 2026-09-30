@@ -118,7 +118,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
   const extendedBasicFields = [...basicFields, { key: 'remark', label: '备注', type: 'textarea' }, ...customFieldDefinitions(customFields, values.asset_class || 'physical')]
   const sections = [
     ['basic', '基础信息', Box],
-    ['connection', 'Netcatty 连接', KeyRound],
+    ['connection', '凭证中心', KeyRound],
     ['ownership', '归属关系', Building2],
     ...(profile.kind !== 'virtual' ? [['location', '安装位置', Building2]] : []),
     ['network', '网络配置', Network],
@@ -152,7 +152,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
         </nav>
         <form ref={formRef} id="cmdb-infrastructure-editor" onSubmit={(event) => { event.preventDefault(); submit() }} className="min-h-0 space-y-3 overflow-y-auto overscroll-contain scroll-smooth p-4">
           <Section sectionKey="basic" title="基础信息" sectionRefs={sectionRefs}>{!deviceTypes.length ? <p className="mb-3 text-xs text-destructive">请先在配置中心维护设备类型。</p> : null}<Fields fields={extendedBasicFields} value={values} onChange={setValues} />{profile.brandModel ? <p className="mt-3 text-xs text-muted-foreground">{Number(values.model_id) ? '品牌与型号已关联型号库。' : '该品牌与型号尚未纳入型号库，资产信息仍会正常保存。'}</p> : null}</Section>
-          <Section sectionKey="connection" title="Netcatty 连接" sectionRefs={sectionRefs}><NetcattyConnectionFields asset={values} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} createHost={netcatty.createHost} createCredential={netcatty.createCredential} /></Section>
+          <Section sectionKey="connection" title="凭证中心" sectionRefs={sectionRefs}><NetcattyConnectionFields asset={values} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} createHost={netcatty.createHost} createCredential={netcatty.createCredential} /></Section>
           <Section sectionKey="ownership" title="归属关系" sectionRefs={sectionRefs}><Fields fields={ownershipFields} value={values} onChange={setValues} /></Section>
           {profile.kind !== 'virtual' ? <Section sectionKey="location" title="安装位置" sectionRefs={sectionRefs}><Fields fields={locationFields} value={values} onChange={setValues} /></Section> : null}
           <Section sectionKey="network" title="网络配置" sectionRefs={sectionRefs}>{profile.deviceMac ? <div className="mb-4 max-w-md"><Field label="设备级 MAC 地址"><Input className="h-9 font-mono" value={values.mac || ''} onChange={(event) => setValues({ ...values, mac: event.target.value })} /></Field></div> : null}<NetworkInterfaces interfaces={values.interfaces || []} zones={meta.net_zones || []} onChange={(interfaces) => setValues({ ...values, interfaces, mgmt_ip: managementIPFromInterfaces(interfaces) })} />{!(values.interfaces || []).length ? <p className="text-xs text-muted-foreground">添加第一个网络接口后，可直接在该接口填写管理 IP。</p> : null}</Section>
