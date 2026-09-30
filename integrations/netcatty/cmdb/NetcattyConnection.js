@@ -20,6 +20,7 @@ export function connectionForAddress(address, links = [], hosts = [], credential
 export function netcattyLinkStatus(link, host, credentials = []) {
   if (!link?.host_id && !link?.credential_id) return 'unresolved'
   if (link.host_id && !host) return 'unresolved'
+  if (link.follow_asset_ip && host && connectionTargetMismatch(link.address, host)) return 'address-mismatch'
   if (link.credential_id && !credentials.some(item => item.id === link.credential_id)) return 'unresolved'
   if (link.host_id && link.credential_id) {
     const actual = host.protocol === 'telnet'
@@ -32,13 +33,14 @@ export function netcattyLinkStatus(link, host, credentials = []) {
 
 export function assertNetcattyLinkReady(link, host, credentials = []) {
   const status = netcattyLinkStatus(link, host, credentials)
+  if (status === 'address-mismatch') throw new Error(`连接目标尚未同步为 ${link.address}，请重试同步地址`)
   if (status === 'auth-mismatch') throw new Error('主机认证未应用或已失效，请在凭证中心重新应用后连接')
   if (status !== 'linked' || !host) throw new Error('Netcatty 主机或身份引用已失效，请重新关联')
 }
 
 export function connectionFromLinks(links = []) {
   const link = links.find((item) => item.is_primary) || links[0]
-  return link ? { host_id: link.host_id || '', credential_id: link.credential_id || '', link_id: link.id } : { ...EMPTY_NETCATTY_CONNECTION }
+  return link ? { host_id: link.host_id || '', credential_id: link.credential_id || '', link_id: link.id, ...(link.follow_asset_ip ? { follow_asset_ip: true } : {}) } : { ...EMPTY_NETCATTY_CONNECTION }
 }
 
 export function selectNetcattyHost(connection, hostID, hosts = []) {
@@ -46,6 +48,7 @@ export function selectNetcattyHost(connection, hostID, hosts = []) {
   return {
     ...connection,
     host_id: hostID || '',
+    ...(Object.hasOwn(connection, 'follow_asset_ip') ? { follow_asset_ip: hostID === connection.host_id && !!connection.follow_asset_ip } : {}),
     credential_id: host ? (host.credentialId || '') : (connection.credential_id || ''),
   }
 }
@@ -67,7 +70,24 @@ export function buildNetcattyLinkPayload(assetType, assetID, connection, hosts =
     address: host?.hostname || '',
     port: Number(host?.port || 0),
     is_primary: !!host && connection.is_primary !== false,
+    follow_asset_ip: !!host && !!connection.follow_asset_ip,
     state: 'linked',
+  }
+}
+
+export async function syncFollowingNetcattyHosts(api, { assetType, assetId, hosts, updateHostAddress }) {
+  const { list = [] } = await api.netcattyLinks({ asset_type: assetType, asset_id: assetId })
+  for (const link of list.filter(item => item.follow_asset_ip && item.host_id)) {
+    const host = hosts.find(item => item.id === link.host_id)
+    if (host?.hostname === link.address) continue
+    try {
+      if (!host) throw new Error('原生主机不存在')
+      const usage = await api.netcattyHostUsage({ host_id: link.host_id, asset_type: assetType, asset_id: assetId })
+      if (usage.other_references > 0) throw new Error('主机仍被其他资产引用，请先解除共享')
+      await updateHostAddress(link.host_id, link.address)
+    } catch (error) {
+      throw new Error(`资产已保存，主机 ${link.host_name || link.host_id} 尚未同步为 ${link.address}：${error.message}。请在凭证中心重试同步地址。`)
+    }
   }
 }
 
@@ -83,6 +103,8 @@ export async function persistNetcattyConnection(api, { assetType, assetId, conne
   if (payload.host_id) {
     if (!api.netcattyLinks) throw new Error('无法检查当前资产的 Netcatty 主机关联，认证未更改')
     const result = await api.netcattyLinks({ asset_type: assetType, asset_id: assetId })
+    const previous = (result.list || []).find(link => Number(link.id) === linkID)
+    if (previous?.follow_asset_ip && payload.follow_asset_ip && previous.host_id === payload.host_id) payload.address = previous.address
     const duplicate = (result.list || []).find(link => link.host_id === payload.host_id && Number(link.id) !== linkID)
     if (duplicate) throw new Error('该 Netcatty 主机已关联当前资产；另一身份请新建独立的 Netcatty 主机')
   }

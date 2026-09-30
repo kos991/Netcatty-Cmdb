@@ -2,6 +2,8 @@ import React, { useCallback, useState } from 'react'
 import { KeyRound, Plus, Server } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { networkAddressRows } from './infrastructureEditorModel'
 import { api } from './api'
 import { choices } from './Fields'
 import { useNetcattyDirectory } from './NetcattyDirectory'
@@ -12,6 +14,7 @@ import {
   connectionFromLinks,
   persistNetcattyConnection,
   selectNetcattyHost,
+  syncFollowingNetcattyHosts,
 } from './NetcattyConnection'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ErrorBanner, Field, SelectControl } from './ui'
@@ -19,7 +22,7 @@ import { ErrorBanner, Field, SelectControl } from './ui'
 export function useNetcattyConnectionEditor(assetType) {
   const directory = useNetcattyDirectory()
   const { hosts, credentials } = directory
-  const { createHost, createCredential, bindHostCredential } = directory
+  const { createHost, createCredential, bindHostCredential, updateHostAddress } = directory
   const [connection, setConnection] = useState({ ...EMPTY_NETCATTY_CONNECTION })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -39,14 +42,17 @@ export function useNetcattyConnectionEditor(assetType) {
     }
   }, [assetType])
 
-  const persist = useCallback((assetID) => persistNetcattyConnection(api, {
+  const persist = useCallback(async (assetID) => {
+    await persistNetcattyConnection(api, {
     assetType,
     assetId: assetID,
     connection,
     hosts,
     credentials,
     bindHostCredential,
-  }), [assetType, bindHostCredential, connection, credentials, hosts])
+    })
+    await syncFollowingNetcattyHosts(api, { assetType, assetId: assetID, hosts, updateHostAddress })
+  }, [assetType, bindHostCredential, connection, credentials, hosts, updateHostAddress])
 
   return { connection, setConnection, begin, persist, hosts, credentials, loading, error, createHost, createCredential }
 }
@@ -67,8 +73,10 @@ export default function NetcattyConnectionFields({ value, onChange, asset = {}, 
         const created = await createCredential(draft)
         onChange({ ...value, credential_id: created.id })
       } else {
+        const assetAddresses = new Set([...networkAddressRows(asset).map(item => item.ip), asset.ip, asset.terminal_ip, asset.public_ip].filter(Boolean))
+        if (draft.follow_asset_ip && !assetAddresses.has(String(draft.hostname || '').trim())) throw new Error('跟随地址必须是当前资产已填写的实际地址，域名或 NAT 主机请取消跟随')
         const created = await createHost({ ...draft, deviceType: infrastructureFieldProfile(asset.category_name || asset.device_type).kind === 'network' ? 'network' : 'general' })
-        onChange({ ...value, host_id: created.id, credential_id: created.telnetIdentityId || created.identityId || created.identityFileId || '' })
+        onChange({ ...value, host_id: created.id, credential_id: created.telnetIdentityId || created.identityId || created.identityFileId || '', follow_asset_ip: !!draft.follow_asset_ip })
       }
       setDialog(null)
     } catch (nextError) { setLocalError(nextError?.message || String(nextError)) } finally { setSaving(false) }
@@ -88,6 +96,7 @@ export default function NetcattyConnectionFields({ value, onChange, asset = {}, 
       <Field label="名称" required><Input value={draft.label || ''} onChange={(event) => setDraft({ ...draft, label: event.target.value })} /></Field>
       {dialog === 'host' ? <>
         <Field label="主机地址" required><Input className="font-mono" value={draft.hostname || ''} onChange={(event) => setDraft({ ...draft, hostname: event.target.value })} /></Field>
+        <label className="flex items-center gap-2 text-xs sm:col-span-2"><Switch checked={!!draft.follow_asset_ip} onCheckedChange={checked => setDraft({ ...draft, follow_asset_ip: checked })} />跟随此资产地址（资产替换地址后同步此主机）</label>
         <Field label="协议"><SelectControl className="w-full" value={draft.protocol} onChange={(protocol) => setDraft({ ...draft, protocol, port: protocol === 'telnet' ? 23 : 22, credentialId: '' })} options={[{ value: 'ssh', label: 'SSH' }, { value: 'telnet', label: 'Telnet' }]} /></Field>
         <Field label="端口"><Input type="number" min="1" max="65535" value={draft.port || ''} onChange={(event) => setDraft({ ...draft, port: Number(event.target.value) })} /></Field>
         <Field label="绑定身份 / 密钥" className="sm:col-span-2"><SelectControl searchable className="w-full" value={draft.credentialId || ''} onChange={(credentialId) => setDraft({ ...draft, credentialId })} options={choices(credentials.filter(credential => draft.protocol !== 'telnet' || (credential.kind === 'identity' && credential.type === 'password')).map((credential) => ({ value: credential.id, label: credential.label })), '不绑定')} /></Field>

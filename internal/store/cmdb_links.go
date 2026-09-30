@@ -318,8 +318,7 @@ func (s *Store) CmdbAssetRelationsForProject(scope ProjectScope, asset *CmdbAsse
 			ips = append(ips, ip)
 		}
 	}
-	for _, iface := range ifaces {
-		ip := strings.TrimSpace(iface.IP)
+	for ip := range cmdbAssetIPs(nil, ifaces) {
 		if ip != "" && !seen[ip] {
 			seen[ip] = true
 			ips = append(ips, ip)
@@ -353,6 +352,15 @@ func (s *Store) CmdbAssetRelationsForProject(scope ProjectScope, asset *CmdbAsse
 		if err := rows.Err(); err != nil {
 			return nil, err
 		}
+		registered := map[string]bool{}
+		for _, item := range relations.IPAM {
+			registered[item.IP] = true
+		}
+		for _, ip := range ips {
+			if !registered[ip] {
+				relations.IPAM = append(relations.IPAM, CmdbAssetIPAM{IP: ip, Status: "未纳入 IPAM"})
+			}
+		}
 	}
 
 	// 业务系统只能挂在服务器类基础设施上。这里同时兼容新关联字段
@@ -364,12 +372,12 @@ func (s *Store) CmdbAssetRelationsForProject(scope ProjectScope, asset *CmdbAsse
 			where = "app.project_id=? AND (app.cmdb_asset_id=? OR app.server_id=?)"
 			args = []interface{}{scope.ProjectID, asset.ID, asset.SourceID}
 		}
-		rows, err := s.db.Query(`SELECT app.id, app.project_id, app.server_id, IFNULL(app.cmdb_asset_id,0),
+		rows, err := s.db.Query(`SELECT app.id, app.project_id, IFNULL(app.server_id,0), IFNULL(app.cmdb_asset_id,0),
 			IFNULL(app.app_name,''), IFNULL(app.app_type,''), IFNULL(app.port,''), IFNULL(app.access_url,''),
 			IFNULL(app.middleware,''), IFNULL(app.database_info,''), IFNULL(app.provider,''), IFNULL(app.owner,''),
 			IFNULL(app.status,''), IFNULL(app.remark,''), IFNULL(app.created_at,''), IFNULL(app.updated_at,''),
 			COALESCE(NULLIF(server.device_name,''), NULLIF(asset_host.name,''), ''),
-			COALESCE(NULLIF(server.biz_ip,''), NULLIF(asset_host.biz_ip,''), NULLIF(asset_host.mgmt_ip,''), '')
+			IFNULL(app.service_ip,'')
 			FROM server_apps app
 			LEFT JOIN servers server ON server.id=app.server_id AND server.project_id=app.project_id
 			LEFT JOIN cmdb_assets asset_host ON asset_host.id=app.cmdb_asset_id AND asset_host.project_id=app.project_id
@@ -386,6 +394,7 @@ func (s *Store) CmdbAssetRelationsForProject(scope ProjectScope, asset *CmdbAsse
 				return nil, err
 			}
 			setLegacyServerAppFields(&app)
+			app.ServiceIP = app.ServerBizIP
 			relations.RelatedApplications = append(relations.RelatedApplications, app)
 		}
 		if err := rows.Err(); err != nil {

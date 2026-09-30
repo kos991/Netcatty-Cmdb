@@ -5,14 +5,14 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { api } from './api'
 import { Fields } from './Fields'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
-import { assertNetcattyLinkReady, buildNetcattyLinkPayload, netcattyLinkStatus, persistNetcattyConnection, setDefaultNetcattyLink } from './NetcattyConnection'
+import { assertNetcattyLinkReady, buildNetcattyLinkPayload, netcattyLinkStatus, persistNetcattyConnection, setDefaultNetcattyLink, syncFollowingNetcattyHosts } from './NetcattyConnection'
 import { toast } from '@/components/ui/toast'
 import { useAction, useQuery } from './hooks'
 import { useNetcattyDirectory } from './NetcattyDirectory'
 import { ActionIcon, ErrorBanner, ModalForm, StatusPill } from './ui'
 
 export default function NetcattyLinks({ assetType, assetId, asset = {}, onChanged, embedded = false }) {
-  const { hosts, credentials, connectHost, bindHostCredential } = useNetcattyDirectory()
+  const { hosts, credentials, connectHost, bindHostCredential, updateHostAddress } = useNetcattyDirectory()
   const [editor, setEditor] = useState(false)
   const [values, setValues] = useState({ host_id: '', credential_id: '', is_primary: true })
   const [removing, setRemoving] = useState(null)
@@ -65,7 +65,7 @@ export default function NetcattyLinks({ assetType, assetId, asset = {}, onChange
   }, '已设为默认连接')
 
   const reapplyCredential = (link) => action.run(async () => {
-    await persistNetcattyConnection(api, { assetType, assetId, connection: { host_id: link.host_id, credential_id: link.credential_id, link_id: link.id, is_primary: link.is_primary }, hosts, credentials, bindHostCredential })
+    await persistNetcattyConnection(api, { assetType, assetId, connection: { host_id: link.host_id, credential_id: link.credential_id, link_id: link.id, is_primary: link.is_primary, follow_asset_ip: link.follow_asset_ip }, hosts, credentials, bindHostCredential })
     query.reload(); onChanged?.()
   }, '主机认证已重新应用')
 
@@ -76,18 +76,20 @@ export default function NetcattyLinks({ assetType, assetId, asset = {}, onChange
       const status = netcattyLinkStatus(link, host, credentials)
       const resolved = status === 'linked'
       const authMismatch = status === 'auth-mismatch'
+      const addressMismatch = status === 'address-mismatch'
       const selectedCredential = credentialByID.get(link.credential_id)
       const actualCredential = credentialByID.get(host?.credentialId)
       return <div key={link.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2 text-xs">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="truncate font-medium">{host?.label || link.host_name || selectedCredential?.label || link.credential_name || link.host_id || link.credential_id}</p>
-            <StatusPill tone={resolved ? 'success' : 'danger'}>{resolved ? '已联动' : authMismatch ? '认证未应用/已失效' : '引用失效'}</StatusPill>
-            {host && link.is_primary ? <StatusPill tone="success">默认</StatusPill> : null}
+            <StatusPill tone={resolved ? 'success' : 'danger'}>{resolved ? '已联动' : addressMismatch ? '地址待同步' : authMismatch ? '认证未应用/已失效' : '引用失效'}</StatusPill>
+            {link.follow_asset_ip ? <span className="text-[10px] text-muted-foreground">跟随 {link.address}</span> : null}{host && link.is_primary ? <StatusPill tone="success">默认</StatusPill> : null}
           </div>
           <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{host ? `${host.protocol}://${host.hostname}${host.port ? `:${host.port}` : ''}` : '仅关联备用凭证'}{host && link.credential_id ? ` · 连接认证：${actualCredential?.label || '未设置'}${authMismatch ? '（与引用不一致）' : ''}` : !host && selectedCredential ? ` · 备用凭证：${selectedCredential.label}` : ''}</p>
         </div>
         <div className="flex items-center">
+          {addressMismatch ? <Button type="button" size="sm" variant="ghost" disabled={action.busy} title={`期望 ${link.address}，实际 ${host?.hostname}`} onClick={() => action.run(async () => { await syncFollowingNetcattyHosts(api, { assetType, assetId, hosts, updateHostAddress }); query.reload(); onChanged?.() })}>重试同步地址</Button> : null}
           {authMismatch ? <Button type="button" size="sm" variant="ghost" className="h-7 text-[11px]" disabled={action.busy} onClick={() => reapplyCredential(link)}>重新应用认证</Button> : null}
           {resolved && host && !link.is_primary ? <Button type="button" size="sm" variant="ghost" className="h-7 text-[11px]" disabled={action.busy} onClick={() => makeDefault(link)}>设为默认</Button> : null}
           {resolved && host ? <ActionIcon label="使用 Netcatty 连接" onClick={() => { try { assertNetcattyLinkReady(link, hostByID.get(link.host_id), credentials); connectHost(link.host_id, link.credential_id) } catch (error) { toast.error(error.message) } }}><PlugZap size={14} /></ActionIcon> : !resolved ? <TriangleAlert size={14} className="mx-2 text-destructive" /> : null}

@@ -74,6 +74,7 @@ type ServerApp struct {
 	UpdatedAt    string `json:"updated_at"`
 	ServerName   string `json:"server_name"`
 	ServerBizIP  string `json:"server_biz_ip"`
+	ServiceIP    string `json:"service_ip"`
 }
 
 type AssetLog struct {
@@ -134,18 +135,19 @@ type MaintenanceReq struct {
 }
 
 type IPEntry struct {
-	ID         int64  `json:"id"`
-	ProjectID  int64  `json:"project_id"`
-	Subnet     string `json:"subnet"`
-	IP         string `json:"ip"`
-	Department string `json:"department"`
-	Room       string `json:"room"`
-	Account    string `json:"account"`
-	Status     string `json:"status"`
-	Remark     string `json:"remark"`
-	AssetCode  string `json:"asset_code"`
-	AssetUser  string `json:"asset_user"`
-	OwnerType  string `json:"owner_type"`
-	OwnerID    int64  `json:"owner_id"`
-	OwnerName  string `json:"owner_name"`
+	Applications []ServerApp `json:"applications,omitempty"`
+	ID           int64       `json:"id"`
+	ProjectID    int64       `json:"project_id"`
+	Subnet       string      `json:"subnet"`
+	IP           string      `json:"ip"`
+	Department   string      `json:"department"`
+	Room         string      `json:"room"`
+	Account      string      `json:"account"`
+	Status       string      `json:"status"`
+	Remark       string      `json:"remark"`
+	AssetCode    string      `json:"asset_code"`
+	AssetUser    string      `json:"asset_user"`
+	OwnerType    string      `json:"owner_type"`
+	OwnerID      int64       `json:"owner_id"`
+	OwnerName    string      `json:"owner_name"`
 }

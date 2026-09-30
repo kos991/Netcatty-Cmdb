@@ -471,17 +471,86 @@ func cmdbAssetIPs(asset *CmdbAsset, ifaces []CmdbAssetInterface) map[string]stru
 		if ip := strings.TrimSpace(iface.IP); ip != "" {
 			ips[ip] = struct{}{}
 		}
+		var addresses []cmdbInterfaceAddress
+		if json.Unmarshal([]byte(iface.AdditionalIPsJSON), &addresses) == nil {
+			for _, address := range addresses {
+				if ip := strings.TrimSpace(address.IP); ip != "" {
+					ips[ip] = struct{}{}
+				}
+			}
+		}
 	}
 	return ips
 }
 
 // linkCmdbAssetIPsToIPPool 在资产写事务内同步直接 IP 字段和多网卡 IP。
 func linkCmdbAssetIPsToIPPool(tx *sql.Tx, projectID, assetID int64, oldAsset, newAsset *CmdbAsset, oldIfaces, newIfaces []CmdbAssetInterface) error {
+	if newAsset != nil {
+		if err := validateHostApplicationAddresses(tx, projectID, assetID); err != nil {
+			return err
+		}
+	}
 	oldIPs := cmdbAssetIPs(oldAsset, oldIfaces)
 	newIPs := cmdbAssetIPs(newAsset, newIfaces)
 
 	for ip := range oldIPs {
 		if _, exists := newIPs[ip]; !exists {
+			replacement := ""
+			if oldAsset != nil && newAsset != nil {
+				switch ip {
+				case oldAsset.MgmtIP, oldAsset.ManageIP:
+					replacement = newAsset.MgmtIP
+				case oldAsset.BizIP:
+					replacement = newAsset.BizIP
+				case oldAsset.PublicIP:
+					replacement = newAsset.PublicIP
+				}
+			}
+			if replacement == "" {
+				for _, oldIface := range oldIfaces {
+					for _, newIface := range newIfaces {
+						if oldIface.ID > 0 && oldIface.ID == newIface.ID && oldIface.IP == ip {
+							replacement = newIface.IP
+						}
+						if oldIface.ID > 0 && oldIface.ID == newIface.ID && replacement == "" {
+							var previous, next []cmdbInterfaceAddress
+							if err := json.Unmarshal([]byte(interfaceAdditionalIPs(oldIface)), &previous); err != nil {
+								return err
+							}
+							if err := json.Unmarshal([]byte(interfaceAdditionalIPs(newIface)), &next); err != nil {
+								return err
+							}
+							candidates := map[string]bool{}
+							for _, before := range previous {
+								if before.IP != ip {
+									continue
+								}
+								for _, after := range next {
+									if _, existed := oldIPs[after.IP]; existed {
+										continue
+									}
+									for _, purpose := range []string{"management", "business", "out_of_band"} {
+										if strings.Contains(fmt.Sprint(before.Purpose), purpose) && strings.Contains(fmt.Sprint(after.Purpose), purpose) {
+											candidates[after.IP] = true
+										}
+									}
+								}
+							}
+							if len(candidates) == 1 {
+								for candidate := range candidates {
+									replacement = candidate
+								}
+							}
+						}
+					}
+				}
+			}
+			if err := updateFollowingAddress(tx, projectID, "infrastructure", assetID, ip, replacement); err != nil {
+				return err
+			}
+			if err := rejectIPApplicationDependencies(tx, projectID, ip); err != nil {
+				return err
+			}
 			if err := releaseUnreferencedIPInTx(tx, projectID, ip); err != nil {
 				return err
 			}
@@ -506,7 +575,7 @@ func linkCmdbAssetIPsToIPPool(tx *sql.Tx, projectID, assetID int64, oldAsset, ne
 			return err
 		}
 		_, alreadyUsedByAsset := oldIPs[ip]
-		if status == "在用" && (ownerType != "infrastructure" || ownerID != assetID) && !alreadyUsedByAsset {
+		if isIPUsedStatus(status) && (ownerType != "infrastructure" || ownerID != assetID) && !(alreadyUsedByAsset && ownerType == "") {
 			return fmt.Errorf("IP %s 已被其他对象占用", ip)
 		}
 		remark := fmt.Sprintf("CMDB资产绑定 [%s]", newAsset.Name)

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import * as connectionModel from './NetcattyConnection.js'
 import {
   connectionForAddress,
   connectionTargetMismatch,
@@ -11,6 +12,24 @@ import {
   netcattyLinkStatus,
   assertNetcattyLinkReady,
 } from './NetcattyConnection.js'
+
+test('新建明确跟随的连接保留跟随标记，旧主机默认不跟随', () => {
+  const host = { id: 'new', label: '新主机', hostname: '192.0.2.10' }
+  assert.equal(buildNetcattyLinkPayload('infrastructure', 1, { host_id: 'new', follow_asset_ip: true }, [host]).follow_asset_ip, true)
+  assert.equal(buildNetcattyLinkPayload('infrastructure', 1, { host_id: 'new' }, [host]).follow_asset_ip, false)
+})
+
+test('同步仅更新明确跟随的目标，独立域名不改；失败保留期望差异供重试', async () => {
+  const links = [{ id: 1, host_id: 'follow', address: '192.0.2.20', follow_asset_ip: true }, { id: 2, host_id: 'nat', address: 'nat.example.test' }]
+  const directory = [{ id: 'follow', hostname: '192.0.2.10' }, { id: 'nat', hostname: 'nat.example.test' }]
+  const api = { netcattyLinks: async () => ({ list: links }), netcattyHostUsage: async () => ({ other_references: 0 }) }
+  const update = async (id, address) => { directory.find(host => host.id === id).hostname = address }
+  await connectionModel.syncFollowingNetcattyHosts(api, { assetType: 'infrastructure', assetId: 1, hosts: directory, updateHostAddress: update })
+  assert.deepEqual(directory.map(host => host.hostname), ['192.0.2.20', 'nat.example.test'])
+  directory[0].hostname = '192.0.2.10'
+  await assert.rejects(connectionModel.syncFollowingNetcattyHosts(api, { assetType: 'infrastructure', assetId: 1, hosts: directory, updateHostAddress: async () => { throw new Error('磁盘失败') } }), /192.0.2.20.*重试/)
+  assert.equal(links[0].address, '192.0.2.20')
+})
 
 test('快捷连接识别所点地址与 Netcatty 实际目标的差异', () => {
   assert.deepEqual(connectionTargetMismatch('10.0.0.12', hosts[0]), { selected: '10.0.0.12', actual: '10.0.0.10' })
@@ -81,6 +100,7 @@ test('Netcatty 主机和钥匙串可以单独建立引用', () => {
     address: '',
     port: 0,
     is_primary: false,
+    follow_asset_ip: false,
     state: 'linked',
   })
 })
@@ -97,6 +117,7 @@ test('Netcatty 连接载荷只保存引用和显示摘要', () => {
     address: '10.0.0.10',
     port: 22,
     is_primary: true,
+    follow_asset_ip: false,
     state: 'linked',
   })
 })

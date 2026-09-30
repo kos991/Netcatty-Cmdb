@@ -2,6 +2,15 @@
 export function createNetcattyVaultActions(actions, getSnapshot) {
   const requireActions = () => { if (!actions) throw new Error('Netcatty 密钥库尚未初始化') }
   return {
+    async updateHostAddress(hostId, address) {
+      requireActions()
+      if (!String(address || '').trim()) throw new Error('跟随目标地址不能为空')
+      const result = await actions.updateHosts(current => {
+        if (!current.some(item => item.id === hostId)) throw new Error('原生主机已不存在')
+        return current.map(item => item.id === hostId ? { ...item, hostname: address.trim() } : item)
+      })
+      if (result === 'failed') throw new Error('Netcatty 主机保存失败，请检查密钥库后重试')
+    },
     async bindHostCredential(hostId, credentialId) {
       requireActions()
       const snapshot = getSnapshot()

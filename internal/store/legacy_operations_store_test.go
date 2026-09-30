@@ -284,8 +284,8 @@ func TestLegacyOperationsAppCRUDRelationsAndQueries(t *testing.T) {
 			t.Fatalf("关键词 %q 应只命中目标应用，total=%d list=%+v", keyword, total, list)
 		}
 		itemJSON := operationsAppJSON(t, list[0])
-		if itemJSON["server_name"] != "承载主机甲" || itemJSON["server_biz_ip"] != "10.30.0.11" {
-			t.Fatalf("应用列表必须带承载服务器信息，JSON=%v", itemJSON)
+		if itemJSON["server_name"] != "承载主机甲" || itemJSON["server_biz_ip"] != "" {
+			t.Fatalf("应用列表保留服务器名称但未选业务地址必须为空，JSON=%v", itemJSON)
 		}
 	}
 	filtered, total, err := s.QueryAllApps("", "数据库服务", "正常运行", 1, 20)

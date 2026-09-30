@@ -466,8 +466,8 @@ func TestIPAMDetectsInfrastructureAndApplicationOwners(t *testing.T) {
 	if owners["10.20.30.2"]["status"] != "在用" || owners["10.20.30.2"]["owner_type"] != "infrastructure" || owners["10.20.30.2"]["owner_name"] != "核心交换机 A" {
 		t.Fatalf("基础设施占用未联动: %+v", owners["10.20.30.2"])
 	}
-	if owners["10.20.30.10"]["status"] != "在用" || owners["10.20.30.10"]["owner_type"] != "application" || owners["10.20.30.10"]["owner_name"] != "审判业务系统" {
-		t.Fatalf("业务系统占用未联动: %+v", owners["10.20.30.10"])
+	if owners["10.20.30.10"]["status"] != "在用" || owners["10.20.30.10"]["owner_type"] != "server" || owners["10.20.30.10"]["owner_name"] != "应用服务器" {
+		t.Fatalf("未选业务地址不能把服务器改为应用占用: %+v", owners["10.20.30.10"])
 	}
 }
 

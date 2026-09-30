@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -397,12 +398,16 @@ func ensureAssignableIP(q interface{ QueryRow(string, ...any) *sql.Row }, scope 
 
 func ensureHostIPInDefinedSubnets(q interface {
 	Query(string, ...any) (*sql.Rows, error)
+	Exec(string, ...any) (sql.Result, error)
 }, projectID int64, ip string) error {
 	rows, err := q.Query(`SELECT name,IFNULL(cidr,''),IFNULL(prefix,'') FROM ip_subnets WHERE project_id=? AND deleted_at IS NULL`, projectID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
+	address, _ := netip.ParseAddr(strings.TrimSpace(ip))
+	matched := ""
+	matchedBits := -1
 	for rows.Next() {
 		var name, cidr, prefix string
 		if err := rows.Scan(&name, &cidr, &prefix); err != nil {
@@ -411,8 +416,18 @@ func ensureHostIPInDefinedSubnets(q interface {
 		if kind := specialIPv4Address(normalizeSubnetCIDR(cidr, prefix), ip); kind != "" {
 			return fmt.Errorf("%s 是网段「%s」的%s，不能分配给资产", ip, name, kind)
 		}
+		if network, err := netip.ParsePrefix(normalizeSubnetCIDR(cidr, prefix)); err == nil && network.Contains(address) && network.Bits() > matchedBits {
+			matched, matchedBits = name, network.Bits()
+		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if matched != "" {
+		_, err = q.Exec(`INSERT INTO ip_pool(project_id,subnet,ip,status) SELECT ?,?,?,'空闲' WHERE NOT EXISTS (SELECT 1 FROM ip_pool WHERE project_id=? AND ip=?)`, projectID, matched, ip, projectID, ip)
+	}
+	return err
 }
 
 func normalizeSubnetCIDR(cidr, prefix string) string {
@@ -683,7 +698,7 @@ func (s *Store) attachIPOwnersForProject(scope ProjectScope, list []IPEntry) err
 	inClause := strings.Join(holders, ",")
 	apply := func(key, ownerType string, ownerID int64, ownerName, code, user, department, room string) {
 		for _, idx := range keyToIndexes[key] {
-			if list[idx].OwnerType != "" {
+			if list[idx].OwnerType != "" && (list[idx].OwnerType != ownerType || list[idx].OwnerID != ownerID) {
 				continue
 			}
 			list[idx].Status = "在用"
@@ -713,22 +728,20 @@ func (s *Store) attachIPOwnersForProject(scope ProjectScope, list []IPEntry) err
 		return out
 	}
 
-	// 业务系统优先于承载设备显示；同一个服务器地址承载应用时，IPAM 应明确标记为应用占用。
-	rows, err := s.db.Query(`SELECT app.id, IFNULL(app.app_name,''), IFNULL(app.owner,''), IFNULL(srv.asset_code,''), IFNULL(srv.location,''), IFNULL(srv.biz_ip,''), IFNULL(srv.mgmt_ip,'')
-		FROM server_apps app JOIN servers srv ON srv.id=app.server_id AND srv.project_id=app.project_id
-		WHERE app.project_id=? AND (srv.biz_ip IN (`+inClause+`) OR srv.mgmt_ip IN (`+inClause+`))`, queryArgs(2)...)
+	// 应用使用设备地址只增加使用关系，不改变地址的设备归属。
+	rows, err := s.db.Query(`SELECT id,app_name,service_ip FROM server_apps WHERE project_id=? AND service_ip IN (`+inClause+`)`, queryArgs(1)...)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var id int64
-		var name, user, code, room, bizIP, mgmtIP string
-		if err := rows.Scan(&id, &name, &user, &code, &room, &bizIP, &mgmtIP); err != nil {
+		var name, serviceIP string
+		if err := rows.Scan(&id, &name, &serviceIP); err != nil {
 			rows.Close()
 			return err
 		}
-		for _, key := range []string{bizIP, mgmtIP} {
-			apply(key, "application", id, name, code, user, "", room)
+		for _, idx := range keyToIndexes[serviceIP] {
+			list[idx].Applications = append(list[idx].Applications, ServerApp{ID: id, AppName: name, ServiceIP: serviceIP})
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -970,6 +983,9 @@ func (s *Store) UpdateIPEntryForProject(scope ProjectScope, e *IPEntry) error {
 	if (isIPUsedStatus(cur.Status) || cur.OwnerType != "") && !isIPUsedStatus(e.Status) {
 		return fmt.Errorf("IP %s 已被占用，请先释放", cur.IP)
 	}
+	if (isIPUsedStatus(cur.Status) || cur.OwnerType != "") && e.IP != cur.IP {
+		return fmt.Errorf("IP %s 已被占用，请从资产编辑或 IPAM 分配替换地址", cur.IP)
+	}
 	_, err = s.db.Exec(`UPDATE ip_pool SET subnet=?, ip=?, department=?, room=?, account=?, status=?, remark=?,owner_type=?,owner_id=?,owner_name=?
 		WHERE id=? AND project_id=?`, e.Subnet, e.IP, e.Department, e.Room, e.Account, e.Status, e.Remark, e.OwnerType, e.OwnerID, e.OwnerName, e.ID, scope.ProjectID)
 	return err
@@ -1013,13 +1029,7 @@ func (s *Store) AllocateIPToAsset(id, assetID int64, field, remark string) error
 
 func (s *Store) AllocateIPToOwnerForProject(scope ProjectScope, id int64, ownerType string, ownerID int64, field, remark string) error {
 	if ownerType == "terminal" || ownerType == "" {
-		if err := s.AllocateIPToAssetForProject(scope, id, ownerID, field, remark); err != nil {
-			return err
-		}
-		var name string
-		_ = s.db.QueryRow(`SELECT COALESCE(NULLIF(asset_code,''),NULLIF(device_type,''),'终端资产') FROM assets WHERE project_id=? AND id=?`, scope.ProjectID, ownerID).Scan(&name)
-		_, err := s.db.Exec(`UPDATE ip_pool SET owner_type='terminal',owner_id=?,owner_name=? WHERE project_id=? AND id=?`, ownerID, name, scope.ProjectID, id)
-		return err
+		return s.AllocateIPToAssetForProject(scope, id, ownerID, field, remark)
 	}
 	if ownerID <= 0 {
 		return errors.New("关联对象 ID 无效")
@@ -1031,7 +1041,7 @@ func (s *Store) AllocateIPToOwnerForProject(scope ProjectScope, id int64, ownerT
 	if err := s.ensureAssignableIPForProject(scope, cur.Subnet, cur.IP); err != nil {
 		return err
 	}
-	if cur.Status == "在用" {
+	if cur.Status == "在用" && !(cur.OwnerType == ownerType && cur.OwnerID == ownerID) {
 		return fmt.Errorf("IP %s 已被占用，请先释放", cur.IP)
 	}
 	tx, err := s.db.Begin()
@@ -1039,7 +1049,7 @@ func (s *Store) AllocateIPToOwnerForProject(scope ProjectScope, id int64, ownerT
 		return err
 	}
 	defer tx.Rollback()
-	var name, account, department, room string
+	var name, account, department, room, oldIP string
 	switch ownerType {
 	case "infrastructure":
 		if field == "" {
@@ -1052,6 +1062,9 @@ func (s *Store) AllocateIPToOwnerForProject(scope ProjectScope, id int64, ownerT
 			return fmt.Errorf("基础设施不存在")
 		}
 		column := field
+		if err := tx.QueryRow(`SELECT IFNULL(`+column+`,'') FROM cmdb_assets WHERE project_id=? AND id=?`, scope.ProjectID, ownerID).Scan(&oldIP); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`UPDATE cmdb_assets SET `+column+`=?,manage_ip=CASE WHEN ?='mgmt_ip' THEN ? ELSE manage_ip END,updated_at=? WHERE project_id=? AND id=?`, cur.IP, field, cur.IP, time.Now().Format("2006-01-02 15:04:05"), scope.ProjectID, ownerID); err != nil {
 			return err
 		}
@@ -1059,8 +1072,41 @@ func (s *Store) AllocateIPToOwnerForProject(scope ProjectScope, id int64, ownerT
 		if err := tx.QueryRow(`SELECT app_name,IFNULL(owner,'') FROM server_apps WHERE project_id=? AND id=?`, scope.ProjectID, ownerID).Scan(&name, &account); err != nil {
 			return fmt.Errorf("业务系统不存在")
 		}
+		if err := tx.QueryRow(`SELECT IFNULL(service_ip,'') FROM server_apps WHERE project_id=? AND id=?`, scope.ProjectID, ownerID).Scan(&oldIP); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE server_apps SET service_ip=?,updated_at=? WHERE project_id=? AND id=?`, cur.IP, time.Now().Format("2006-01-02 15:04:05"), scope.ProjectID, ownerID); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("不支持的占用对象类型: %s", ownerType)
+	}
+	if oldIP != "" && oldIP != cur.IP {
+		if ownerType == "infrastructure" {
+			if err := validateHostApplicationAddresses(tx, scope.ProjectID, ownerID); err != nil {
+				return err
+			}
+			var remaining int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM cmdb_assets WHERE project_id=? AND id=? AND (mgmt_ip=? OR manage_ip=? OR biz_ip=? OR public_ip=?)`, scope.ProjectID, ownerID, oldIP, oldIP, oldIP, oldIP).Scan(&remaining); err != nil {
+				return err
+			}
+			if remaining == 0 {
+				if err := updateFollowingAddress(tx, scope.ProjectID, ownerType, ownerID, oldIP, cur.IP); err != nil {
+					return err
+				}
+				if err := rejectIPApplicationDependencies(tx, scope.ProjectID, oldIP); err != nil {
+					return err
+				}
+				if err := rejectIPInterfaceDependencies(tx, scope.ProjectID, oldIP); err != nil {
+					return err
+				}
+			}
+		} else if err := updateFollowingAddress(tx, scope.ProjectID, ownerType, ownerID, oldIP, cur.IP); err != nil {
+			return err
+		}
+		if err := releaseUnreferencedIPInTx(tx, scope.ProjectID, oldIP); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec(`UPDATE ip_pool SET status='在用',department=?,account=?,room=?,remark=?,owner_type=?,owner_id=?,owner_name=? WHERE project_id=? AND id=?`, department, account, room, remark, ownerType, ownerID, name, scope.ProjectID, id); err != nil {
 		return err
@@ -1125,11 +1171,14 @@ func (s *Store) AllocateIPToAssetForProject(scope ProjectScope, id, assetID int6
 		return err
 	}
 	if oldIP != "" && oldIP != entry.IP {
+		if err := updateFollowingAddress(tx, scope.ProjectID, "terminal", assetID, oldIP, entry.IP); err != nil {
+			return err
+		}
 		if err := releaseUnreferencedIPInTx(tx, scope.ProjectID, oldIP); err != nil {
 			return err
 		}
 	}
-	if _, err := tx.Exec(`UPDATE ip_pool SET status='在用',department=?,account=?,room=?,remark=? WHERE id=? AND project_id=?`, asset.Department, asset.UserName, asset.Room, remark, id, scope.ProjectID); err != nil {
+	if _, err := tx.Exec(`UPDATE ip_pool SET status='在用',department=?,account=?,room=?,remark=?,owner_type='terminal',owner_id=?,owner_name=(SELECT COALESCE(NULLIF(asset_code,''),NULLIF(device_type,''),'终端资产') FROM assets WHERE id=? AND project_id=?) WHERE id=? AND project_id=?`, asset.Department, asset.UserName, asset.Room, remark, assetID, assetID, scope.ProjectID, id, scope.ProjectID); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -1157,6 +1206,20 @@ func (s *Store) ReleaseIPForProject(scope ProjectScope, id int64) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := rejectIPFollowingDependencies(tx, scope.ProjectID, cur.IP); err != nil {
+		return err
+	}
+	if cur.OwnerType == "application" && cur.OwnerID > 0 {
+		if _, err := tx.Exec(`UPDATE server_apps SET service_ip='' WHERE project_id=? AND id=? AND service_ip=?`, scope.ProjectID, cur.OwnerID, cur.IP); err != nil {
+			return err
+		}
+	}
+	if err := rejectIPApplicationDependencies(tx, scope.ProjectID, cur.IP); err != nil {
+		return err
+	}
+	if err := rejectIPInterfaceDependencies(tx, scope.ProjectID, cur.IP); err != nil {
+		return err
+	}
 	if cur.OwnerType == "infrastructure" && cur.OwnerID > 0 {
 		if _, err := tx.Exec(`UPDATE cmdb_assets SET mgmt_ip=CASE WHEN mgmt_ip=? THEN '' ELSE mgmt_ip END,manage_ip=CASE WHEN manage_ip=? THEN '' ELSE manage_ip END,biz_ip=CASE WHEN biz_ip=? THEN '' ELSE biz_ip END,public_ip=CASE WHEN public_ip=? THEN '' ELSE public_ip END,updated_at=? WHERE project_id=? AND id=?`, cur.IP, cur.IP, cur.IP, cur.IP, time.Now().Format("2006-01-02 15:04:05"), scope.ProjectID, cur.OwnerID); err != nil {
 			return err
@@ -1183,19 +1246,64 @@ func releaseUnreferencedIPInTx(tx *sql.Tx, projectID int64, ip string) error {
 		(SELECT COUNT(*) FROM assets WHERE project_id=? AND (ip=? OR terminal_ip=?)) +
 		(SELECT COUNT(*) FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL AND (mgmt_ip=? OR manage_ip=? OR biz_ip=? OR public_ip=?)) +
 		(SELECT COUNT(*) FROM cmdb_asset_interfaces WHERE project_id=? AND ip=?) +
+		(SELECT COUNT(*) FROM server_apps WHERE project_id=? AND service_ip=?) +
 		(SELECT COUNT(*) FROM servers WHERE project_id=? AND (mgmt_ip=? OR biz_ip=?))`,
 		projectID, ip, ip,
 		projectID, ip, ip, ip, ip,
+		projectID, ip,
 		projectID, ip,
 		projectID, ip, ip,
 	).Scan(&references); err != nil {
 		return err
 	}
 	if references == 0 {
+		if err := rejectIPInterfaceDependencies(tx, projectID, ip); err != nil {
+			return err
+		}
 		_, err := tx.Exec(`UPDATE ip_pool SET status='空闲',department='',account='',room='',remark='',owner_type='',owner_id=0,owner_name='' WHERE project_id=? AND ip=?`, projectID, ip)
 		return err
 	}
 	return nil
+}
+
+func rejectIPApplicationDependencies(tx *sql.Tx, projectID int64, ip string) error {
+	var names sql.NullString
+	if err := tx.QueryRow(`SELECT group_concat(app_name,'、') FROM server_apps WHERE project_id=? AND service_ip=? AND deleted_at IS NULL`, projectID, ip).Scan(&names); err != nil {
+		return err
+	}
+	if names.Valid {
+		return fmt.Errorf("IP %s 仍被业务系统 %s 使用，请先处理依赖", ip, names.String)
+	}
+	return nil
+}
+
+func rejectIPInterfaceDependencies(tx *sql.Tx, projectID int64, ip string) error {
+	rows, err := tx.Query(`SELECT name,ip,IFNULL(additional_ips_json,'[]') FROM cmdb_asset_interfaces WHERE project_id=?`, projectID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, primary, raw string
+		if err := rows.Scan(&name, &primary, &raw); err != nil {
+			return err
+		}
+		var addresses []cmdbInterfaceAddress
+		if strings.TrimSpace(raw) != "" {
+			if err := json.Unmarshal([]byte(raw), &addresses); err != nil {
+				return fmt.Errorf("接口 %s 附加地址格式无效: %w", name, err)
+			}
+		}
+		if primary == ip {
+			return fmt.Errorf("IP %s 仍被接口 %s 使用，请先处理依赖", ip, name)
+		}
+		for _, address := range addresses {
+			if address.IP == ip {
+				return fmt.Errorf("IP %s 仍被接口 %s 使用，请先处理依赖", ip, name)
+			}
+		}
+	}
+	return rows.Err()
 }
 
 // ipOwner 返回占用该 IP 的资产编号与使用人（没有则返回空串）。

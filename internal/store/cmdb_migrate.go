@@ -15,6 +15,9 @@ type schemaExecutor interface {
 // MigrateCMDBFullSchema 负责检查并平滑补齐 CMDB 所需的所有扩展列与新建表。
 // 支持在全新数据库以及已有旧版本数据库上安全幂等执行。
 func MigrateCMDBFullSchema(db *sql.DB) error {
+	if err := addMissingColumns(db, "cmdb_netcatty_links", map[string]string{"follow_asset_ip": "INTEGER NOT NULL DEFAULT 0"}); err != nil {
+		return err
+	}
 	if err := addMissingColumns(db, "cmdb_device_categories", map[string]string{
 		"asset_scope": "TEXT NOT NULL DEFAULT 'infrastructure'",
 	}); err != nil {

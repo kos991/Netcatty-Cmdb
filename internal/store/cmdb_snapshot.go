@@ -619,7 +619,7 @@ type snapshotReferenceIndex map[string]map[int64]string
 var snapshotStaticReferences = map[string]map[string]string{
 	"asset_logs":                  {"asset_id": "assets"},
 	"assets":                      {"group_id": "cmdb_groups"},
-	"server_apps":                 {"server_id": "servers", "group_id": "cmdb_groups"},
+	"server_apps":                 {"server_id": "servers", "cmdb_asset_id": "cmdb_assets", "group_id": "cmdb_groups"},
 	"cmdb_orgs":                   {"parent_id": "cmdb_orgs"},
 	"cmdb_groups":                 {"parent_id": "cmdb_groups"},
 	"cmdb_device_categories":      {"parent_id": "cmdb_device_categories"},

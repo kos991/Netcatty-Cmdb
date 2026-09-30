@@ -13,6 +13,15 @@ function fixture() {
   return { state, original, ...createNetcattyVaultActions(actions, () => state) }
 }
 
+test('跟随地址只更新指定原生主机且保留完整认证与其他配置', async () => {
+  const f = fixture()
+  const other = { id: 'nat', hostname: 'nat.example.test' }
+  f.state.hosts.push(other)
+  await f.updateHostAddress('existing', '192.0.2.20')
+  assert.deepEqual(f.state.hosts[0], { ...f.original, hostname: '192.0.2.20' })
+  assert.strictEqual(f.state.hosts[1], other)
+})
+
 test('资产内创建主机保留现有主机全部配置，使用最新主机集合追加', async () => {
   const f = fixture()
   const created = await f.createHost({ label: '交换机', hostname: '192.0.2.2', credentialId: 'account', protocol: 'telnet', port: 23 })

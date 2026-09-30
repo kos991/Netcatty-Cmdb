@@ -211,6 +211,7 @@ func (s *Store) InitSchema() error {
 		return fmt.Errorf("migrate ip_pool owner columns: %w", err)
 	}
 	serverAppColumns := map[string]string{
+		"service_ip":    "TEXT NOT NULL DEFAULT ''",
 		"server_id":     "INTEGER",
 		"cmdb_asset_id": "INTEGER DEFAULT 0",
 		"app_name":      "TEXT",

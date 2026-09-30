@@ -147,3 +147,9 @@ test('管理 IP 始终由主接口派生且没有主接口时清空', () => {
   assert.equal(managementIPFromInterfaces(interfaces), '10.20.30.2')
   assert.equal(managementIPFromInterfaces([{ name: '业务口', ip: '10.20.30.8', is_primary: 0 }]), '')
 })
+import * as businessModel from './infrastructureEditorModel.js'
+
+test('业务系统只能选择真实业务用途，管理地址不作为候选，附加业务地址可共用', () => {
+  assert.deepEqual(businessModel.businessAddressOptions({ mgmt_ip: '192.0.2.1', interfaces: [{ name: 'eth0', ip: '192.0.2.1', additional_ips_json: '[{"ip":"192.0.2.1","purpose":"management"},{"ip":"192.0.2.2","purpose":["business","out_of_band"]}]' }] }), [{ value: '192.0.2.2', label: '192.0.2.2 · eth0' }])
+  assert.deepEqual(businessModel.businessAddressOptions({ mgmt_ip: '192.0.2.1' }), [])
+})

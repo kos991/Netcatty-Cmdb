@@ -17,6 +17,7 @@ import { AssetPanel, AssetPanelFields, AssetPanelSave, AssetPanelSection } from 
 import OperatingSystemCell from './OperatingSystemCell'
 import { buildLinkedHostByAssetID, operatingSystemTypeFromDetectedHost } from './deviceWorkspaceModel'
 import { useNetcattyDirectory } from './NetcattyDirectory'
+import { syncFollowingNetcattyHosts } from './NetcattyConnection'
 
 const loadDirectory = async () => {
   const [people, statuses, categories, groups, meta] = await Promise.all([allPages(api.persons), api.config('statuses'), api.taxonomy('terminal-categories'), api.taxonomy('groups'), api.meta()])
@@ -35,9 +36,10 @@ export function LogTimeline({ logs = [] }) {
 
 const terminalOperatingSystemTypes = ['Windows 11', 'Windows 10', 'Windows', '银河麒麟', '统信 UOS', 'openEuler', '龙蜥 Anolis OS', '中科方德', 'Ubuntu', 'Debian', 'CentOS', 'Rocky Linux', 'Red Hat Enterprise Linux', 'AlmaLinux', 'Linux', 'Unix', '其他', '未知']
 
-function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged }) {
+function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged, onNavigate }) {
   const loader = useCallback(async () => {
-    return api.asset(id)
+    const [detail, relations] = await Promise.all([api.asset(id), api.assetRelations(id)])
+    return { ...detail, relations }
   }, [id])
   const query = useQuery(loader)
   if (query.error) return <AssetPanel open onClose={onClose} title="终端资产"><ErrorBanner message={query.error} onRetry={query.reload} /></AssetPanel>
@@ -48,8 +50,9 @@ function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged }) {
   return <AssetPanel open onClose={onClose} title={asset.asset_code || `终端资产 #${id}`} subtitle={asset.device_type} status={asset.status} icon={Monitor} onEdit={() => onEdit('edit', asset)}>
     <AssetPanelSection title="使用与位置" icon={UserRound} action={<div className="flex gap-1"><ActionIcon label="调换使用人" onClick={() => onEdit('transfer', asset)}><ArrowLeftRight size={15} /></ActionIcon><ActionIcon label="维修换件" onClick={() => onEdit('maintenance', asset)}><Wrench size={15} /></ActionIcon></div>}><AssetPanelFields items={[["当前使用人", asset.user_name], ["部门", asset.department], ["房间 / 位置", asset.room]]} /></AssetPanelSection>
     <AssetPanelSection title="设备与网络" icon={Network}><AssetPanelFields items={[["资产编码", asset.asset_code], ["设备类型", asset.device_type], ["所属分组", asset.group_name], [serial.primaryLabel, serial.primaryValue], ...(serial.secondaryLabel ? [[serial.secondaryLabel, serial.secondaryValue]] : []), ["操作系统", <OperatingSystemCell asset={asset} host={host} />], [cloud ? '业务/虚拟机 IP' : '设备 IP', asset.ip], ...(cloud ? [['终端物理 IP', asset.terminal_ip]] : []), ["IP 网络类型", asset.net_type], ["备注", asset.remark], ["建档时间", asset.created_at]]} /></AssetPanelSection>
+    <AssetPanelSection title="IPAM 地址" icon={Network}>{[asset.ip, ...(cloud ? [asset.terminal_ip] : [])].filter(Boolean).map(ip => { const entry = query.data.relations?.ips?.find(item => item.ip === ip); return <p key={ip} className="text-xs">{ip} · {entry ? `${entry.subnet} / ${entry.status}` : '未纳入 IPAM'}{entry ? <Button variant="link" size="sm" onClick={() => onNavigate?.({ tableKey: 'ip_pool', id: entry.id, title: entry.ip, subtitle: entry.subnet })}>查看 IPAM</Button> : null}</p> })}</AssetPanelSection>
     <AssetPanelSection title="设备照片" icon={ImageIcon}><DeviceImages kind="terminal" id={id} /></AssetPanelSection>
-    <AssetPanelSection title="凭证中心" icon={Network}><NetcattyLinks assetType="terminal" assetId={id} embedded onChanged={onNetcattyChanged} /></AssetPanelSection>
+    <AssetPanelSection title="凭证中心" icon={Network}><NetcattyLinks asset={{ ...asset, name: asset.asset_code }} assetType="terminal" assetId={id} embedded onChanged={onNetcattyChanged} /></AssetPanelSection>
     <AssetPanelSection title="运维履历" icon={History}><LogTimeline logs={logs || []} /></AssetPanelSection>
   </AssetPanel>
 }
@@ -67,7 +70,7 @@ function TerminalRowActions({ record, compact, onDetail, onEdit, onTransfer, onM
   </Dropdown>
 }
 
-export default function TerminalAssets({ keyword = '', focusTarget, command, leadingControl, onPanelOpenChange }) {
+export default function TerminalAssets({ keyword = '', focusTarget, command, leadingControl, onPanelOpenChange, onNavigate }) {
   const [filters, setFilters] = useState({ device_type: '', group_id: '', dept: '', status: '', include_archived: '' })
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -81,7 +84,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
   useEffect(() => { onPanelOpenChange?.(!!detailId || !!editor) }, [detailId, editor, onPanelOpenChange])
   const handledCommandId = useRef(null)
   const action = useAction()
-  const { hosts: netcattyHosts } = useNetcattyDirectory()
+  const { hosts: netcattyHosts, updateHostAddress } = useNetcattyDirectory()
   const netcatty = useNetcattyConnectionEditor('terminal')
   const beginNetcattyConnection = netcatty.begin
   const directory = useDirectory(loadDirectory)
@@ -169,9 +172,11 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
       const person = d.people.find((p) => p.id === values.to_person_id)
       if (!person) throw new Error('请选择有效的新使用人')
       await api.transferAsset(editor.record.id, { ...values, to_user: person.name, to_department: person.department })
+      await syncFollowingNetcattyHosts(api, { assetType: 'terminal', assetId: editor.record.id, hosts: netcattyHosts, updateHostAddress })
     } else if (editor.mode === 'maintenance') await api.maintainAsset(editor.record.id, values)
     else {
       const result = editor.record.id ? (await api.updateAsset(editor.record.id, normalizeAsset(values)), { id: editor.record.id }) : await api.createAsset(normalizeAsset(values))
+      if (!editor.record.id) setEditor(current => ({ ...current, record: { ...values, id: result.id } }))
       await netcatty.persist(result.id)
     }
     setEditor(null); query.reload(); linkQuery.reload(); directoryChanged(); setDetailRevision((x) => x + 1)
@@ -206,7 +211,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     {(query.error || directory.error || linkQuery.error || autoDetectError) && <ErrorBanner message={query.error || directory.error || linkQuery.error || autoDetectError} onRetry={() => { setAutoDetectError(''); query.reload(); directory.reload(); linkQuery.reload() }} />}
     <DataTable columns={visibleColumns} compact={density !== 'wide'} rows={query.error ? [] : query.data?.list || []} loading={query.loading} />
     <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(p, s) => { setPage(p); setPageSize(s) }} />
-    {detailId && <AssetDetails key={`${detailId}-${detailRevision}`} id={detailId} host={linkedHostByAssetID.get(Number(detailId))} onClose={() => setDetailId(null)} onEdit={open} onNetcattyChanged={linkQuery.reload} />}
+    {detailId && <AssetDetails onNavigate={onNavigate} key={`${detailId}-${detailRevision}`} id={detailId} host={linkedHostByAssetID.get(Number(detailId))} onClose={() => setDetailId(null)} onEdit={open} onNetcattyChanged={linkQuery.reload} />}
     {editor && <AssetPanel open onClose={() => setEditor(null)} title={editor.mode === 'transfer' ? '调换使用人' : editor.mode === 'maintenance' ? '维修换件' : editor.record.id ? '编辑终端资产' : '新增终端资产'} subtitle={editor.record.asset_code} icon={Monitor} footer={<AssetPanelSave onCancel={() => setEditor(null)} onSave={save} busy={action.busy || netcatty.loading} />}>
       <AssetPanelSection title={editor.mode === 'transfer' ? '交接信息' : editor.mode === 'maintenance' ? '维修记录' : '设备档案'} icon={Monitor}><Fields fields={fields} value={values} onChange={setValues} /></AssetPanelSection>
       {editor.mode === 'edit' ? <AssetPanelSection title="凭证中心" icon={Network}><NetcattyConnectionFields asset={{ name: values.asset_code, ip: values.ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection> : null}

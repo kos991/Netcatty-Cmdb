@@ -116,6 +116,17 @@ export function networkAddressRows(asset = {}) {
   return [...rows.values()]
 }
 
+export function businessAddressOptions(asset = {}) {
+  const addresses = new Map()
+  if (asset.biz_ip) addresses.set(asset.biz_ip, { value: asset.biz_ip, label: asset.biz_ip })
+  for (const iface of asset.interfaces || []) {
+    for (const address of additionalEditorRows(iface.additional_ips_json, iface.name)) {
+      if (address.purpose === 'business' && address.ip) addresses.set(address.ip, { value: address.ip, label: `${address.ip} · ${iface.name || iface.if_name || '接口'}` })
+    }
+  }
+  return [...addresses.values()]
+}
+
 export async function saveInfrastructureDraftPhotos(id, draft = {}, saveImage) {
   for (const [side, label] of [['front', '正面'], ['back', '背面']]) {
     const key = `${side}_image`

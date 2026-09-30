@@ -209,7 +209,7 @@ func (s *Store) CommitCmdbImportForProject(scope ProjectScope, r io.Reader) (*Cm
 		return nil, err
 	}
 	for _, item := range items {
-		if _, err := s.InsertCmdbAssetForProject(scope, item); err != nil {
+		if _, err := s.CreateCmdbAssetManualForProject(scope, item); err != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("「%s」写入失败：%v", item.Name, err))
 			continue
 		}

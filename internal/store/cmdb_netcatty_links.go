@@ -28,6 +28,7 @@ type CmdbNetcattyLink struct {
 	Address        string `json:"address"`
 	Port           int    `json:"port"`
 	IsPrimary      bool   `json:"is_primary"`
+	FollowAssetIP  bool   `json:"follow_asset_ip"`
 	State          string `json:"state"`
 	Revision       int64  `json:"revision"`
 	CreatedAt      string `json:"created_at"`
@@ -36,6 +37,44 @@ type CmdbNetcattyLink struct {
 
 type netcattyLinkQueryRower interface {
 	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+// 关联地址保存期望目标；原生主机保存由现有桌面桥接完成，失败时保留可重试差异。
+func updateFollowingAddress(tx *sql.Tx, projectID int64, assetType string, assetID int64, oldIP, newIP string) error {
+	if oldIP == "" || oldIP == newIP {
+		return nil
+	}
+	var count int
+	var names sql.NullString
+	if err := tx.QueryRow(`SELECT COUNT(*),group_concat(COALESCE(NULLIF(host_name,''),host_id),'、') FROM cmdb_netcatty_links WHERE project_id=? AND asset_type=? AND asset_id=? AND address=? AND follow_asset_ip=1 AND deleted_at IS NULL`, projectID, assetType, assetID, oldIP).Scan(&count, &names); err != nil {
+		return err
+	}
+	if count == 0 {
+		return nil
+	}
+	if newIP == "" {
+		return fmt.Errorf("IP %s 仍有跟随连接 %s，请先处理依赖", oldIP, names.String)
+	}
+	var shared int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM cmdb_netcatty_links a JOIN cmdb_netcatty_links b ON b.host_id=a.host_id AND b.id<>a.id AND b.deleted_at IS NULL WHERE a.project_id=? AND a.asset_type=? AND a.asset_id=? AND a.address=? AND a.follow_asset_ip=1 AND a.deleted_at IS NULL`, projectID, assetType, assetID, oldIP).Scan(&shared); err != nil {
+		return err
+	}
+	if shared > 0 {
+		return fmt.Errorf("跟随连接 %s 的主机还被其他资产引用，请先解除共享或新建独立主机", names.String)
+	}
+	_, err := tx.Exec(`UPDATE cmdb_netcatty_links SET address=?,updated_at=? WHERE project_id=? AND asset_type=? AND asset_id=? AND address=? AND follow_asset_ip=1 AND deleted_at IS NULL`, newIP, time.Now().UTC().Format(time.RFC3339Nano), projectID, assetType, assetID, oldIP)
+	return err
+}
+
+func rejectIPFollowingDependencies(tx *sql.Tx, projectID int64, ip string) error {
+	var names sql.NullString
+	if err := tx.QueryRow(`SELECT group_concat(COALESCE(NULLIF(host_name,''),host_id),'、') FROM cmdb_netcatty_links WHERE project_id=? AND address=? AND follow_asset_ip=1 AND deleted_at IS NULL`, projectID, ip).Scan(&names); err != nil {
+		return err
+	}
+	if names.Valid {
+		return fmt.Errorf("IP %s 仍有跟随连接 %s，请先处理依赖", ip, names.String)
+	}
+	return nil
 }
 
 func normalizeNetcattyLinkState(value string) (string, error) {
@@ -99,8 +138,8 @@ func (s *Store) SaveCmdbNetcattyLinkForProject(scope ProjectScope, link *CmdbNet
 		primary = 1
 	}
 	if link.ID > 0 {
-		res, err := s.db.Exec(`UPDATE cmdb_netcatty_links SET asset_type=?,asset_id=?,asset_sync_id=?,asset_name=?,host_id=?,host_name=?,credential_id=?,credential_name=?,protocol=?,address=?,port=?,is_primary=?,state=?,revision=revision+1,updated_at=? WHERE id=? AND project_id=? AND deleted_at IS NULL`,
-			link.AssetType, link.AssetID, assetSyncID, assetName, link.HostID, strings.TrimSpace(link.HostName), strings.TrimSpace(link.CredentialID), strings.TrimSpace(link.CredentialName), strings.TrimSpace(link.Protocol), strings.TrimSpace(link.Address), link.Port, primary, state, now, link.ID, scope.ProjectID)
+		res, err := s.db.Exec(`UPDATE cmdb_netcatty_links SET asset_type=?,asset_id=?,asset_sync_id=?,asset_name=?,host_id=?,host_name=?,credential_id=?,credential_name=?,protocol=?,address=?,port=?,is_primary=?,state=?,follow_asset_ip=?,revision=revision+1,updated_at=? WHERE id=? AND project_id=? AND deleted_at IS NULL`,
+			link.AssetType, link.AssetID, assetSyncID, assetName, link.HostID, strings.TrimSpace(link.HostName), strings.TrimSpace(link.CredentialID), strings.TrimSpace(link.CredentialName), strings.TrimSpace(link.Protocol), strings.TrimSpace(link.Address), link.Port, primary, state, link.FollowAssetIP, now, link.ID, scope.ProjectID)
 		if err != nil {
 			return 0, classifyNetcattyLinkError(err)
 		}
@@ -109,8 +148,8 @@ func (s *Store) SaveCmdbNetcattyLinkForProject(scope ProjectScope, link *CmdbNet
 		}
 		return link.ID, nil
 	}
-	res, err := s.db.Exec(`INSERT INTO cmdb_netcatty_links(project_id,sync_id,asset_type,asset_id,asset_sync_id,asset_name,host_id,host_name,credential_id,credential_name,protocol,address,port,is_primary,state,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
-		scope.ProjectID, uuid.NewString(), link.AssetType, link.AssetID, assetSyncID, assetName, link.HostID, strings.TrimSpace(link.HostName), strings.TrimSpace(link.CredentialID), strings.TrimSpace(link.CredentialName), strings.TrimSpace(link.Protocol), strings.TrimSpace(link.Address), link.Port, primary, state, now, now)
+	res, err := s.db.Exec(`INSERT INTO cmdb_netcatty_links(project_id,sync_id,asset_type,asset_id,asset_sync_id,asset_name,host_id,host_name,credential_id,credential_name,protocol,address,port,is_primary,state,follow_asset_ip,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`,
+		scope.ProjectID, uuid.NewString(), link.AssetType, link.AssetID, assetSyncID, assetName, link.HostID, strings.TrimSpace(link.HostName), strings.TrimSpace(link.CredentialID), strings.TrimSpace(link.CredentialName), strings.TrimSpace(link.Protocol), strings.TrimSpace(link.Address), link.Port, primary, state, link.FollowAssetIP, now, now)
 	if err != nil {
 		return 0, classifyNetcattyLinkError(err)
 	}
@@ -140,7 +179,7 @@ func (s *Store) ListCmdbNetcattyLinksForProject(scope ProjectScope, assetType st
 		where += ` AND asset_id=?`
 		args = append(args, assetID)
 	}
-	rows, err := s.db.Query(`SELECT id,project_id,sync_id,asset_type,asset_id,asset_sync_id,asset_name,host_id,host_name,credential_id,credential_name,protocol,address,port,is_primary,state,revision,created_at,updated_at FROM cmdb_netcatty_links WHERE `+where+` ORDER BY is_primary DESC,id`, args...)
+	rows, err := s.db.Query(`SELECT id,project_id,sync_id,asset_type,asset_id,asset_sync_id,asset_name,host_id,host_name,credential_id,credential_name,protocol,address,port,is_primary,state,revision,created_at,updated_at,follow_asset_ip FROM cmdb_netcatty_links WHERE `+where+` ORDER BY is_primary DESC,id`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +188,7 @@ func (s *Store) ListCmdbNetcattyLinksForProject(scope ProjectScope, assetType st
 	for rows.Next() {
 		var item CmdbNetcattyLink
 		var primary int
-		if err := rows.Scan(&item.ID, &item.ProjectID, &item.SyncID, &item.AssetType, &item.AssetID, &item.AssetSyncID, &item.AssetName, &item.HostID, &item.HostName, &item.CredentialID, &item.CredentialName, &item.Protocol, &item.Address, &item.Port, &primary, &item.State, &item.Revision, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ProjectID, &item.SyncID, &item.AssetType, &item.AssetID, &item.AssetSyncID, &item.AssetName, &item.HostID, &item.HostName, &item.CredentialID, &item.CredentialName, &item.Protocol, &item.Address, &item.Port, &primary, &item.State, &item.Revision, &item.CreatedAt, &item.UpdatedAt, &item.FollowAssetIP); err != nil {
 			return nil, err
 		}
 		item.IsPrimary = primary != 0

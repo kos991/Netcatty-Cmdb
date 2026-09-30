@@ -11,6 +11,8 @@ import { ipAddressPresentation, isCloudDevice } from './state'
 import { ActionIcon, DataTable, DefinitionList, DetailSheet, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, Toolbar } from './ui'
 import Catalog from './Catalog'
 import ImportDialog from './ImportDialog'
+import { useNetcattyDirectory } from './NetcattyDirectory'
+import { syncFollowingNetcattyHosts } from './NetcattyConnection'
 
 const loadSubnets = async () => (await api.ipSubnets()).list || []
 const loadSummary = () => api.ipSummary()
@@ -42,7 +44,7 @@ function IPDetails({ record, onNavigate }) {
   const presentation = ipAddressPresentation(record)
   return <div className="space-y-4"><DefinitionList items={[
     ['IP 地址', record.ip], ['网段', record.subnet], ['状态', presentation.label], ['占用类型', ownerTypeLabel(record.owner_type)], ['占用对象', record.owner_name || record.asset_code], ['部门', record.department], ['位置', record.room], ['使用人 / 负责人', record.account || record.asset_user], ['备注', record.remark],
-  ]} />{specialIP(record) && <p className="text-xs text-muted-foreground">该地址由网段 CIDR 识别，不可预留或分配。</p>}{target ? <Button variant="outline" size="sm" onClick={() => onNavigate(target)}>查看{ownerTypeLabel(record.owner_type)}</Button> : !specialIP(record) ? <p className="text-xs text-muted-foreground">当前地址未关联资产</p> : null}</div>
+  ]} />{record.applications?.length ? <div className="space-y-1"><p className="text-xs text-muted-foreground">使用此地址的业务系统</p>{record.applications.map(app => <Button key={app.id} variant="link" size="sm" onClick={() => onNavigate({ tableKey: 'server_apps', id: app.id })}>{app.app_name}</Button>)}</div> : null}{specialIP(record) && <p className="text-xs text-muted-foreground">该地址由网段 CIDR 识别，不可预留或分配。</p>}{target ? <Button variant="outline" size="sm" onClick={() => onNavigate(target)}>查看{ownerTypeLabel(record.owner_type)}</Button> : !specialIP(record) ? <p className="text-xs text-muted-foreground">当前地址未关联资产</p> : null}</div>
 }
 
 export default function IPAM({ focusTarget, onNavigate }) {
@@ -68,6 +70,7 @@ export default function IPAM({ focusTarget, onNavigate }) {
   const visualQuery = useQuery(visualLoader)
   const query = view === 'grid' ? visualQuery : listQuery
   const action = useAction()
+  const { hosts, updateHostAddress } = useNetcattyDirectory()
   useEffect(() => {
     if (!subnet && summary.data?.subnets?.length) setSubnet(summary.data.subnets[0].subnet)
   }, [subnet, summary.data])
@@ -154,6 +157,7 @@ export default function IPAM({ focusTarget, onNavigate }) {
         let id = editor.record.id
         if (!id) id = (await api.createIP({ subnet: editor.record.subnet, ip: editor.record.ip, status: '空闲' })).id
         await api.allocateIP(id, { asset_id: values.asset_id, owner_type: values.owner_type, ip_field: values.ip_field, remark: values.remark })
+        await syncFollowingNetcattyHosts(api, { assetType: values.owner_type, assetId: values.asset_id, hosts, updateHostAddress })
       } else if (editor.mode === 'reserve') {
         if (editor.record.id) await api.updateIP(editor.record.id, { ...editor.record, status: '保留', remark: values.remark })
         else await api.createIP({ subnet: editor.record.subnet, ip: editor.record.ip, status: '保留', remark: values.remark })
