@@ -7,7 +7,7 @@ import { AsidePanel, AsidePanelFooter } from '@/components/ui/aside-panel'
 import { Card } from '@/components/ui/card'
 import { toast } from '@/components/ui/toast'
 import { choices, Fields, textFields, validateFields } from './Fields'
-import { parseAdditionalIPs, prepareInfrastructureEditorValues, resolveInfrastructureModelID } from './infrastructureEditorModel'
+import { additionalEditorRows, prepareInfrastructureEditorValues, resolveInfrastructureModelID } from './infrastructureEditorModel'
 import { customFieldDefinitions, infrastructureDeviceTypeOptions, infrastructureFieldProfile, supportsInfrastructurePhotos } from './state'
 import { Field, SelectControl } from './ui'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
@@ -24,19 +24,18 @@ function Section({ sectionKey, title, sectionRefs, children }) {
 
 function NetworkInterfaces({ interfaces, zones, onChange }) {
   const update = (index, patch) => onChange(interfaces.map((item, current) => current === index ? { ...item, ...patch } : item))
-  const add = () => onChange([...interfaces, { name: `eth${interfaces.length}`, ip: '', purpose: 'business', additional_ips_json: '[]', mask: '', gateway: '', mac: '', network_zone: '未分类', is_primary: 0, remark: '' }])
+  const add = () => onChange([...interfaces, { name: `eth${interfaces.length}`, ip: '', additional_ips_json: '[]', mask: '', gateway: '', mac: '', network_zone: '未分类', is_primary: 0, remark: '' }])
   const remove = (index) => onChange(interfaces.filter((_, current) => current !== index))
   const updateAdditional = (index, addresses) => update(index, { additional_ips_json: JSON.stringify(addresses) })
   const purposeOptions = [{ value: 'business', label: '业务' }, { value: 'out_of_band', label: '带外' }]
   return <div className="space-y-3">
     {interfaces.map((item, index) => {
-      const additional = parseAdditionalIPs(item.additional_ips_json)
+      const additional = additionalEditorRows(item.additional_ips_json, item.name || item.if_name || '未命名')
       return <div key={item.id || `new-${index}`} className="border-b border-border/60 pb-4 last:border-b-0">
       <div className="mb-3 flex items-center justify-between gap-3"><span className="text-xs font-medium text-muted-foreground">接口 {index + 1}</span><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="删除接口" onClick={() => remove(index)}><Trash2 size={14} /></Button></div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Field label="接口名称"><Input className="h-9" value={item.name || item.if_name || ''} onChange={(event) => update(index, { name: event.target.value, if_name: event.target.value })} /></Field>
         <Field label="接口 IP（可留空）"><Input className="h-9 font-mono" value={item.ip || ''} onChange={(event) => update(index, { ip: event.target.value })} /></Field>
-        <Field label="接口 IP 用途"><SelectControl className="w-full" value={item.purpose || 'business'} onChange={(purpose) => update(index, { purpose })} options={purposeOptions} /></Field>
         <Field label="网络分区"><SelectControl className="w-full" value={item.network_zone || item.net_zone || ''} onChange={(value) => update(index, { network_zone: value, net_zone: value })} options={choices(zones)} /></Field>
         <Field label="掩码 / 前缀"><Input className="h-9 font-mono" value={item.mask || ''} onChange={(event) => update(index, { mask: event.target.value })} /></Field>
         <Field label="网关"><Input className="h-9 font-mono" value={item.gateway || ''} onChange={(event) => update(index, { gateway: event.target.value })} /></Field>

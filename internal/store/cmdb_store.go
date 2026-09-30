@@ -130,7 +130,6 @@ type CmdbAssetInterface struct {
 	Name              string `json:"name"`
 	IfName            string `json:"if_name"`
 	IP                string `json:"ip"`
-	Purpose           string `json:"purpose"`
 	AdditionalIPsJSON string `json:"additional_ips_json"`
 	Mask              string `json:"mask"`
 	Gateway           string `json:"gateway"`

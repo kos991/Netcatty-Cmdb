@@ -3,7 +3,7 @@ import { PlugZap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api } from './api'
 import { useAction } from './hooks'
-import { connectionFromLinks, connectionTargetMismatch, netcattyLinkStatus, persistNetcattyConnection } from './NetcattyConnection'
+import { connectionForAddress, connectionFromLinks, connectionTargetMismatch, netcattyLinkStatus, persistNetcattyConnection } from './NetcattyConnection'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
 import { useNetcattyDirectory } from './NetcattyDirectory'
 import { quickConnectControlPresentation } from './state'
@@ -22,7 +22,8 @@ export default function InfrastructureQuickConnect({ asset }) {
   const connect = () => action.run(async () => {
     const result = await api.netcattyLinks({ asset_type: 'infrastructure', asset_id: asset.id })
     const links = result.list || []
-    const link = links.find(item => item.is_primary && item.host_id) || links.find(item => item.host_id)
+    const matched = connectionForAddress(selectedAddress, links, hosts, credentials)
+    const link = matched || links.find(item => item.is_primary && item.host_id) || links.find(item => item.host_id)
     const host = hosts.find(item => item.id === link?.host_id)
     if (host && netcattyLinkStatus(link, host, credentials) === 'linked') {
       if (!selectedAddress) {

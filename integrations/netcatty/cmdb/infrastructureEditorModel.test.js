@@ -36,6 +36,28 @@ test('地址清单合并管理与业务用途并保留接口上下文', () => {
   ])
 })
 
+test('主地址与附加地址同 IP 时保留不同用途且只展示一行', () => {
+  const asset = { mgmt_ip: '10.0.0.1', interfaces: [{ id: 7, name: 'eth0', ip: '10.0.0.1', is_primary: 1, additional_ips_json: '[{"ip":"10.0.0.1","purpose":"out_of_band"}]' }] }
+  const saved = infrastructureSavePayload(asset)
+  assert.equal(saved.interfaces[0].additional_ips_json, '[{"ip":"10.0.0.1","purpose":"out_of_band"}]')
+  assert.deepEqual(addressModel.networkAddressRows(saved).map(row => [row.ip, row.purposes]), [['10.0.0.1', ['管理', '带外']]])
+})
+
+test('两条附加地址同 IP 不同用途归并并可编辑', () => {
+  const value = '[{"ip":"10.0.0.2","purpose":"business"},{"ip":"10.0.0.2","purpose":"out_of_band"}]'
+  const saved = infrastructureSavePayload({ interfaces: [{ name: 'eth0', additional_ips_json: value }] })
+  assert.equal(saved.interfaces[0].additional_ips_json, '[{"ip":"10.0.0.2","purpose":["business","out_of_band"]}]')
+  assert.deepEqual(addressModel.additionalEditorRows(saved.interfaces[0].additional_ips_json), [
+    { ip: '10.0.0.2', purpose: 'business' }, { ip: '10.0.0.2', purpose: 'out_of_band' },
+  ])
+  assert.deepEqual(addressModel.networkAddressRows(saved).map(row => [row.ip, row.purposes]), [['10.0.0.2', ['业务', '带外']]])
+})
+
+test('附加地址旧数据无效时解析给出可见的接口错误', () => {
+  assert.throws(() => addressModel.additionalEditorRows('{bad', 'eth0'), /接口 eth0.*附加地址格式无效/)
+  assert.throws(() => addressModel.networkAddressRows({ interfaces: [{ name: 'eth0', additional_ips_json: '{bad' }] }), /接口 eth0.*附加地址格式无效/)
+})
+
 test('新增资产取得 ID 后只上传选中的正反面照片', async () => {
   const saved = []
   await saveInfrastructureDraftPhotos(42, { front_image: 'front-data' }, async (...args) => { saved.push(args) })

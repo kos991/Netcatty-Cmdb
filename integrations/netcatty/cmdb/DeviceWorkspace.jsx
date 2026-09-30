@@ -141,7 +141,7 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
   const primaryHost = hosts.find(host => host.id === primaryLink?.host_id)
   const connections = (detail.netcatty_links || []).map(link => ({ link, host: hosts.find(host => host.id === link.host_id) })).filter(item => item.host)
   const connectAddress = (address) => {
-    const link = connectionForAddress(address, detail.netcatty_links || [], hosts)
+    const link = connectionForAddress(address, detail.netcatty_links || [], hosts, credentials)
     const host = hosts.find(item => item.id === link?.host_id)
     if (!link) {
       const difference = connectionTargetMismatch(address, primaryHost)
@@ -154,6 +154,9 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
   const connect = () => {
     const managementIP = asset.mgmt_ip || asset.manage_ip
     if (!managementIP) { setConnectionWarning('尚未填写管理 IP，请在网络配置中填写后再连接。'); setActiveTab('network'); return }
+    const link = connectionForAddress(managementIP, detail.netcatty_links || [], hosts, credentials)
+    const host = hosts.find(item => item.id === link?.host_id)
+    if (link) { try { assertNetcattyLinkReady(link, host, credentials); setConnectionWarning(''); connectHost(host.id, link.credential_id) } catch (error) { toast.error(error.message); setActiveTab('relations') }; return }
     const difference = connectionTargetMismatch(managementIP, primaryHost)
     if (difference) { setConnectionWarning(`所点管理地址 ${difference.selected} 与默认主机实际目标 ${difference.actual} 不同，未发起连接。`); setActiveTab('network'); return }
     try { assertNetcattyLinkReady(primaryLink, primaryHost, credentials); setConnectionWarning(''); connectHost(primaryHost.id, primaryLink.credential_id) } catch (error) { toast.error(error.message); setActiveTab('relations') }

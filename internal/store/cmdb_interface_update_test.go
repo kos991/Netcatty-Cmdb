@@ -7,14 +7,14 @@ import (
 	"testing"
 )
 
-func TestCmdbInterfaceAddressPurposesSurviveCreateAndEdit(t *testing.T) {
+func TestCmdbInterfaceAdditionalPurposesSurviveCreateAndEdit(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "interface-addresses.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 	var iface CmdbAssetInterface
-	if err := json.Unmarshal([]byte(`{"name":"eth0","ip":"192.0.2.10","purpose":"business","additional_ips_json":"[{\"ip\":\"192.0.2.11\",\"purpose\":\"out_of_band\"}]"}`), &iface); err != nil {
+	if err := json.Unmarshal([]byte(`{"name":"eth0","ip":"192.0.2.10","additional_ips_json":"[{\"ip\":\"192.0.2.11\",\"purpose\":\"out_of_band\"}]"}`), &iface); err != nil {
 		t.Fatal(err)
 	}
 	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "安全设备", MgmtIP: "192.0.2.1", Interfaces: []CmdbAssetInterface{iface}})
@@ -33,7 +33,7 @@ func TestCmdbInterfaceAddressPurposesSurviveCreateAndEdit(t *testing.T) {
 	if err := json.Unmarshal(encoded, &actual); err != nil {
 		t.Fatal(err)
 	}
-	if actual["purpose"] != "business" || actual["additional_ips_json"] != `[{"ip":"192.0.2.11","purpose":"out_of_band"}]` {
+	if _, hasPurpose := actual["purpose"]; hasPurpose || actual["additional_ips_json"] != `[{"ip":"192.0.2.11","purpose":"out_of_band"}]` {
 		t.Fatalf("接口地址未恢复: %s", encoded)
 	}
 	asset.Interfaces = ifaces
@@ -47,6 +47,33 @@ func TestCmdbInterfaceAddressPurposesSurviveCreateAndEdit(t *testing.T) {
 	reencoded, _ := json.Marshal(again[0])
 	if string(reencoded) != string(encoded) {
 		t.Fatalf("二次保存覆盖地址: %s -> %s", encoded, reencoded)
+	}
+}
+
+func TestCmdbInterfaceDoesNotAddPurposeColumn(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "interface-schema.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	rows, err := s.db.Query(`PRAGMA table_info(cmdb_asset_interfaces)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, kind string
+		var defaultValue interface{}
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatal(err)
+		}
+		if name == "purpose" {
+			t.Fatal("接口表不得新增主地址用途列")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -70,6 +97,47 @@ func TestCmdbInterfaceAdditionalAddressesAreValidatedAndDeduplicated(t *testing.
 	}
 	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.11","purpose":"out_of_band"}]` {
 		t.Fatalf("附加地址未按 IP 去重: %s", got)
+	}
+}
+
+func TestCmdbInterfaceAdditionalAddressesMergePurposesByIP(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "interface-purposes.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "多用途", MgmtIP: "192.0.2.10", Interfaces: []CmdbAssetInterface{{Name: "eth0", IP: "192.0.2.10", IsPrimary: 1, AdditionalIPsJSON: `[{"ip":"192.0.2.10","purpose":"out_of_band"},{"ip":"192.0.2.11","purpose":"business"},{"ip":"192.0.2.11","purpose":"out_of_band"}]`}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, ifaces, err := s.GetCmdbAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.10","purpose":"out_of_band"},{"ip":"192.0.2.11","purpose":["business","out_of_band"]}]` {
+		t.Fatalf("附加地址用途未按 IP 归并: %s", got)
+	}
+}
+
+func TestCmdbInvalidLegacyAdditionalAddressesFailOnRead(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "invalid-legacy-interface.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "旧设备", Interfaces: []CmdbAssetInterface{{Name: "eth0", IP: "192.0.2.10"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE cmdb_asset_interfaces SET additional_ips_json='{bad' WHERE asset_id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = s.GetCmdbAsset(id)
+	if err == nil || !strings.Contains(err.Error(), "接口 eth0") || !strings.Contains(err.Error(), "附加地址格式无效") {
+		t.Fatalf("旧数据应在接口读取时明确报错: %v", err)
+	}
+	if err := s.UpdateCmdbAssetManual(&CmdbAsset{ID: id, Name: "旧设备"}); err == nil || !strings.Contains(err.Error(), "附加地址格式无效") {
+		t.Fatalf("旧数据编辑保存应拒绝: %v", err)
 	}
 }
 

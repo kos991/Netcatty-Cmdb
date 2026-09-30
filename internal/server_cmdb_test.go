@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -67,6 +68,34 @@ func TestHandleCmdbAssetNotFoundReturnsExplicitError(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
 	if body["error"] == "" {
 		t.Fatalf("404 必须带明确 error 说明，实际响应 %s", rec.Body.String())
+	}
+}
+
+func TestHandleCmdbAssetInvalidLegacyAddressReturnsInterfaceError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invalid-interface-api.db")
+	st, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	id, err := st.CreateCmdbAssetManual(&store.CmdbAsset{Name: "旧设备", Interfaces: []store.CmdbAssetInterface{{Name: "eth0", IP: "192.0.2.10"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`UPDATE cmdb_asset_interfaces SET additional_ips_json='{bad' WHERE asset_id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	(&Server{Store: st}).RegisterRoutes(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/cmdb/assets/%d", id), nil))
+	if rec.Code != http.StatusInternalServerError || !bytes.Contains(rec.Body.Bytes(), []byte("接口 eth0")) || !bytes.Contains(rec.Body.Bytes(), []byte("附加地址格式无效")) {
+		t.Fatalf("详情应返回可见的接口错误: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

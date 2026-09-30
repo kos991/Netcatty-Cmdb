@@ -23,6 +23,28 @@ test('地址快捷连接只选择目标相同的主机引用', () => {
   assert.equal(connectionForAddress('10.0.0.12', links, hosts), null)
 })
 
+test('默认快连优先选择管理目标相同且认证有效的最新关联', () => {
+  const available = [
+    { id: 3, host_id: 'host-1', credential_id: 'identity-1', is_primary: true },
+    { id: 9, host_id: 'host-3', credential_id: 'identity-1' },
+    { id: 8, host_id: 'host-4', credential_id: 'key-1' },
+  ]
+  const directory = [...hosts, { ...hosts[0], id: 'host-3', hostname: '10.0.0.11', credentialId: 'key-1' }, { ...hosts[0], id: 'host-4', hostname: '10.0.0.11', credentialId: 'key-1' }]
+  assert.equal(connectionForAddress('10.0.0.11', available, directory, credentials)?.id, 8)
+  assert.equal(connectionForAddress('10.0.0.12', available, directory, credentials), null)
+})
+
+test('多个有效目标匹配时默认优先，否则选择最新关联', () => {
+  const available = [
+    { id: 4, host_id: 'host-1', credential_id: 'identity-1' },
+    { id: 10, host_id: 'host-3', credential_id: 'identity-1' },
+    { id: 2, host_id: 'host-4', credential_id: 'identity-1', is_primary: true },
+  ]
+  const directory = [...hosts, { ...hosts[0], id: 'host-3' }, { ...hosts[0], id: 'host-4' }]
+  assert.equal(connectionForAddress('10.0.0.10', available, directory, credentials)?.id, 2)
+  assert.equal(connectionForAddress('10.0.0.10', available.slice(0, 2), directory, credentials)?.id, 10)
+})
+
 const hosts = [
   { id: 'host-1', label: '核心服务器', hostname: '10.0.0.10', port: 22, protocol: 'ssh', credentialId: 'identity-1' },
   { id: 'host-2', label: '备用服务器', hostname: '10.0.0.11', port: 22, protocol: 'ssh', credentialId: '' },

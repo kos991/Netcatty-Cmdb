@@ -681,10 +681,10 @@ func (s *Store) CreateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 		}
 		_, err := tx.Exec(`
 			INSERT INTO cmdb_asset_interfaces (
-				project_id, asset_id, asset_name, name, if_name, ip, purpose, additional_ips_json, mask, gateway, mac,
+				project_id, asset_id, asset_name, name, if_name, ip, additional_ips_json, mask, gateway, mac,
 				network_zone, net_zone, is_primary, vlan_id, remark, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			scope.ProjectID, newID, a.Name, ifaceName, ifaceName, iface.IP, interfacePurpose(*iface), interfaceAdditionalIPs(*iface), iface.Mask, iface.Gateway, iface.MAC,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			scope.ProjectID, newID, a.Name, ifaceName, ifaceName, iface.IP, interfaceAdditionalIPs(*iface), iface.Mask, iface.Gateway, iface.MAC,
 			netZone, netZone, iface.IsPrimary, iface.VlanID, iface.Remark, now, now,
 		)
 		if err != nil {

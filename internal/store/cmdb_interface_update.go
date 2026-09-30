@@ -8,8 +8,8 @@ import (
 )
 
 type cmdbInterfaceAddress struct {
-	IP      string `json:"ip"`
-	Purpose string `json:"purpose"`
+	IP      string      `json:"ip"`
+	Purpose interface{} `json:"purpose"`
 }
 
 func validInterfacePurpose(purpose string) bool {
@@ -18,29 +18,67 @@ func validInterfacePurpose(purpose string) bool {
 
 func normalizeInterfaceAddresses(iface *CmdbAssetInterface) error {
 	iface.IP = strings.TrimSpace(iface.IP)
-	iface.Purpose = interfacePurpose(*iface)
-	if !validInterfacePurpose(iface.Purpose) {
-		return fmt.Errorf("接口 %s 的 IP 用途无效", iface.Name)
-	}
 	var addresses []cmdbInterfaceAddress
 	if err := json.Unmarshal([]byte(interfaceAdditionalIPs(*iface)), &addresses); err != nil || addresses == nil {
 		return fmt.Errorf("接口 %s 的附加地址格式无效：必须是地址数组", iface.Name)
 	}
-	seen := map[string]bool{}
-	if iface.IP != "" {
-		seen[iface.IP] = true
-	}
+	seen := map[string]int{}
 	unique := make([]cmdbInterfaceAddress, 0, len(addresses))
 	for _, address := range addresses {
 		address.IP = strings.TrimSpace(address.IP)
-		if address.IP == "" || !validInterfacePurpose(address.Purpose) {
+		if address.IP == "" {
 			return fmt.Errorf("接口 %s 的附加地址须包含 IP 和有效用途", iface.Name)
 		}
-		if seen[address.IP] {
-			continue
+		var purposes []string
+		switch value := address.Purpose.(type) {
+		case string:
+			purposes = []string{value}
+		case []interface{}:
+			for _, item := range value {
+				purpose, ok := item.(string)
+				if !ok {
+					return fmt.Errorf("接口 %s 的附加地址用途无效", iface.Name)
+				}
+				purposes = append(purposes, purpose)
+			}
+		default:
+			return fmt.Errorf("接口 %s 的附加地址用途无效", iface.Name)
 		}
-		seen[address.IP] = true
-		unique = append(unique, address)
+		if len(purposes) == 0 {
+			return fmt.Errorf("接口 %s 的附加地址用途无效", iface.Name)
+		}
+		for _, purpose := range purposes {
+			if !validInterfacePurpose(purpose) {
+				return fmt.Errorf("接口 %s 的附加地址用途无效", iface.Name)
+			}
+			if address.IP == iface.IP && iface.IsPrimary == 0 && purpose == "business" {
+				continue
+			}
+			index, exists := seen[address.IP]
+			if !exists {
+				index = len(unique)
+				seen[address.IP] = index
+				unique = append(unique, cmdbInterfaceAddress{IP: address.IP, Purpose: []string{}})
+			}
+			current := unique[index].Purpose.([]string)
+			found := false
+			for _, existing := range current {
+				if existing == purpose {
+					found = true
+					break
+				}
+			}
+			if !found {
+				current = append(current, purpose)
+			}
+			unique[index].Purpose = current
+		}
+	}
+	for index := range unique {
+		purposes := unique[index].Purpose.([]string)
+		if len(purposes) == 1 {
+			unique[index].Purpose = purposes[0]
+		}
 	}
 	encoded, err := json.Marshal(unique)
 	if err != nil {
@@ -48,13 +86,6 @@ func normalizeInterfaceAddresses(iface *CmdbAssetInterface) error {
 	}
 	iface.AdditionalIPsJSON = string(encoded)
 	return nil
-}
-
-func interfacePurpose(iface CmdbAssetInterface) string {
-	if iface.Purpose != "" {
-		return iface.Purpose
-	}
-	return "business"
 }
 
 func interfaceAdditionalIPs(iface CmdbAssetInterface) string {
@@ -111,14 +142,14 @@ func updateCmdbAssetInterfaces(tx *sql.Tx, projectID int64, asset *CmdbAsset, pr
 			zone = iface.NetZone
 		}
 		if iface.ID != 0 {
-			_, err := tx.Exec(`UPDATE cmdb_asset_interfaces SET asset_name=?, name=?, if_name=?, ip=?, purpose=?, additional_ips_json=?, mask=?, gateway=?, mac=?, network_zone=?, net_zone=?, is_primary=?, vlan_id=?, remark=?, updated_at=? WHERE id=? AND asset_id=? AND project_id=?`,
-				asset.Name, name, name, iface.IP, interfacePurpose(*iface), interfaceAdditionalIPs(*iface), iface.Mask, iface.Gateway, iface.MAC, zone, zone, iface.IsPrimary, iface.VlanID, iface.Remark, now, iface.ID, asset.ID, projectID)
+			_, err := tx.Exec(`UPDATE cmdb_asset_interfaces SET asset_name=?, name=?, if_name=?, ip=?, additional_ips_json=?, mask=?, gateway=?, mac=?, network_zone=?, net_zone=?, is_primary=?, vlan_id=?, remark=?, updated_at=? WHERE id=? AND asset_id=? AND project_id=?`,
+				asset.Name, name, name, iface.IP, interfaceAdditionalIPs(*iface), iface.Mask, iface.Gateway, iface.MAC, zone, zone, iface.IsPrimary, iface.VlanID, iface.Remark, now, iface.ID, asset.ID, projectID)
 			if err != nil {
 				return err
 			}
 		} else {
-			result, err := tx.Exec(`INSERT INTO cmdb_asset_interfaces (project_id, asset_id, asset_name, name, if_name, ip, purpose, additional_ips_json, mask, gateway, mac, network_zone, net_zone, is_primary, vlan_id, remark, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				projectID, asset.ID, asset.Name, name, name, iface.IP, interfacePurpose(*iface), interfaceAdditionalIPs(*iface), iface.Mask, iface.Gateway, iface.MAC, zone, zone, iface.IsPrimary, iface.VlanID, iface.Remark, now, now)
+			result, err := tx.Exec(`INSERT INTO cmdb_asset_interfaces (project_id, asset_id, asset_name, name, if_name, ip, additional_ips_json, mask, gateway, mac, network_zone, net_zone, is_primary, vlan_id, remark, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				projectID, asset.ID, asset.Name, name, name, iface.IP, interfaceAdditionalIPs(*iface), iface.Mask, iface.Gateway, iface.MAC, zone, zone, iface.IsPrimary, iface.VlanID, iface.Remark, now, now)
 			if err != nil {
 				return err
 			}

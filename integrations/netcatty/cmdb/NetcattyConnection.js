@@ -6,10 +6,15 @@ export function connectionTargetMismatch(address, host) {
   return selected && actual && selected !== actual ? { selected, actual } : null
 }
 
-export function connectionForAddress(address, links = [], hosts = []) {
+export function connectionForAddress(address, links = [], hosts = [], credentials = null) {
   const selected = String(address || '').trim()
   if (!selected) return null
-  return links.find(link => hosts.some(host => host.id === link.host_id && String(host.hostname || '').trim() === selected)) || null
+  const matches = links.filter(link => {
+    const host = hosts.find(item => item.id === link.host_id)
+    return host && String(host.hostname || '').trim() === selected
+      && (credentials === null || netcattyLinkStatus(link, host, credentials) === 'linked')
+  })
+  return matches.sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary) || Number(b.id || 0) - Number(a.id || 0))[0] || null
 }
 
 export function netcattyLinkStatus(link, host, credentials = []) {
