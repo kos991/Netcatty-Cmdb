@@ -13,6 +13,7 @@ test('业务接口重排和无地址接口不推导管理 IP', () => {
   assert.equal(values.mgmt_ip || '', '')
   assert.equal(infrastructureSavePayload(values).mgmt_ip, '')
   assert.equal(values.interfaces.some(item => item.is_primary), false)
+  assert.equal(values.interfaces[1].main_ip_purpose, 'business')
 })
 
 test('旧数据仅明确标记主接口时保留管理地址', () => {
@@ -41,6 +42,32 @@ test('主地址与附加地址同 IP 时保留不同用途且只展示一行', (
   const saved = infrastructureSavePayload(asset)
   assert.equal(saved.interfaces[0].additional_ips_json, '[{"ip":"10.0.0.1","purpose":"out_of_band"}]')
   assert.deepEqual(addressModel.networkAddressRows(saved).map(row => [row.ip, row.purposes]), [['10.0.0.1', ['管理', '带外']]])
+})
+
+test('纯带外主 IP 不自动补业务且编辑重存保持带外', () => {
+  const record = { interfaces: [{ id: 7, name: 'eth0', ip: '10.0.0.9', additional_ips_json: '[{"ip":"10.0.0.9","purpose":"out_of_band"}]' }] }
+  assert.deepEqual(addressModel.networkAddressRows(record).map(row => [row.ip, row.purposes]), [['10.0.0.9', ['带外']]])
+  const values = prepareInfrastructureEditorValues(record)
+  assert.equal(values.interfaces[0].main_ip_purpose, 'out_of_band')
+  assert.equal(values.interfaces[0].additional_ips_json, '[]')
+  const saved = infrastructureSavePayload(values)
+  assert.equal(saved.interfaces[0].additional_ips_json, '[{"ip":"10.0.0.9","purpose":"out_of_band"}]')
+  assert.deepEqual(addressModel.networkAddressRows(saved).map(row => [row.ip, row.purposes]), [['10.0.0.9', ['带外']]])
+})
+
+test('主 IP 可明确选择带外加业务且只展示一行', () => {
+  const saved = infrastructureSavePayload({ interfaces: [{ name: 'eth0', ip: '10.0.0.9', main_ip_purpose: 'business_out_of_band', additional_ips_json: '[]' }] })
+  assert.equal(saved.interfaces[0].additional_ips_json, '[{"ip":"10.0.0.9","purpose":["business","out_of_band"]}]')
+  assert.deepEqual(addressModel.networkAddressRows(saved).map(row => [row.ip, row.purposes]), [['10.0.0.9', ['业务', '带外']]])
+  assert.equal(prepareInfrastructureEditorValues(saved).interfaces[0].main_ip_purpose, 'business_out_of_band')
+})
+
+test('管理字段未同步时旧编辑态不凭主接口用途制造第二个管理 IP', () => {
+  const saved = infrastructureSavePayload({ mgmt_ip: '10.0.0.1', interfaces: [{ ip: '10.0.0.2', main_ip_purpose: 'management', additional_ips_json: '[]' }] })
+  assert.equal(saved.interfaces[0].additional_ips_json, '[]')
+  assert.deepEqual(addressModel.networkAddressRows(saved).map(row => [row.ip, row.purposes]), [
+    ['10.0.0.1', ['管理']], ['10.0.0.2', ['业务']],
+  ])
 })
 
 test('两条附加地址同 IP 不同用途归并并可编辑', () => {

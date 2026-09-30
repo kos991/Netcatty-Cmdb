@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -168,8 +169,87 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	for _, q := range syncSqls {
 		_, _ = db.Exec(q)
 	}
+	if err := migrateLegacyInterfacePurpose(db); err != nil {
+		return fmt.Errorf("migrate legacy interface purpose: %w", err)
+	}
 
 	return nil
+}
+
+// 初版开发库可能有计划外的 purpose 列；仅在一次性迁移中读取，不纳入常规读写。
+func migrateLegacyInterfacePurpose(db *sql.DB) error {
+	cols, err := getTableColumns(db, "cmdb_asset_interfaces")
+	if err != nil || !cols["purpose"] {
+		return err
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS _meta (k TEXT PRIMARY KEY, v TEXT)`); err != nil {
+		return err
+	}
+	var migrated string
+	err = db.QueryRow(`SELECT v FROM _meta WHERE k='cmdb_interface_purpose_migrated_v1'`).Scan(&migrated)
+	if err == nil && migrated == "1" {
+		return nil
+	}
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	rows, err := db.Query(`SELECT id, IFNULL(name,''), IFNULL(ip,''), IFNULL(is_primary,0), IFNULL(additional_ips_json,'[]'), IFNULL(purpose,'') FROM cmdb_asset_interfaces`)
+	if err != nil {
+		return err
+	}
+	type legacyAddressUpdate struct {
+		id   int64
+		json string
+	}
+	var updates []legacyAddressUpdate
+	for rows.Next() {
+		var id int64
+		var iface CmdbAssetInterface
+		var purpose string
+		if err := rows.Scan(&id, &iface.Name, &iface.IP, &iface.IsPrimary, &iface.AdditionalIPsJSON, &purpose); err != nil {
+			rows.Close()
+			return err
+		}
+		if strings.TrimSpace(iface.IP) == "" || !validInterfacePurpose(purpose) {
+			continue
+		}
+		var addresses []cmdbInterfaceAddress
+		if err := json.Unmarshal([]byte(interfaceAdditionalIPs(iface)), &addresses); err != nil || addresses == nil {
+			continue // 保留损坏的原值，由接口详情返回可见错误；迁移不得覆盖它。
+		}
+		addresses = append(addresses, cmdbInterfaceAddress{IP: iface.IP, Purpose: purpose})
+		encoded, err := json.Marshal(addresses)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		iface.AdditionalIPsJSON = string(encoded)
+		if err := normalizeInterfaceAddresses(&iface); err != nil {
+			continue // 非法历史项仍由接口详情报错，不伪造正常数据。
+		}
+		updates = append(updates, legacyAddressUpdate{id: id, json: iface.AdditionalIPsJSON})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, update := range updates {
+		if _, err := tx.Exec(`UPDATE cmdb_asset_interfaces SET additional_ips_json=? WHERE id=?`, update.json, update.id); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO _meta (k,v) VALUES ('cmdb_interface_purpose_migrated_v1','1') ON CONFLICT(k) DO UPDATE SET v='1'`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func addMissingColumns(db schemaExecutor, tableName string, cols map[string]string) error {

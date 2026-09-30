@@ -20,7 +20,16 @@ export function prepareInfrastructureEditorValues(record = {}, models = []) {
   const managementIP = String(values.mgmt_ip || values.manage_ip || managementIPFromInterfaces(values.interfaces)).trim()
   values.mgmt_ip = managementIP
   values.manage_ip = managementIP
-  if (managementIP) values.interfaces = values.interfaces.map(item => ({ ...item, is_primary: String(item.ip || '').trim() === managementIP ? 1 : 0 }))
+  values.interfaces = values.interfaces.map(item => {
+    const mainIP = String(item.ip || '').trim()
+    const addresses = additionalEditorRows(item.additional_ips_json, item.name || item.if_name || '未命名')
+    const mainPurposes = addresses.filter(address => mainIP && String(address.ip || '').trim() === mainIP).map(address => address.purpose)
+    const business = mainPurposes.includes('business') || Boolean(mainIP && mainIP === String(values.biz_ip || '').trim())
+    const outOfBand = mainPurposes.includes('out_of_band')
+    const mainPurpose = business && outOfBand ? 'business_out_of_band' : outOfBand ? 'out_of_band' : business ? 'business' : mainIP && mainIP === managementIP || mainPurposes.includes('management') ? 'management' : 'business'
+    const otherAddresses = addresses.filter(address => !mainIP || String(address.ip || '').trim() !== mainIP || address.purpose === 'management')
+    return { ...item, main_ip_purpose: mainPurpose, additional_ips_json: JSON.stringify(otherAddresses), is_primary: managementIP ? (mainIP === managementIP ? 1 : 0) : item.is_primary }
+  })
 
   return values
 }
@@ -34,10 +43,14 @@ export function infrastructureSavePayload(values) {
   const interfaces = (values.interfaces || []).map(item => {
     const mainIP = String(item.ip || '').trim()
     const byIP = new Map()
-    for (const address of additionalEditorRows(item.additional_ips_json, item.name || item.if_name || '未命名')) {
+    const selectedPurposes = { business: ['business'], out_of_band: ['out_of_band'], business_out_of_band: ['business', 'out_of_band'] }[item.main_ip_purpose] || []
+    const addresses = [
+      ...selectedPurposes.map(purpose => ({ ip: mainIP, purpose })),
+      ...additionalEditorRows(item.additional_ips_json, item.name || item.if_name || '未命名'),
+    ]
+    for (const address of addresses) {
       const ip = String(address.ip || '').trim()
       if (!ip) continue
-      if (ip === mainIP && mainIP !== managementIP && address.purpose === 'business') continue
       const purposes = byIP.get(ip) || []
       if (!purposes.includes(address.purpose)) purposes.push(address.purpose)
       byIP.set(ip, purposes)
@@ -45,6 +58,7 @@ export function infrastructureSavePayload(values) {
     const additional = [...byIP].map(([ip, purposes]) => ({ ip, purpose: purposes.length === 1 ? purposes[0] : purposes }))
     const withoutPurpose = { ...item }
     delete withoutPurpose.purpose
+    delete withoutPurpose.main_ip_purpose
     return { ...withoutPurpose, ip: String(item.ip || '').trim(), additional_ips_json: JSON.stringify(additional), is_primary: managementIP && String(item.ip || '').trim() === managementIP ? 1 : 0 }
   })
   return { ...values, interfaces, mgmt_ip: managementIP, manage_ip: managementIP }
@@ -92,8 +106,12 @@ export function networkAddressRows(asset = {}) {
   for (const iface of asset.interfaces || []) {
     const mainIP = String(iface.ip || '').trim()
     const managementIP = String(asset.mgmt_ip || asset.manage_ip || '').trim()
-    add(mainIP, !managementIP && iface.is_primary ? 'management' : mainIP === managementIP || mainIP === String(asset.biz_ip || '').trim() ? '' : 'business', iface)
-    for (const address of additionalEditorRows(iface.additional_ips_json, iface.name || iface.if_name || '未命名')) add(address.ip, address.purpose, iface)
+    const addresses = additionalEditorRows(iface.additional_ips_json, iface.name || iface.if_name || '未命名')
+    const hasExplicitPurpose = addresses.some(address => String(address.ip || '').trim() === mainIP)
+    const isManagement = mainIP === managementIP || !managementIP && iface.is_primary
+    const isBusiness = mainIP === String(asset.biz_ip || '').trim()
+    add(mainIP, !hasExplicitPurpose && !isManagement && !isBusiness ? 'business' : isManagement && !managementIP ? 'management' : '', iface)
+    for (const address of addresses) add(address.ip, address.purpose, iface)
   }
   return [...rows.values()]
 }

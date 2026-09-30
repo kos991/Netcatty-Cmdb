@@ -95,7 +95,7 @@ func TestCmdbInterfaceAdditionalAddressesAreValidatedAndDeduplicated(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.11","purpose":"out_of_band"}]` {
+	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.10","purpose":"business"},{"ip":"192.0.2.11","purpose":"out_of_band"}]` {
 		t.Fatalf("附加地址未按 IP 去重: %s", got)
 	}
 }
@@ -116,6 +116,119 @@ func TestCmdbInterfaceAdditionalAddressesMergePurposesByIP(t *testing.T) {
 	}
 	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.10","purpose":"out_of_band"},{"ip":"192.0.2.11","purpose":["business","out_of_band"]}]` {
 		t.Fatalf("附加地址用途未按 IP 归并: %s", got)
+	}
+}
+
+func TestCmdbMainAddressPurposeCombinationsSurviveSaveAndReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out-of-band-main.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := s
+	defer first.Close()
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "带外设备", Interfaces: []CmdbAssetInterface{{Name: "eth0", IP: "192.0.2.9", AdditionalIPsJSON: `[{"ip":"192.0.2.9","purpose":"out_of_band"}]`}, {Name: "eth1", IP: "192.0.2.10", AdditionalIPsJSON: `[{"ip":"192.0.2.10","purpose":["business","out_of_band"]}]`}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset, ifaces, err := s.GetCmdbAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.9","purpose":"out_of_band"}]` {
+		t.Fatalf("带外用途丢失: %s", got)
+	}
+	if got := ifaces[1].AdditionalIPsJSON; got != `[{"ip":"192.0.2.10","purpose":["business","out_of_band"]}]` {
+		t.Fatalf("同 IP 业务与带外用途未共存: %s", got)
+	}
+	asset.Interfaces = ifaces
+	if err := s.UpdateCmdbAssetManual(asset); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_, ifaces, err = s.GetCmdbAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.9","purpose":"out_of_band"}]` {
+		t.Fatalf("重开后带外用途丢失: %s", got)
+	}
+	if got := ifaces[1].AdditionalIPsJSON; got != `[{"ip":"192.0.2.10","purpose":["business","out_of_band"]}]` {
+		t.Fatalf("重开后双用途丢失: %s", got)
+	}
+}
+
+func TestCmdbLegacyPurposeColumnMigratesIntoAddressNotes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-purpose.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := s
+	defer first.Close()
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "旧带外设备", Interfaces: []CmdbAssetInterface{{Name: "eth0", IP: "192.0.2.9"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	managementID, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "旧管理业务设备", MgmtIP: "192.0.2.10", Interfaces: []CmdbAssetInterface{{Name: "eth0", IP: "192.0.2.10", IsPrimary: 1}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE cmdb_asset_interfaces ADD COLUMN purpose TEXT NOT NULL DEFAULT 'business'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE cmdb_asset_interfaces SET purpose='out_of_band' WHERE asset_id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var newID int64
+	for run := 0; run < 2; run++ {
+		s, err = Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		current := s
+		defer current.Close()
+		_, ifaces, err := s.GetCmdbAsset(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.9","purpose":"out_of_band"}]` {
+			t.Fatalf("第 %d 次打开未保留旧带外用途: %s", run+1, got)
+		}
+		_, managementIfaces, err := s.GetCmdbAsset(managementID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := managementIfaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.10","purpose":"business"}]` {
+			t.Fatalf("第 %d 次打开未保留旧管理+业务用途: %s", run+1, got)
+		}
+		if run == 0 {
+			newID, err = s.CreateCmdbAssetManual(&CmdbAsset{Name: "新带外设备", Interfaces: []CmdbAssetInterface{{Name: "eth1", IP: "192.0.2.11", AdditionalIPsJSON: `[{"ip":"192.0.2.11","purpose":"out_of_band"}]`}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			_, newIfaces, err := s.GetCmdbAsset(newID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := newIfaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.11","purpose":"out_of_band"}]` {
+				t.Fatalf("新设备带外用途被旧列默认值污染: %s", got)
+			}
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

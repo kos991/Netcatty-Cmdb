@@ -51,9 +51,6 @@ func normalizeInterfaceAddresses(iface *CmdbAssetInterface) error {
 			if !validInterfacePurpose(purpose) {
 				return fmt.Errorf("接口 %s 的附加地址用途无效", iface.Name)
 			}
-			if address.IP == iface.IP && iface.IsPrimary == 0 && purpose == "business" {
-				continue
-			}
 			index, exists := seen[address.IP]
 			if !exists {
 				index = len(unique)
