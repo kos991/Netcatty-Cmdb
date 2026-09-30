@@ -217,6 +217,16 @@ func migrateLegacyInterfacePurpose(db *sql.DB) error {
 		if err := json.Unmarshal([]byte(interfaceAdditionalIPs(iface)), &addresses); err != nil || addresses == nil {
 			continue // 保留损坏的原值，由接口详情返回可见错误；迁移不得覆盖它。
 		}
+		mainIPHasPurpose := false
+		for _, address := range addresses {
+			if strings.TrimSpace(address.IP) == strings.TrimSpace(iface.IP) {
+				mainIPHasPurpose = true
+				break
+			}
+		}
+		if mainIPHasPurpose {
+			continue // JSON 中的主 IP 显式用途优先于旧列默认值。
+		}
 		addresses = append(addresses, cmdbInterfaceAddress{IP: iface.IP, Purpose: purpose})
 		encoded, err := json.Marshal(addresses)
 		if err != nil {

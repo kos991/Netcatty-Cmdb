@@ -232,6 +232,40 @@ func TestCmdbLegacyPurposeColumnMigratesIntoAddressNotes(t *testing.T) {
 	}
 }
 
+func TestCmdbLegacyPurposeDoesNotOverrideExplicitMainAddressPurpose(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-purpose-with-new-json.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "带外设备", Interfaces: []CmdbAssetInterface{{Name: "eth0", IP: "192.0.2.9"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE cmdb_asset_interfaces ADD COLUMN purpose TEXT NOT NULL DEFAULT 'business'`); err != nil {
+		t.Fatal(err)
+	}
+	// 旧列仍是默认 business；模拟前一轮代码只更新 JSON 中的主 IP 用途。
+	if _, err := s.db.Exec(`UPDATE cmdb_asset_interfaces SET additional_ips_json=? WHERE asset_id=?`, `[{"ip":"192.0.2.9","purpose":"out_of_band"}]`, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_, ifaces, err := s.GetCmdbAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ifaces[0].AdditionalIPsJSON; got != `[{"ip":"192.0.2.9","purpose":"out_of_band"}]` {
+		t.Fatalf("显式主 IP 用途被旧列默认值污染: %s", got)
+	}
+}
+
 func TestCmdbInvalidLegacyAdditionalAddressesFailOnRead(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "invalid-legacy-interface.db"))
 	if err != nil {
