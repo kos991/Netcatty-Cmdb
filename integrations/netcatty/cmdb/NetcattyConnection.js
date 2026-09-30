@@ -63,6 +63,12 @@ export async function persistNetcattyConnection(api, { assetType, assetId, conne
   const payload = buildNetcattyLinkPayload(assetType, assetId, connection, hosts, credentials)
   if (!payload) throw new Error('请选择有效的 Netcatty 主机或钥匙串')
   const host = hosts.find(item => item.id === payload.host_id)
+  if (payload.host_id) {
+    if (!api.netcattyLinks) throw new Error('无法检查当前资产的 Netcatty 主机关联，认证未更改')
+    const result = await api.netcattyLinks({ asset_type: assetType, asset_id: assetId })
+    const duplicate = (result.list || []).find(link => link.host_id === payload.host_id && Number(link.id) !== linkID)
+    if (duplicate) throw new Error('该 Netcatty 主机已关联当前资产；另一身份请新建独立的 Netcatty 主机')
+  }
   let bound = false
   if (payload.host_id && payload.credential_id) {
     if (!bindHostCredential) throw new Error('Netcatty 主机认证更新入口不可用')
