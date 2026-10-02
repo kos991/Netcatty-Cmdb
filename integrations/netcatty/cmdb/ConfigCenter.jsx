@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Cloud, DatabaseBackup, FolderOpen, RefreshCw, Save, ShieldCheck } from 'lucide-react'
+import { Cloud, DatabaseBackup, Download, FolderOpen, FolderTree, RefreshCw, Save, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -12,11 +12,12 @@ import {
   writeCmdbCloudSyncSettings,
 } from '../../application/CmdbCloudSync'
 import { api } from './api'
-import { directoryChanged, useAction, useQuery } from './hooks'
+import { allPages, directoryChanged, useAction, useQuery } from './hooks'
 import { ErrorBanner, Field, SelectControl } from './ui'
 import Catalog from './Catalog'
+import Taxonomy from './Taxonomy'
 
-const GROUPS = [['work', '工单配置'], ['project', '项目设置']]
+const GROUPS = [['taxonomy', '分类与分组'], ['models', '型号库'], ['network', '网络类型'], ['work', '工单配置'], ['templates', '导入模板'], ['project', '项目设置']]
 const WORK_TABS = [['rule', '编号规则'], ['work-order-categories', '工单类别'], ['work-order-types', '运维类型'], ['work-order-priorities', '优先级']]
 const BASIC = [{ key: 'name', label: '名称', required: true }, { key: 'remark', label: '说明', type: 'textarea' }, { key: 'sort_order', label: '排序', type: 'number', min: 0 }]
 const RULE_DEFAULTS = { name: 'GD', vendor: '-', version: 'YYYYMMDD', remark: '每日', sort_order: 4 }
@@ -41,6 +42,38 @@ function ConfigCatalog({ kind }) {
     { key: 'sort_order', label: '排序' },
   ]
   return <Catalog key={kind} {...spec} load={load} defaults={{ sort_order: 0 }} columns={columns} fields={BASIC} />
+}
+
+function TaxonomySettings() {
+  const [open, setOpen] = useState(false)
+  const [selectedKind, setSelectedKind] = useState('terminal-categories')
+  const load = React.useCallback(async () => {
+    const kinds = [['terminal-categories', '终端资产'], ['infrastructure-categories', '基础设施'], ['application-categories', '业务系统'], ['groups', '资产分组']]
+    return Promise.all(kinds.map(async ([kind, label]) => ({ kind, label, count: (await api.taxonomy(kind)).list?.length || 0 })))
+  }, [])
+  const query = useQuery(load)
+  return <div className="min-h-0 flex-1 overflow-auto">
+    <section className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-5 py-4"><div><h2 className="text-sm font-semibold">分类与分组</h2><p className="mt-1 text-xs text-muted-foreground">终端、基础设施、业务系统和资产分组共用原有目录</p></div><Button size="sm" onClick={() => setOpen(true)}><FolderTree size={14} className="mr-1.5" />管理目录</Button></section>
+    {query.error && <ErrorBanner message={query.error} onRetry={query.reload} />}
+    <div className="max-w-4xl divide-y divide-border/70">{(query.data || []).map((item) => <button key={item.kind} type="button" className="flex h-12 w-full items-center justify-between px-5 text-left text-xs hover:bg-accent/50" onClick={() => { setSelectedKind(item.kind); setOpen(true) }}><span>{item.label}</span><span className="text-muted-foreground">{item.count} 项</span></button>)}</div>
+    <Taxonomy key={selectedKind} initialKind={selectedKind} open={open} onOpenChange={setOpen} onChanged={() => { query.reload(); directoryChanged() }} />
+  </div>
+}
+
+function ModelSettings() {
+  const load = React.useCallback(async () => allPages(api.models), [])
+  return <Catalog title="型号" load={load} defaults={{ vendor: '', model: '' }} save={(values, original) => original.id ? api.updateModel(original.id, values) : api.createModel(values)} remove={(row) => api.deleteModel(row.id)} fields={[{ key: 'vendor', label: '品牌 / 厂商', required: true }, { key: 'model', label: '型号', required: true }]} columns={[{ key: 'vendor', label: '品牌 / 厂商' }, { key: 'model', label: '型号' }]} />
+}
+
+function NetworkSettings() {
+  const load = React.useCallback(async () => (await api.config('network-types')).list || [], [])
+  return <Catalog title="网络类型" load={load} defaults={{ sort_order: 0 }} save={(values, original) => original.id ? api.updateConfig('network-types', original.id, values) : api.createConfig('network-types', values)} remove={(row) => api.deleteConfig('network-types', row.id)} fields={BASIC} columns={[{ key: 'name', label: '名称' }, { key: 'remark', label: '说明' }, { key: 'sort_order', label: '排序' }]} />
+}
+
+function TemplateSettings() {
+  const action = useAction()
+  const templates = [['终端资产', api.downloadAssetTemplate], ['基础设施', api.downloadInfrastructureTemplate], ['IPAM/IP', api.downloadIPTemplate]]
+  return <div className="min-h-0 flex-1 overflow-auto"><section className="border-b border-border/70 px-5 py-4"><h2 className="text-sm font-semibold">导入模板</h2><p className="mt-1 text-xs text-muted-foreground">下载模板后，回到对应业务页导入；筛选导出也在对应业务页</p></section><div className="max-w-4xl divide-y divide-border/70">{templates.map(([label, download]) => <div key={label} className="flex min-h-14 items-center justify-between gap-3 px-5"><span className="text-xs">{label}</span><Button size="sm" variant="outline" disabled={action.busy} onClick={() => action.run(download)}><Download size={14} className="mr-1.5" />下载模板</Button></div>)}</div></div>
 }
 
 function NumberRule() {
@@ -93,7 +126,7 @@ function ProjectSettings() {
     window.addEventListener(CMDB_CLOUD_SYNC_SETTINGS_EVENT, refresh)
     return () => window.removeEventListener(CMDB_CLOUD_SYNC_SETTINGS_EVENT, refresh)
   }, [])
-  const attachmentPath = `cmdb/attachments/${values.code || 'default'}`
+  const attachmentPath = project ? `cmdb/attachments/project-${project.id}` : ''
   const updateSync = (changes) => setSyncSettings(writeCmdbCloudSyncSettings(changes))
   const syncStatus = syncSettings.lastStatus === 'error'
     ? `失败：${syncSettings.lastError || '未知错误'}`
@@ -105,7 +138,7 @@ function ProjectSettings() {
     <section className="px-5 py-4"><div className="flex items-start justify-between gap-4"><div><h2 className="text-sm font-semibold">项目设置</h2><p className="mt-1 text-xs text-muted-foreground">维护当前项目资料和附件存储位置</p></div><Button size="sm" disabled={!project || action.busy} onClick={() => action.run(async () => { await api.updateProject(project.id, values); query.reload() }, '项目设置已保存')}><Save size={14} className="mr-1.5" />保存设置</Button></div>
       <div className="mt-5 grid max-w-4xl grid-cols-2 gap-4"><Field label="项目名称" required><Input className="h-9" value={values.name} onChange={(event) => setValues((old) => ({ ...old, name: event.target.value }))} /></Field><Field label="项目编码" required><Input className="h-9 font-mono" value={values.code} onChange={(event) => setValues((old) => ({ ...old, code: event.target.value }))} /></Field></div>
     </section>
-    <section className="border-t border-border/70 px-5 py-5"><div className="flex items-center gap-2"><FolderOpen size={16} /><h3 className="text-sm font-medium">附件存储</h3></div><p className="mt-1 text-xs text-muted-foreground">工单附件按项目独立保存</p><div className="mt-4 max-w-4xl"><Field label="附件管理路径"><Input className="h-9 font-mono" value={attachmentPath} readOnly /></Field><p className="mt-2 text-[11px] text-muted-foreground">相对于 Netcatty 用户数据目录；绝对路径不参与云同步。</p></div></section>
+    <section className="border-t border-border/70 px-5 py-5"><div className="flex items-center gap-2"><FolderOpen size={16} /><h3 className="text-sm font-medium">附件存储</h3></div><p className="mt-1 text-xs text-muted-foreground">工单附件按项目独立保存</p><div className="mt-4 max-w-4xl"><Field label="附件管理路径"><Input className="h-9 font-mono" value={attachmentPath} readOnly /></Field><p className="mt-2 text-[11px] text-muted-foreground">相对于当前数据库所在目录；工单文件位于下级 work-order-ID 目录。附件文件不参与云同步。</p></div></section>
     <section className="border-t border-border/70 px-5 py-5" data-section="cmdb-cloud-sync-settings">
       <div className="flex max-w-4xl items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3"><Cloud className="mt-0.5 h-4 w-4 shrink-0" /><div><h3 className="text-sm font-medium">Netcatty 云同步</h3><p className="mt-1 text-xs text-muted-foreground">Cmdb 规范快照随现有加密同步载荷传输</p></div></div>
@@ -133,18 +166,20 @@ function ProjectSettings() {
 }
 
 export default function ConfigCenter() {
-  const [group, setGroup] = useState('work')
+  const [group, setGroup] = useState('taxonomy')
   const [workTab, setWorkTab] = useState('rule')
   const project = useQuery(api.projects)
   const projectLabel = useMemo(() => project.data?.list?.[0]?.name || '当前项目', [project.data])
   let content
-  if (group === 'project') content = <ProjectSettings />
-  else content = workTab === 'rule' ? <NumberRule /> : <ConfigCatalog kind={workTab} />
-  const tabs = group === 'work' ? WORK_TABS : []
+  if (group === 'taxonomy') content = <TaxonomySettings />
+  else if (group === 'models') content = <ModelSettings />
+  else if (group === 'network') content = <NetworkSettings />
+  else if (group === 'templates') content = <TemplateSettings />
+  else if (group === 'project') content = <ProjectSettings />
+  else content = <div className="flex min-h-0 flex-1 flex-col"><nav className="flex h-9 shrink-0 items-stretch gap-1 overflow-x-auto border-b border-border/70 px-4" aria-label="工单配置项">{WORK_TABS.map(([key, label]) => <TabButton key={key} active={workTab === key} onClick={() => setWorkTab(key)}>{label}</TabButton>)}</nav>{workTab === 'rule' ? <NumberRule /> : <ConfigCatalog kind={workTab} />}</div>
   return <div className="flex h-full min-h-0 flex-col">
     <VaultPageHeader dataSection="cmdb-config-header"><strong className="text-sm">配置中心</strong><span className="ml-1 text-[11px] text-muted-foreground">当前项目：{projectLabel}</span></VaultPageHeader>
-    <nav className="flex h-[44px] shrink-0 items-stretch overflow-x-auto border-b border-border/70 px-3" aria-label="配置分类">{GROUPS.map(([key, label]) => <TabButton key={key} active={group === key} onClick={() => setGroup(key)}>{label}</TabButton>)}</nav>
-    {tabs.length > 0 && <nav className="flex h-[44px] shrink-0 items-stretch overflow-x-auto border-b border-border/70 px-3" aria-label="配置项目">{tabs.map(([key, label]) => <TabButton key={key} active={workTab === key} onClick={() => setWorkTab(key)}>{label}</TabButton>)}<span className="ml-auto hidden shrink-0 self-center pr-3 text-[11px] text-muted-foreground lg:block">配置仅作用于当前项目</span></nav>}
+    <nav className="flex h-10 shrink-0 items-stretch overflow-x-auto border-b border-border/70 px-3" aria-label="配置分类">{GROUPS.map(([key, label]) => <TabButton key={key} active={group === key} onClick={() => setGroup(key)}>{label}</TabButton>)}</nav>
     {content}
   </div>
 }

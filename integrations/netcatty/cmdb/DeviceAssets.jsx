@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { ArrowRight, ChevronDown, FolderTree, Monitor, Network, Plus, RefreshCw, Workflow, X } from 'lucide-react'
+import { ArrowRight, ChevronDown, FolderTree, Monitor, Network, Plus, Workflow, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 import { Spinner } from '@/components/ui/spinner'
@@ -26,6 +26,7 @@ export default function DeviceAssets({ focusTarget, onNavigate, meta }) {
   const [search, setSearch] = useState('')
   const [results, setResults] = useState(null)
   const [taxonomyOpen, setTaxonomyOpen] = useState(false)
+  const [headerActions, setHeaderActions] = useState(null)
   const [command, setCommand] = useState({ tab: '', type: '', id: 0 })
   const [panel, setPanel] = useState({ open: false, width: 420 })
   const onPanelOpenChange = useCallback((open, width = 420) => setPanel(current => current.open === open && current.width === width ? current : { open, width }), [])
@@ -42,10 +43,10 @@ export default function DeviceAssets({ focusTarget, onNavigate, meta }) {
     </DropdownContent></Dropdown>
     <VaultHeaderSearch data-device-asset-search-input value={keyword} onChange={(event) => { const value = event.target.value; setKeyword(value); if (!value) clearSearch() }} onKeyDown={(event) => { if (event.key === 'Enter') submit() }} placeholder="搜索资产编码、名称、SN、IP、品牌、型号或供应商" className="min-w-[180px] max-w-[520px] flex-1" rightAdornment={keyword ? <button type="button" aria-label="清除资产搜索" className="grid h-6 w-6 place-items-center rounded hover:bg-foreground/10" onClick={clearSearch}><X size={13} /></button> : null} />
     <span className="min-w-0 flex-1" />
-    <Button data-device-assets-taxonomy type="button" variant="ghost" className={vaultHeaderSecondaryButtonClass} onClick={() => setTaxonomyOpen(true)}><FolderTree size={15} />分类与分组管理</Button>
-    <Button data-device-assets-refresh type="button" variant="ghost" size="icon" className={vaultHeaderIconButtonClass} aria-label="刷新当前资产列表" onClick={() => issueCommand('refresh')}><RefreshCw size={15} /></Button>
+    <div ref={setHeaderActions} className="flex shrink-0 items-center gap-1" data-device-assets-header-actions />
+    <Button data-device-assets-taxonomy type="button" variant="ghost" size="icon" className={vaultHeaderIconButtonClass} aria-label="分类与分组管理" title="分类与分组管理" onClick={() => setTaxonomyOpen(true)}><FolderTree size={16} /></Button>
   </VaultPageHeader>
     {results && <section className="max-h-48 shrink-0 overflow-auto border-b border-border px-5 py-2" aria-label="设备资产搜索结果"><div className="flex justify-between text-xs text-muted-foreground"><span>{results.length ? `找到 ${results.length} 项` : '未找到匹配资产'}</span><Button variant="ghost" size="sm" onClick={() => setResults(null)}>收起</Button></div>{results.map((row) => <button type="button" key={`${row.tableKey}-${row.id}`} onClick={() => { setResults(null); onNavigate(row) }} className="flex w-full items-center justify-between rounded px-2 py-2 text-left hover:bg-muted"><span className="text-sm">{row.title}<small className="ml-3 text-muted-foreground">{labels[row.tableKey]} · {row.subtitle}</small></span><ArrowRight size={14} /></button>)}</section>}
-    <Suspense fallback={<div className="p-5"><Spinner /></div>}>{tab === 'terminals' ? <TerminalAssets keyword={search} focusTarget={focusTarget} onNavigate={onNavigate} command={command} leadingControl={viewControl} onPanelOpenChange={onPanelOpenChange} /> : tab === 'infrastructure' ? <Infrastructure keyword={search} focusTarget={focusTarget} onNavigate={onNavigate} command={command} leadingControl={viewControl} meta={meta} onPanelOpenChange={onPanelOpenChange} /> : <Systems onNavigate={onNavigate} keyword={search} focusTarget={focusTarget} meta={meta} command={command} leadingControl={viewControl} onPanelOpenChange={onPanelOpenChange} />}</Suspense>
+    <Suspense fallback={<div className="p-5"><Spinner /></div>}>{tab === 'terminals' ? <TerminalAssets keyword={search} focusTarget={focusTarget} onNavigate={onNavigate} command={command} leadingControl={viewControl} headerActions={headerActions} onPanelOpenChange={onPanelOpenChange} /> : tab === 'infrastructure' ? <Infrastructure keyword={search} focusTarget={focusTarget} onNavigate={onNavigate} command={command} leadingControl={viewControl} headerActions={headerActions} meta={meta} onPanelOpenChange={onPanelOpenChange} /> : <Systems onNavigate={onNavigate} keyword={search} focusTarget={focusTarget} meta={meta} command={command} leadingControl={viewControl} headerActions={headerActions} onPanelOpenChange={onPanelOpenChange} />}</Suspense>
   </div><Taxonomy open={taxonomyOpen} onOpenChange={setTaxonomyOpen} onChanged={() => { directoryChanged(); issueCommand('refresh') }} /></div>
 }

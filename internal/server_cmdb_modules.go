@@ -112,6 +112,31 @@ func (s *Server) handleUpdateCmdbWorkOrder(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, 200, map[string]string{"ok": "1"})
 }
 
+func (s *Server) handleBatchUpdateCmdbWorkOrders(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
+	var body struct {
+		IDs    []int64 `json:"ids"`
+		Status string  `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体解析失败: "+err.Error())
+		return
+	}
+	if len(body.IDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "至少选择一张工单")
+		return
+	}
+	if body.Status == "" {
+		body.Status = "已关闭"
+	}
+	updated, err := s.Store.BatchUpdateCmdbWorkOrdersStatusForProject(scope, body.IDs, body.Status)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"updated": updated, "status": body.Status})
+}
+
 func (s *Server) handleDeleteCmdbWorkOrder(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
 	id, ok := cmdbPathID(r)

@@ -35,8 +35,8 @@ function TaxonomyNode({ node, depth, selectedId, expanded, onToggle, onSelect })
   </div>
 }
 
-export default function Taxonomy({ open, onOpenChange, onChanged }) {
-  const [kind, setKind] = useState('terminal-categories')
+export default function Taxonomy({ open, onOpenChange, onChanged, initialKind = 'terminal-categories' }) {
+  const [kind, setKind] = useState(initialKind)
   const [rows, setRows] = useState([])
   const [selectedId, setSelectedId] = useState(0)
   const [draft, setDraft] = useState(null)

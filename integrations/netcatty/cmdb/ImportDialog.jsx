@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button'
 import { useAction } from './hooks'
 import { DataTable, DefinitionList, ErrorBanner, ModalForm } from './ui'
 
-export default function ImportDialog({ importer, onImported, title = '导入资产' }) {
+export default function ImportDialog({ importer, onImported, title = '导入资产', renderTrigger }) {
   const [preview, setPreview] = useState(null)
   const action = useAction()
   const rows = preview?.rows || preview?.items || []
-  return <><Button size="sm" variant="outline" disabled={action.busy} onClick={() => action.run(async () => { const result = await importer(); if (!result.cancelled) setPreview(result) })}>{title}</Button>
+  const startImport = () => action.run(async () => { const result = await importer(); if (!result.cancelled) setPreview(result) })
+  return <>{renderTrigger ? renderTrigger(startImport, action.busy) : <Button size="sm" variant="outline" disabled={action.busy} onClick={startImport}>{title}</Button>}
     <ModalForm open={!!preview} onOpenChange={(v) => { if (!v) setPreview(null) }} title={`${title}预览`} wide busy={action.busy} submitLabel="确认导入" onSubmit={() => action.run(async () => {
       if (!preview.token) throw new Error('导入预览已失效，请重新选择文件')
       if (preview.errors?.length) throw new Error('请先修正导入文件中的错误')

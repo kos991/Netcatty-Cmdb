@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Archive, ArrowLeftRight, Download, FileSpreadsheet, History, Image as ImageIcon, Monitor, MoreHorizontal, Network, Pencil, RotateCcw, UserRound, Wrench } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Archive, ArrowLeftRight, History, Image as ImageIcon, Monitor, MoreHorizontal, Network, Pencil, RotateCcw, UserRound, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
@@ -9,19 +10,20 @@ import { allPages, directoryChanged, useAction, useDirectory, useQuery, useTable
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { isCloudDevice, normalizeAsset, nowText, terminalSerialProfile } from './state'
 import { ActionIcon, DataTable, EmptyState, ErrorBanner, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
-import ImportDialog from './ImportDialog'
+import AssetTransferMenu from './AssetTransferMenu'
 import NetcattyConnectionFields, { useNetcattyConnectionEditor } from './NetcattyConnectionFields'
 import NetcattyLinks from './NetcattyLinks'
 import DeviceImages from './DeviceImages'
 import { AssetPanel, AssetPanelFields, AssetPanelSave, AssetPanelSection } from './AssetPanel'
 import OperatingSystemCell from './OperatingSystemCell'
+import AssetFilterPicker, { useAssetFilterSelection } from './AssetFilterPicker'
 import { buildLinkedHostByAssetID, operatingSystemTypeFromDetectedHost } from './deviceWorkspaceModel'
 import { useNetcattyDirectory } from './NetcattyDirectory'
 import { syncFollowingNetcattyHosts } from './NetcattyConnection'
 
 const loadDirectory = async () => {
-  const [people, statuses, categories, groups, meta] = await Promise.all([allPages(api.persons), api.config('statuses'), api.taxonomy('terminal-categories'), api.taxonomy('groups'), api.meta()])
-  return { people, statuses: [...new Set([...(statuses.list || []).map((x) => x.name), ...(meta.statuses || [])])], categories: categories.list || [], groups: groups.list || [], departments: meta.departments || [] }
+  const [people, statuses, categories, groups, meta, networkTypes] = await Promise.all([allPages(api.persons), api.config('statuses'), api.taxonomy('terminal-categories'), api.taxonomy('groups'), api.meta(), api.config('network-types')])
+  return { people, statuses: [...new Set([...(statuses.list || []).map((x) => x.name), ...(meta.statuses || [])])], categories: categories.list || [], groups: groups.list || [], departments: meta.departments || [], networkTypes: (networkTypes.list || []).map((item) => item.name) }
 }
 
 export function LogTimeline({ logs = [] }) {
@@ -70,10 +72,12 @@ function TerminalRowActions({ record, compact, onDetail, onEdit, onTransfer, onM
   </Dropdown>
 }
 
-export default function TerminalAssets({ keyword = '', focusTarget, command, leadingControl, onPanelOpenChange, onNavigate }) {
+export default function TerminalAssets({ keyword = '', focusTarget, command, leadingControl, headerActions, onPanelOpenChange, onNavigate }) {
   const [filters, setFilters] = useState({ device_type: '', group_id: '', dept: '', status: '', include_archived: '' })
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const filterItems = [{ key: 'device_type', label: '设备分类' }, { key: 'group_id', label: '资产分组' }, { key: 'dept', label: '部门' }, { key: 'status', label: '状态' }, { key: 'include_archived', label: '含已注销' }]
+  const { visible: visibleFilters, toggle: toggleFilter } = useAssetFilterSelection('terminals', filterItems, filterItems.map((item) => item.key), setFilters, () => setPage(1))
   const [detailId, setDetailId] = useState(null)
   const [detailRevision, setDetailRevision] = useState(0)
   const [editor, setEditor] = useState(null)
@@ -88,7 +92,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
   const netcatty = useNetcattyConnectionEditor('terminal')
   const beginNetcattyConnection = netcatty.begin
   const directory = useDirectory(loadDirectory)
-  const d = directory.data || { people: [], statuses: [], categories: [], groups: [], departments: [] }
+  const d = directory.data || { people: [], statuses: [], categories: [], groups: [], departments: [], networkTypes: [] }
   const loader = useCallback(() => api.assets({ keyword, ...filters, page, page_size: pageSize }), [keyword, filters, page, pageSize])
   const query = useQuery(loader)
   const linkLoader = useCallback(() => api.netcattyLinks({ asset_type: 'terminal' }), [])
@@ -131,8 +135,8 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     setEditor({ mode, record })
     setValues(mode === 'transfer' ? { to_room: record.room, date: nowText(), operator: '资产管理员' }
       : mode === 'maintenance' ? { part_type: 'box', maintenance_type: isCloudDevice(record.device_type) ? '更换终端主机' : '更换设备', old_sn: record.box_sn, new_status: record.status, mark_old_as: '故障待修入库', date: nowText(), operator: '运维技术员' }
-        : { device_type: '', group_id: 0, status: '在用', net_type: '专网', ...record })
-  }, [beginNetcattyConnection])
+        : { device_type: '', group_id: 0, status: '在用', net_type: d.networkTypes[0] || '', ...record })
+  }, [beginNetcattyConnection, d.networkTypes])
   useEffect(() => {
     if (!command?.id || command?.tab !== 'terminals' || handledCommandId.current === command.id) return
     handledCommandId.current = command.id
@@ -160,7 +164,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     { key: 'person_id', label: '从人员目录选择', numeric: true, options: peopleOptions, derive: (id) => { const person = d.people.find((p) => p.id === id); return { user_name: person?.name || '', department: person?.department || '' } } },
     ...textFields([['user_name', '当前使用人'], ['department', '部门'], ['room', '房间 / 位置'], ['ip', isCloudDevice(values.device_type) ? '业务/虚拟机 IP' : '设备 IP']]),
     { key: 'terminal_ip', label: '终端物理 IP', hidden: !isCloudDevice(values.device_type) },
-    { key: 'net_type', label: 'IP 网络类型', options: choices(['专网', '外网', '内网']) },
+    { key: 'net_type', label: 'IP 网络类型', options: choices([...new Set([...d.networkTypes, values.net_type].filter(Boolean))]) },
     { key: 'os_type', label: '操作系统类型', searchable: true, options: choices([...new Set([...terminalOperatingSystemTypes, values.os_type].filter(Boolean))]) },
     { key: 'os_version', label: '操作系统版本' },
     { key: 'status', label: '设备状态', options: choices([...new Set([...d.statuses, values.status].filter(Boolean))]) },
@@ -198,15 +202,15 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
   const mediumColumns = columns.filter((column) => ['asset_code', 'operating_system', 'ip', 'status', 'actions'].includes(column.key))
   const visibleColumns = density === 'compact' ? compactColumns : density === 'medium' ? mediumColumns : columns
   return <div ref={tableRef} className="flex min-h-0 flex-1 flex-col">
+    {headerActions && createPortal(<><AssetFilterPicker items={filterItems} visible={visibleFilters} onToggle={toggleFilter} /><AssetTransferMenu importTitle="导入终端资产" importer={api.importAssets} onImported={query.reload} exporter={() => api.exportAssets({ keyword, ...filters })} /></>, headerActions)}
     <Toolbar>
       {leadingControl}
-      <SelectControl value={filters.device_type} onChange={(v) => filter('device_type', v)} options={choices(d.categories.map((item) => item.name), '全部设备分类')} className="w-36" />
-      <SelectControl value={filters.group_id} onChange={(v) => filter('group_id', v)} options={choices(d.groups.map((item) => ({ value: item.id, label: item.name })), '全部资产分组')} className="w-36" />
-      <SelectControl value={filters.dept} onChange={(v) => filter('dept', v)} options={choices(d.departments, '全部部门')} className="w-36" />
-      <SelectControl value={filters.status} onChange={(v) => filter('status', v)} options={choices(d.statuses, '全部状态')} className="w-36" />
-      <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={!!filters.include_archived} onChange={(e) => filter('include_archived', e.target.checked ? '1' : '')} />含已注销</label>
+      {visibleFilters.includes('device_type') && <SelectControl value={filters.device_type} onChange={(v) => filter('device_type', v)} options={choices(d.categories.map((item) => item.name), '全部设备分类')} className="w-36" />}
+      {visibleFilters.includes('group_id') && <SelectControl value={filters.group_id} onChange={(v) => filter('group_id', v)} options={choices(d.groups.map((item) => ({ value: item.id, label: item.name })), '全部资产分组')} className="w-36" />}
+      {visibleFilters.includes('dept') && <SelectControl value={filters.dept} onChange={(v) => filter('dept', v)} options={choices(d.departments, '全部部门')} className="w-36" />}
+      {visibleFilters.includes('status') && <SelectControl value={filters.status} onChange={(v) => filter('status', v)} options={choices(d.statuses, '全部状态')} className="w-36" />}
+      {visibleFilters.includes('include_archived') && <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={!!filters.include_archived} onChange={(e) => filter('include_archived', e.target.checked ? '1' : '')} />含已注销</label>}
       <ActionIcon label="重置筛选" onClick={() => { setFilters({ device_type: '', group_id: '', dept: '', status: '', include_archived: '' }); setPage(1) }}><RotateCcw size={15} /></ActionIcon>
-      <div className="ml-auto flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={action.busy} onClick={() => action.run(api.downloadAssetTemplate)}><FileSpreadsheet size={14} className="mr-1" />模板</Button><ImportDialog title="导入终端资产" importer={api.importAssets} onImported={query.reload} /><Button size="sm" variant="outline" disabled={action.busy} onClick={() => action.run(() => api.exportAssets({ keyword, ...filters }))}><Download size={14} className="mr-2" />导出</Button></div>
     </Toolbar>
     {(query.error || directory.error || linkQuery.error || autoDetectError) && <ErrorBanner message={query.error || directory.error || linkQuery.error || autoDetectError} onRetry={() => { setAutoDetectError(''); query.reload(); directory.reload(); linkQuery.reload() }} />}
     <DataTable columns={visibleColumns} compact={density !== 'wide'} rows={query.error ? [] : query.data?.list || []} loading={query.loading} />

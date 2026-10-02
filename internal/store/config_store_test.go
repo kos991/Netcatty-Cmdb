@@ -173,6 +173,7 @@ func TestConfigCatalogProjectIsolation(t *testing.T) {
 		{kind: ConfigKindSoftware, itemA: ConfigItem{Name: "终端安全软件", Vendor: "厂商甲", Version: "1.0"}, itemB: ConfigItem{Name: "终端安全软件", Vendor: "厂商乙", Version: "2.0"}},
 		{kind: ConfigKindLocations, itemA: ConfigItem{Name: "数据机房"}, itemB: ConfigItem{Name: "数据机房"}},
 		{kind: ConfigKindStatuses, itemA: ConfigItem{Name: "在用"}, itemB: ConfigItem{Name: "在用"}},
+		{kind: ConfigKindNetworkTypes, itemA: ConfigItem{Name: "测试专线"}, itemB: ConfigItem{Name: "测试专线"}},
 		{kind: ConfigKindWorkOrderCategories, itemA: ConfigItem{Name: "故障处理"}, itemB: ConfigItem{Name: "故障处理"}},
 		{kind: ConfigKindWorkOrderTypes, itemA: ConfigItem{Name: "排障"}, itemB: ConfigItem{Name: "排障"}},
 		{kind: ConfigKindWorkOrderPriorities, itemA: ConfigItem{Name: "P3（普通）"}, itemB: ConfigItem{Name: "P3（普通）"}},
@@ -191,11 +192,11 @@ func TestConfigCatalogProjectIsolation(t *testing.T) {
 				t.Fatalf("创建项目 B 同名配置: %v", err)
 			}
 			listA, err := s.ListConfigItems(scopeA, tt.kind)
-			if err != nil || len(listA) != 1 || listA[0].ID != idA || listA[0].ProjectID != scopeA.ProjectID || listA[0].SyncID == "" {
+			if err != nil || !containsConfigItem(listA, idA, scopeA.ProjectID) {
 				t.Fatalf("项目 A 配置隔离失败: list=%+v err=%v", listA, err)
 			}
 			listB, err := s.ListConfigItems(scopeB, tt.kind)
-			if err != nil || len(listB) != 1 || listB[0].ID != idB || listB[0].ProjectID != scopeB.ProjectID || listB[0].SyncID == "" {
+			if err != nil || !containsConfigItem(listB, idB, scopeB.ProjectID) {
 				t.Fatalf("项目 B 配置隔离失败: list=%+v err=%v", listB, err)
 			}
 			if err := s.DeleteConfigItem(scopeA, tt.kind, idB); !errors.Is(err, ErrProjectScopedNotFound) {
@@ -209,6 +210,36 @@ func TestConfigCatalogProjectIsolation(t *testing.T) {
 	}
 	if _, err := s.ListConfigItems(scopeA, "unknown"); err == nil {
 		t.Fatal("未知配置类型必须显式报错")
+	}
+}
+
+func containsConfigItem(items []ConfigItem, id, projectID int64) bool {
+	for _, item := range items {
+		if item.ID == id && item.ProjectID == projectID && item.SyncID != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestNetworkTypesHaveProjectDefaults(t *testing.T) {
+	s := newCmdbTestStore(t)
+	first, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondProject, err := s.CreateCmdbProject(&CmdbProject{Code: "second", Name: "第二项目"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []ProjectScope{first, {ProjectID: secondProject.ID}} {
+		items, err := s.ListConfigItems(scope, ConfigKindNetworkTypes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 3 || items[0].Name != "专网" || items[1].Name != "外网" || items[2].Name != "内网" {
+			t.Fatalf("项目 %d 网络类型默认项错误: %+v", scope.ProjectID, items)
+		}
 	}
 }
 

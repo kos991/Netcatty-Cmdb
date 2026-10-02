@@ -5,8 +5,8 @@ const { spawn } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
 const target = path.resolve(process.env.NETCATTY_PREVIEW_TARGET || path.join(root, 'build', 'netcatty-native-ui'));
-const data = path.join(root, 'build', 'native-ui-preview');
-const server = path.join(root, 'build', 'cmdb-server-native-ui.exe');
+const data = path.resolve(process.env.NETCATTY_PREVIEW_DATA || path.join(root, 'build', 'native-ui-preview'));
+const server = path.resolve(process.env.NETCATTY_PREVIEW_SERVER || path.join(root, 'build', 'cmdb-server-native-ui.exe'));
 const port = Number(process.env.NETCATTY_PREVIEW_PORT || 18082);
 
 if (process.versions.electron) {

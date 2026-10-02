@@ -1,20 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Download, FileSpreadsheet, List, Lock, Pencil, Plus, RefreshCw, Settings2, Trash2, Unlock } from 'lucide-react'
+import { List, Lock, Pencil, Plus, Settings2, Trash2, Unlock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from '@/components/ui/toast'
-import { VaultHeaderSearch, VaultPageHeader, vaultHeaderIconButtonClass, vaultHeaderSecondaryButtonClass } from '@/components/vault/VaultPageHeader'
+import { VaultHeaderSearch, VaultPageHeader } from '@/components/vault/VaultPageHeader'
 import { api } from './api'
-import { allPages, useAction, useQuery } from './hooks'
+import { allPages, useAction, useDirectory, useQuery } from './hooks'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { ipAddressPresentation, isCloudDevice } from './state'
-import { ActionIcon, DataTable, DefinitionList, DetailSheet, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, Toolbar } from './ui'
+import { ActionIcon, DataTable, DefinitionList, DetailSheet, ErrorBanner, ModalForm, Pagination, StatusPill, Toolbar } from './ui'
 import Catalog from './Catalog'
-import ImportDialog from './ImportDialog'
+import AssetTransferMenu from './AssetTransferMenu'
 import { useNetcattyDirectory } from './NetcattyDirectory'
 import { syncFollowingNetcattyHosts } from './NetcattyConnection'
 
 const loadSubnets = async () => (await api.ipSubnets()).list || []
+const loadNetworkTypes = async () => (await api.config('network-types')).list || []
 const loadSummary = () => api.ipSummary()
 const loadAssets = async () => {
   const [terminals, infrastructure, applications] = await Promise.all([allPages(api.assets), allPages(api.infrastructure, { scope: 'infrastructure' }), allPages(api.apps)])
@@ -33,9 +34,9 @@ function UsageBar({ value = 0 }) {
   return <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-[width]" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} /></div>
 }
 
-function SubnetSettings({ onChanged }) {
-  return <Catalog title="网段" load={loadSubnets} defaults={{ category: '专网', sort_order: 0 }} save={(v, row) => row.id ? api.updateSubnet(row.id, v) : api.createSubnet(v)} remove={(row) => api.deleteSubnet(row.id)} onChanged={onChanged} fields={[
-    { key: 'name', label: '网段名称', required: true }, { key: 'category', label: '网络类型', options: ['专网', '外网', '内网'] }, ...textFields([['prefix', '地址前缀'], ['cidr', 'CIDR'], ['gateway', '网关'], ['vlan', 'VLAN'], ['vni', 'VXLAN VNI'], ['purpose', '用途'], ['sort_order', '排序', 'number'], ['remark', '备注', 'textarea']]),
+function SubnetSettings({ onChanged, networkTypes }) {
+  return <Catalog title="网段" load={loadSubnets} defaults={{ category: networkTypes[0] || '', sort_order: 0 }} save={(v, row) => row.id ? api.updateSubnet(row.id, v) : api.createSubnet(v)} remove={(row) => api.deleteSubnet(row.id)} onChanged={onChanged} fields={(values) => [
+    { key: 'name', label: '网段名称', required: true }, { key: 'category', label: '网络类型', required: true, options: choices([...new Set([...networkTypes, values.category].filter(Boolean))]) }, ...textFields([['prefix', '地址前缀'], ['cidr', 'CIDR'], ['gateway', '网关'], ['vlan', 'VLAN'], ['vni', 'VXLAN VNI'], ['purpose', '用途'], ['sort_order', '排序', 'number'], ['remark', '备注', 'textarea']]),
   ]} columns={textFields([['name', '网段'], ['category', '网络类型'], ['cidr', 'CIDR'], ['gateway', '网关'], ['vlan', 'VLAN'], ['vni', 'VNI'], ['total', '地址数']])} />
 }
 
@@ -49,7 +50,6 @@ function IPDetails({ record, onNavigate }) {
 
 export default function IPAM({ focusTarget, onNavigate }) {
   const [subnet, setSubnet] = useState('')
-  const [status, setStatus] = useState('')
   const [keyword, setKeyword] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -64,7 +64,8 @@ export default function IPAM({ focusTarget, onNavigate }) {
   const subnets = useQuery(loadSubnets, [])
   const summary = useQuery(loadSummary)
   const assets = useQuery(loadAssets, [])
-  const listLoader = useCallback(() => api.ipEntries({ subnet, status, keyword: search, page, page_size: pageSize }), [subnet, status, search, page, pageSize])
+  const networkTypes = useDirectory(loadNetworkTypes)
+  const listLoader = useCallback(() => api.ipEntries({ subnet, keyword: search, page, page_size: pageSize }), [subnet, search, page, pageSize])
   const visualLoader = useCallback(() => subnet ? api.ipVisualization({ subnet, page, page_size: pageSize }) : Promise.resolve({ list: [], total: 0 }), [subnet, page, pageSize])
   const listQuery = useQuery(listLoader)
   const visualQuery = useQuery(visualLoader)
@@ -133,10 +134,10 @@ export default function IPAM({ focusTarget, onNavigate }) {
       <div className="flex h-10 items-center border-t border-border/70 px-3 text-[11px] text-muted-foreground">选择网段查看地址占用</div>
     </aside>
     <section className="flex min-w-0 flex-1 flex-col">
-      <VaultPageHeader dataSection="cmdb-ipam-header" contentClassName="h-auto min-h-14 flex-wrap"><Button data-ipam-add-subnet type="button" className="h-10 shrink-0 gap-2 px-4" onClick={() => setSettings(true)}><Plus size={14} />新增网段</Button><VaultHeaderSearch data-ipam-search value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { setSearch(keyword.trim()); setPage(1) } }} placeholder="搜索 IP、资产、人员、部门、VLAN 或 VNI" className="min-w-[180px] max-w-[620px] flex-1" /><span className="min-w-0 flex-1" /><Button variant="secondary" className={vaultHeaderSecondaryButtonClass} onClick={() => action.run(api.downloadIPTemplate)}><FileSpreadsheet size={14} />模板</Button><ImportDialog title="导入 IP" importer={api.importIPs} onImported={refresh} /><Button variant="secondary" className={vaultHeaderSecondaryButtonClass} onClick={() => action.run(() => api.exportIPs({ subnet, status, keyword: search }))}><Download size={14} />导出</Button><ActionIcon className={vaultHeaderIconButtonClass} label="刷新" onClick={refresh}><RefreshCw size={15} /></ActionIcon></VaultPageHeader>
+      <VaultPageHeader dataSection="cmdb-ipam-header" contentClassName="h-auto min-h-14 flex-wrap"><Button data-ipam-add-subnet type="button" className="h-10 shrink-0 gap-2 px-4" onClick={() => setSettings(true)}><Plus size={14} />新增网段</Button><VaultHeaderSearch data-ipam-search value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { setSearch(keyword.trim()); setPage(1) } }} placeholder="搜索 IP、资产、人员、部门、VLAN 或 VNI" className="min-w-[180px] max-w-[520px] flex-1" /><span className="min-w-0 flex-1" /><AssetTransferMenu importTitle="导入 IP" importer={api.importIPs} onImported={refresh} exporter={() => api.exportIPs({ subnet, keyword: search })} /></VaultPageHeader>
       <div className="flex h-12 items-center gap-2 border-b border-border/70 px-4">{[['ip', 'IP 地址'], ['vlan', 'VLAN'], ['vxlan', 'VXLAN']].map(([key, label]) => <Button key={key} variant={resourceView === key ? 'secondary' : 'ghost'} size="sm" onClick={() => setResourceView(key)}>{label}</Button>)}</div>
       <div className="grid grid-cols-2 border-b border-border/70 lg:grid-cols-[minmax(150px,1.4fr)_repeat(5,minmax(68px,.55fr))]"><div className="col-span-2 border-b border-border/70 px-4 py-3 lg:col-span-1 lg:border-b-0 lg:border-r"><strong className="text-sm">{subnet || '请选择网段'}</strong><p className="mt-1 font-mono text-[11px] text-muted-foreground">{activeSummary.cidr || activeSummary.prefix || '-'}{activeSummary.vlan ? ` · VLAN ${activeSummary.vlan}` : ''}{activeSummary.vni ? ` · VNI ${activeSummary.vni}` : ''}</p><div className="mt-2"><UsageBar value={activeSummary.usage_rate} /></div></div>{[['使用率', `${activeSummary.usage_rate || 0}%`], ['已占用', activeSummary.used || 0], ['预留', activeSummary.reserved || 0], ['空闲', activeSummary.free || 0], ['异常', activeSummary.abnormal || 0]].map(([label, value]) => <div key={label} className="border-r border-border/70 px-3 py-2.5 last:border-r-0"><span className="text-[10px] text-muted-foreground">{label}</span><strong className="mt-0.5 block font-mono text-base tabular-nums">{value}</strong></div>)}</div>
-      {resourceView === 'ip' ? <Toolbar><SelectControl className="w-32" value={status} onChange={(v) => { setStatus(v); setPage(1) }} options={choices(['空闲', '在用', '保留', '不可用', '冲突'], '全部状态')} /><Button variant="outline" size="sm" onClick={() => { setView(view === 'grid' ? 'table' : 'grid'); setPage(1) }}><List size={14} className="mr-1" />{view === 'grid' ? '列表视图' : '方格视图'}</Button><Button variant="outline" size="sm" onClick={() => open()}>补录 IP</Button></Toolbar> : null}
+      {resourceView === 'ip' ? <Toolbar><Button variant="outline" size="sm" onClick={() => { setView(view === 'grid' ? 'table' : 'grid'); setPage(1) }}><List size={14} className="mr-1" />{view === 'grid' ? '列表视图' : '方格视图'}</Button><Button variant="outline" size="sm" onClick={() => open()}>补录 IP</Button></Toolbar> : null}
       {(query.error || summary.error || subnets.error || assets.error) && <ErrorBanner message={query.error || summary.error || subnets.error || assets.error} onRetry={refresh} />}
       {resourceView !== 'ip' ? <DataTable rows={(summary.data?.subnets || []).filter((item) => resourceView === 'vlan' ? item.vlan : item.vni)} columns={resourceView === 'vlan' ? textFields([['subnet', '网段'], ['cidr', 'CIDR'], ['vlan', 'VLAN'], ['purpose', '用途'], ['usage_rate', '使用率（%）']]) : textFields([['subnet', '网段'], ['cidr', 'CIDR'], ['vni', 'VXLAN VNI'], ['purpose', '用途'], ['usage_rate', '使用率（%）']])} /> : view === 'table' ? <DataTable rows={rows} loading={query.loading} columns={columns} /> : <div className="min-h-0 flex-1 overflow-auto p-3">{query.loading ? <p className="text-sm text-muted-foreground">加载中...</p> : <div data-ipam-address-grid className="grid grid-cols-[repeat(auto-fill,minmax(42px,1fr))] gap-1">{rows.map((row) => {
         const presentation = ipAddressPresentation(row)
@@ -148,7 +149,7 @@ export default function IPAM({ focusTarget, onNavigate }) {
       })}</div>}</div>}
       {resourceView === 'ip' && (view === 'table' || subnet) && <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} pageSizes={view === 'grid' ? [96, 128, 256, 500] : [20, 50, 100, 256]} onChange={(p, size) => { setPage(p); setPageSize(size) }} />}
     </section>
-    <DetailSheet open={settings} onOpenChange={setSettings} title="网段管理">{settings && <SubnetSettings onChanged={refresh} />}</DetailSheet>
+    <DetailSheet open={settings} onOpenChange={setSettings} title="网段管理">{settings && <SubnetSettings onChanged={refresh} networkTypes={(networkTypes.data || []).map((item) => item.name)} />}</DetailSheet>
     <DetailSheet open={!!detail} onOpenChange={(v) => { if (!v) setDetail(null) }} title="IP 地址详情" actions={detail && !specialIP(detail) && <>{!usedIP(detail) && <Button variant="outline" size="sm" onClick={() => reservedIP(detail) ? clearReservation(detail) : open(detail, 'reserve')}>{reservedIP(detail) ? '取消预留' : '预留'}</Button>}<Button size="sm" onClick={() => usedIP(detail) ? setConfirmation({ action: 'release', record: detail }) : open(detail, 'allocate')}>{usedIP(detail) ? '释放' : '分配'}</Button></>}>{detail && <IPDetails record={detail} onNavigate={(target) => { setDetail(null); onNavigate(target) }} />}</DetailSheet>
     <ModalForm open={!!editor} onOpenChange={(v) => { if (!v) setEditor(null) }} title={editor?.mode === 'allocate' ? `分配 ${editor.record.ip}` : editor?.mode === 'reserve' ? `预留 ${editor.record.ip}` : editor?.record.id ? '编辑 IP' : '新增 IP'} busy={action.busy} onSubmit={() => action.run(async () => {
       const fields = editor.mode === 'allocate' ? allocateFields : editor.mode === 'reserve' ? [{ key: 'remark', label: '预留用途', type: 'textarea' }] : editFields

@@ -54,6 +54,7 @@ var projectScopedTables = []string{
 	"cmdb_asset_software",
 	"cmdb_locations",
 	"cmdb_statuses",
+	"cmdb_network_types",
 	"cmdb_work_order_categories",
 	"cmdb_work_order_types",
 	"cmdb_work_order_priorities",
@@ -132,6 +133,45 @@ func MigrateProjectSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if _, err := tx.Exec(`DROP INDEX IF EXISTS idx_cmdb_network_types_sync_id`); err != nil {
+		return fmt.Errorf("drop network type sync index: %w", err)
+	}
+	if _, err := tx.Exec(`CREATE UNIQUE INDEX idx_cmdb_network_types_sync_id
+		ON cmdb_network_types(project_id, sync_id) WHERE sync_id IS NOT NULL AND sync_id <> ''`); err != nil {
+		return fmt.Errorf("create project network type sync index: %w", err)
+	}
+	var networkTypesSeeded int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM _meta WHERE k='cmdb_network_types_seeded_v1'`).Scan(&networkTypesSeeded); err != nil {
+		return fmt.Errorf("检查网络类型默认项: %w", err)
+	}
+	if networkTypesSeeded == 0 {
+		rows, err := tx.Query(`SELECT id FROM cmdb_projects WHERE deleted_at IS NULL`)
+		if err != nil {
+			return fmt.Errorf("查询网络类型项目: %w", err)
+		}
+		var projectIDs []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			projectIDs = append(projectIDs, id)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+		for _, id := range projectIDs {
+			if err := insertDefaultNetworkTypes(tx, id, now); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(`INSERT INTO _meta(k,v) VALUES('cmdb_network_types_seeded_v1','1')`); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.Exec(`
 		INSERT OR REPLACE INTO _meta(k, v) VALUES ('project_schema_version', ?)
 	`, projectSchemaVersion); err != nil {
@@ -152,6 +192,19 @@ func MigrateProjectSchema(db *sql.DB) error {
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit project migration: %w", err)
+	}
+	return nil
+}
+
+func insertDefaultNetworkTypes(tx *sql.Tx, projectID int64, _ string) error {
+	const createdAt = "1970-01-01T00:00:00Z"
+	for index, name := range []string{"专网", "外网", "内网"} {
+		syncID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("netcatty/cmdb/network-type/"+name)).String()
+		if _, err := tx.Exec(`INSERT INTO cmdb_network_types(project_id,sync_id,name,sort_order,created_at,updated_at)
+			SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM cmdb_network_types WHERE project_id=? AND name=? AND deleted_at IS NULL)`,
+			projectID, syncID, name, index+1, createdAt, createdAt, projectID, name); err != nil {
+			return fmt.Errorf("初始化网络类型 %s: %w", name, err)
+		}
 	}
 	return nil
 }

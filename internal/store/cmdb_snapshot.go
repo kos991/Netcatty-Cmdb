@@ -63,7 +63,7 @@ var snapshotExcludedTables = map[string]bool{
 
 var snapshotApplyOrder = []string{
 	"cmdb_orgs", "cmdb_groups", "cmdb_device_categories", "cmdb_device_models",
-	"cmdb_org_nodes", "cmdb_persons", "cmdb_software_catalog", "cmdb_locations", "cmdb_statuses",
+	"cmdb_org_nodes", "cmdb_persons", "cmdb_software_catalog", "cmdb_locations", "cmdb_statuses", "cmdb_network_types",
 	"cmdb_work_order_categories", "cmdb_work_order_types", "cmdb_work_order_priorities", "cmdb_work_order_rules",
 	"cmdb_custom_fields", "assets", "servers", "server_apps", "cmdb_assets", "cmdb_asset_interfaces",
 	"cmdb_asset_links", "cmdb_netcatty_links", "cmdb_switch_snapshots", "cmdb_asset_history", "cmdb_work_orders",

@@ -231,6 +231,37 @@ func TestCmdbMergeAddsDifferentRecordsWithoutMutatingPreflight(t *testing.T) {
 	}
 }
 
+func TestDefaultNetworkTypesMergeAcrossIndependentStores(t *testing.T) {
+	remote, remoteScope := openSnapshotTestStore(t)
+	local, localScope := openSnapshotTestStore(t)
+	remoteProject, err := remote.ResolveProject(remoteScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alignSnapshotProject(t, local, localScope, remoteProject.SyncID)
+	snapshot, err := remote.ExportCmdbSnapshot(remoteScope, SnapshotExportOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := local.PreflightCmdbSnapshot(localScope, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Added != 0 || preview.Conflicts != 0 {
+		t.Fatalf("独立库的默认网络类型不应重复新增或冲突: %+v", preview)
+	}
+	if _, err := local.ApplyCmdbSnapshot(localScope, snapshot); err != nil {
+		t.Fatalf("合并默认网络类型: %v", err)
+	}
+	items, err := local.ListConfigItems(localScope, ConfigKindNetworkTypes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("合并后应仅有三种默认网络类型，实际 %+v", items)
+	}
+}
+
 func TestCmdbMergeRejectsConcurrentRecordConflictWithoutPartialWrites(t *testing.T) {
 	remote, remoteScope := openSnapshotTestStore(t)
 	local, localScope := openSnapshotTestStore(t)

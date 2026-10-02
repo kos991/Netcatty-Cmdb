@@ -235,6 +235,47 @@ func (s *Store) UpdateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	return tx.Commit()
 }
 
+// BatchUpdateCmdbWorkOrdersStatusForProject 批量结束当前项目内的工单。
+// 工单结束统一使用「已关闭」，同时补齐完成时间，不跨项目修改记录。
+func (s *Store) BatchUpdateCmdbWorkOrdersStatusForProject(scope ProjectScope, ids []int64, status string) (int64, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return 0, err
+	}
+	if strings.TrimSpace(status) != "已关闭" {
+		return 0, fmt.Errorf("批量结束工单只允许使用「已关闭」状态")
+	}
+	unique := make([]int64, 0, len(ids))
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 {
+		return 0, fmt.Errorf("至少选择一张有效工单")
+	}
+	placeholders := make([]string, len(unique))
+	args := []interface{}{"已关闭"}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	args = append(args, now, now, scope.ProjectID)
+	for i, id := range unique {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	result, err := s.db.Exec(`UPDATE cmdb_work_orders SET status=?,
+		actual_time=CASE WHEN IFNULL(actual_time,'')='' THEN ? ELSE actual_time END,
+		updated_at=? WHERE project_id=? AND id IN (`+strings.Join(placeholders, ",")+")", args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 func (s *Store) replaceWorkOrderAssetRefs(tx *sql.Tx, scope ProjectScope, workOrderID int64, refs []WorkOrderAssetRef) error {
 	if _, err := tx.Exec(`DELETE FROM cmdb_work_order_asset_links WHERE project_id=? AND work_order_id=?`, scope.ProjectID, workOrderID); err != nil {
 		return err

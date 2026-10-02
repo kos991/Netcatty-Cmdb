@@ -54,6 +54,38 @@ func TestCmdbWorkOrderCRUDAndFilter(t *testing.T) {
 	}
 }
 
+func TestCmdbWorkOrderBatchCompletion(t *testing.T) {
+	s := newCmdbTestStore(t)
+	first, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "批量结束一", Status: "处理中"})
+	if err != nil {
+		t.Fatalf("新增第一张工单失败: %v", err)
+	}
+	second, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "批量结束二", Status: "已解决"})
+	if err != nil {
+		t.Fatalf("新增第二张工单失败: %v", err)
+	}
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatalf("读取项目范围失败: %v", err)
+	}
+	updated, err := s.BatchUpdateCmdbWorkOrdersStatusForProject(scope, []int64{first, second, first}, "已关闭")
+	if err != nil || updated != 2 {
+		t.Fatalf("批量结束应更新 2 张工单，updated=%d err=%v", updated, err)
+	}
+	for _, id := range []int64{first, second} {
+		order, getErr := s.GetCmdbWorkOrder(id)
+		if getErr != nil {
+			t.Fatalf("读取批量结束工单失败: %v", getErr)
+		}
+		if order.Status != "已关闭" || order.ActualTime == "" {
+			t.Fatalf("工单应进入已关闭并记录完成时间: %+v", order)
+		}
+	}
+	if _, err := s.BatchUpdateCmdbWorkOrdersStatusForProject(scope, []int64{first}, "处理中"); err == nil {
+		t.Fatalf("批量结束不应接受非已关闭状态")
+	}
+}
+
 // 同一秒内连续创建不能产生重复单号（回归：曾用秒级时间戳生成，产生过重复工单号）。
 func TestCmdbAutoNumbersAreUnique(t *testing.T) {
 	s := newCmdbTestStore(t)

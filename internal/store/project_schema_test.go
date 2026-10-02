@@ -35,8 +35,12 @@ func TestProjectMigrationCreatesEmptyDefaultProject(t *testing.T) {
 		if err := s.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
 			t.Fatalf("查询 %s: %v", table, err)
 		}
-		if count != 0 {
-			t.Fatalf("全新库 %s 有 %d 条业务数据", table, count)
+		want := 0
+		if table == "cmdb_network_types" {
+			want = 3
+		}
+		if count != want {
+			t.Fatalf("全新库 %s 有 %d 条记录，期望 %d", table, count, want)
 		}
 	}
 }
@@ -283,6 +287,8 @@ func insertProjectScopedRow(t *testing.T, db *sql.DB, table, prefix string) int6
 		result, err = db.Exec(`INSERT INTO cmdb_locations(name, updated_at) VALUES (?, '')`, value)
 	case "cmdb_statuses":
 		result, err = db.Exec(`INSERT INTO cmdb_statuses(name, updated_at) VALUES (?, '')`, value)
+	case "cmdb_network_types":
+		result, err = db.Exec(`INSERT INTO cmdb_network_types(name, updated_at) VALUES (?, '')`, value)
 	case "cmdb_work_order_categories":
 		result, err = db.Exec(`INSERT INTO cmdb_work_order_categories(name, updated_at) VALUES (?, '')`, value)
 	case "cmdb_work_order_types":

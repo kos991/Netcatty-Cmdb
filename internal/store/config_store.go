@@ -18,6 +18,7 @@ const (
 	ConfigKindSoftware            = "software"
 	ConfigKindLocations           = "locations"
 	ConfigKindStatuses            = "statuses"
+	ConfigKindNetworkTypes        = "network-types"
 	ConfigKindModels              = "models"
 	ConfigKindWorkOrderCategories = "work-order-categories"
 	ConfigKindWorkOrderTypes      = "work-order-types"
@@ -406,6 +407,8 @@ func (s *Store) ListConfigItems(scope ProjectScope, kind string) ([]ConfigItem, 
 		return s.listFlatConfigItems(scope, "cmdb_locations", false)
 	case ConfigKindStatuses:
 		return s.listFlatConfigItems(scope, "cmdb_statuses", false)
+	case ConfigKindNetworkTypes:
+		return s.listFlatConfigItems(scope, "cmdb_network_types", false)
 	case ConfigKindWorkOrderCategories:
 		return s.listFlatConfigItems(scope, "cmdb_work_order_categories", false)
 	case ConfigKindWorkOrderTypes:
@@ -437,6 +440,8 @@ func (s *Store) CreateConfigItem(scope ProjectScope, kind string, item *ConfigIt
 		return s.createFlatConfigItem(scope, "cmdb_locations", kind, item, false)
 	case ConfigKindStatuses:
 		return s.createFlatConfigItem(scope, "cmdb_statuses", kind, item, false)
+	case ConfigKindNetworkTypes:
+		return s.createFlatConfigItem(scope, "cmdb_network_types", kind, item, false)
 	case ConfigKindWorkOrderCategories:
 		return s.createFlatConfigItem(scope, "cmdb_work_order_categories", kind, item, false)
 	case ConfigKindWorkOrderTypes:
@@ -468,6 +473,8 @@ func (s *Store) UpdateConfigItem(scope ProjectScope, kind string, item *ConfigIt
 		return s.updateFlatConfigItem(scope, "cmdb_locations", kind, item, false)
 	case ConfigKindStatuses:
 		return s.updateFlatConfigItem(scope, "cmdb_statuses", kind, item, false)
+	case ConfigKindNetworkTypes:
+		return s.updateFlatConfigItem(scope, "cmdb_network_types", kind, item, false)
 	case ConfigKindWorkOrderCategories:
 		return s.updateFlatConfigItem(scope, "cmdb_work_order_categories", kind, item, false)
 	case ConfigKindWorkOrderTypes:
@@ -508,6 +515,8 @@ func (s *Store) DeleteConfigItem(scope ProjectScope, kind string, id int64) erro
 		return s.softDeleteFlatConfigItem(scope, "cmdb_locations", id)
 	case ConfigKindStatuses:
 		return s.softDeleteFlatConfigItem(scope, "cmdb_statuses", id)
+	case ConfigKindNetworkTypes:
+		return s.softDeleteFlatConfigItem(scope, "cmdb_network_types", id)
 	case ConfigKindWorkOrderCategories:
 		return s.softDeleteFlatConfigItem(scope, "cmdb_work_order_categories", id)
 	case ConfigKindWorkOrderTypes:

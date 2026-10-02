@@ -548,6 +548,51 @@ func (s *Server) handleListAllApps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{"list": apps, "total": total, "page": page, "page_size": pageSize})
 }
 
+func (s *Server) handleExportApps(w http.ResponseWriter, r *http.Request) {
+	scope := requestProjectScope(r)
+	query := r.URL.Query()
+	groupID, _ := strconv.ParseInt(query.Get("group_id"), 10, 64)
+	f := excelize.NewFile()
+	defer f.Close()
+	const sheet = "业务系统"
+	if err := f.SetSheetName("Sheet1", sheet); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	headers := []interface{}{"序号", "系统名称", "系统分类", "资产分组", "版本", "供应商", "承载服务器", "业务 IP", "端口", "访问地址", "中间件", "数据库", "负责人", "状态", "说明"}
+	if err := f.SetSheetRow(sheet, "A1", &headers); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	row := 2
+	for page := 1; ; page++ {
+		apps, total, err := s.Store.QueryAllAppsWithGroupForProject(scope, query.Get("keyword"), query.Get("app_type"), query.Get("status"), groupID, page, 500)
+		if err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		for _, app := range apps {
+			values := []interface{}{row - 1, app.AppName, app.AppType, app.GroupName, app.Version, app.Provider, app.ServerName, app.ServiceIP, app.Port, app.AccessURL, app.Middleware, app.DatabaseInfo, app.Owner, app.Status, app.Description}
+			if err := f.SetSheetRow(sheet, "A"+strconv.Itoa(row), &values); err != nil {
+				writeErr(w, 500, err.Error())
+				return
+			}
+			row++
+		}
+		if len(apps) == 0 || row-2 >= total {
+			break
+		}
+	}
+	content, err := f.WriteToBuffer()
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="business_systems.xlsx"`)
+	w.Write(content.Bytes())
+}
+
 // ---- 全局履历流水总账查询 ----
 func (s *Server) handleListLogs(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
@@ -748,6 +793,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("PUT /api/apps/{id}", s.handleUpdateApp)
 	scoped("DELETE /api/apps/{id}", s.handleDeleteApp)
 	scoped("GET /api/apps", s.handleListAllApps)
+	scoped("GET /api/apps/export", s.handleExportApps)
 
 	scoped("GET /api/logs", s.handleListLogs)
 	scoped("GET /api/ip_pool", s.handleListIPPool)
@@ -818,6 +864,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("GET /api/cmdb/work-orders/export", s.handleExportCmdbWorkOrders)
 	scoped("POST /api/cmdb/work-orders", s.handleCreateCmdbWorkOrder)
 	scoped("PUT /api/cmdb/work-orders/{id}", s.handleUpdateCmdbWorkOrder)
+	scoped("POST /api/cmdb/work-orders/batch", s.handleBatchUpdateCmdbWorkOrders)
 	scoped("DELETE /api/cmdb/work-orders/{id}", s.handleDeleteCmdbWorkOrder)
 	scoped("GET /api/cmdb/work-orders/{id}/attachments", s.handleListWorkOrderAttachments)
 	scoped("POST /api/cmdb/work-orders/{id}/attachments", s.handleUploadWorkOrderAttachment)

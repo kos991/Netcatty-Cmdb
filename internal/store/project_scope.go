@@ -90,13 +90,24 @@ func (s *Store) CreateCmdbProject(project *CmdbProject) (*CmdbProject, error) {
 	if syncID == "" {
 		syncID = uuid.NewString()
 	}
-	result, err := s.db.Exec(`INSERT INTO cmdb_projects(sync_id, code, name, revision, created_at, updated_at)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`INSERT INTO cmdb_projects(sync_id, code, name, revision, created_at, updated_at)
 		VALUES (?, ?, ?, 1, ?, ?)`, syncID, project.Code, project.Name, now, now)
 	if err != nil {
 		return nil, err
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
+		return nil, err
+	}
+	if err := insertDefaultNetworkTypes(tx, id, now); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.GetCmdbProject(id)

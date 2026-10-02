@@ -1,17 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Download, SlidersHorizontal } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AsidePanel } from '@/components/ui/aside-panel'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { api } from './api'
 import DeviceWorkspace from './DeviceWorkspace'
 import DeviceWorkspaceErrorBoundary from './DeviceWorkspaceErrorBoundary'
-import { requestJson, exportFile } from './transport'
+import { requestJson } from './transport'
 import { allPages, useAction, useDirectory, useQuery, useTableDensity } from './hooks'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { DataTable, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
-import ImportDialog from './ImportDialog'
+import AssetTransferMenu from './AssetTransferMenu'
 import InfrastructureEditor from './InfrastructureEditor'
 import InfrastructureQuickConnect from './InfrastructureQuickConnect'
 import OperatingSystemCell from './OperatingSystemCell'
@@ -22,6 +22,7 @@ import { useNetcattyConnectionEditor } from './NetcattyConnectionFields'
 import { infrastructureGroupFilterOptions, infrastructureListFilterParams, infrastructureTypeFilterOptions, supportsInfrastructurePhotos } from './state'
 import { VendorBrandValue } from './VendorBrandIcon'
 import { resolveVendorBrand } from './vendorBrandModel'
+import AssetFilterPicker, { useAssetFilterSelection } from './AssetFilterPicker'
 
 const TYPES = [['server', '服务器'], ['virtual_machine', '虚拟机'], ['hyperconverged', '超融合'], ['switch', '交换机'], ['router', '路由器'], ['security_device', '安全设备'], ['storage', '存储设备']].map(([value, label]) => ({ value, label }))
 const DEFAULTS = { status: '在库', asset_class: 'physical', device_type: 'server', org_id: 0, group_id: 0, category_id: 0, model_id: 0, owner_id: 0, interfaces: [] }
@@ -43,12 +44,14 @@ function InfrastructureTechnicalCell({ record }) {
   </div>
 }
 
-export default function Infrastructure({ keyword, focusTarget, onNavigate, command, leadingControl, meta: workspaceMeta, onPanelOpenChange }) {
+export default function Infrastructure({ keyword, focusTarget, onNavigate, command, leadingControl, headerActions, meta: workspaceMeta, onPanelOpenChange }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [filters, setFilters] = useState({ status: '', type_filter: '', org_id: '', group_id: '', source_type: '', os_type: '', os_version: '' })
   const [sort, setSort] = useState('')
   const [selected, setSelected] = useState([])
+  const filterItems = [{ key: 'type_filter', label: '设备类型' }, { key: 'status', label: '状态' }, { key: 'group_id', label: '资产分组' }, { key: 'org_id', label: '组织' }, { key: 'source_type', label: '来源' }, { key: 'os_type', label: '操作系统' }, { key: 'os_version', label: '系统版本' }]
+  const { visible: visibleFilters, toggle: toggleFilter } = useAssetFilterSelection('infrastructure', filterItems, ['type_filter', 'status', 'group_id'], setFilters, () => { setPage(1); setSelected([]) })
   const [selectedDeviceID, setSelectedDeviceID] = useState(null)
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false)
   const [workspaceRefresh, setWorkspaceRefresh] = useState(0)
@@ -67,7 +70,6 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
   const loader = useCallback(() => api.infrastructure({ keyword, scope: 'infrastructure', ...infrastructureListFilterParams(filters), ...(sort ? { sort_by: sort, sort_order: 'asc' } : {}), page, page_size: pageSize }), [keyword, filters, sort, page, pageSize])
   const query = useQuery(loader)
   const meta = directory.data?.meta || {}
-  const advancedFilterCount = ['org_id', 'source_type', 'os_type', 'os_version'].filter((key) => filters[key]).length + (sort ? 1 : 0)
   useEffect(() => { setPage(1); setSelected([]) }, [keyword])
   const showAsset = useCallback((recordOrID) => setSelectedDeviceID(typeof recordOrID === 'object' ? recordOrID.id : recordOrID), [])
   const closeWorkspace = () => { setSelectedDeviceID(null); setWorkspaceExpanded(false) }
@@ -130,20 +132,18 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
     { key: 'status', label: '状态', headerClassName: 'w-24', render: (value) => <StatusPill tone={statusTone(value)}>{value}</StatusPill> },
   ]
   return <div ref={tableRef} className="flex min-h-0 flex-1 flex-col">
+    {headerActions && createPortal(<><AssetFilterPicker items={filterItems} visible={visibleFilters} onToggle={toggleFilter} /><AssetTransferMenu importTitle="导入基础设施" importer={api.importInfrastructure} onImported={() => { query.reload(); directory.reload() }} exporter={() => api.exportInfrastructure(params)} /></>, headerActions)}
     <Toolbar>
       {leadingControl}
-      <SelectControl className="w-36" value={filters.type_filter} onChange={(value) => changeFilter('type_filter', value)} options={choices(infrastructureTypeFilterOptions(meta.categories || [], directory.data?.filters.device_type || []), '全部设备类型')} />
-      <SelectControl className="w-32" value={filters.status} onChange={(value) => changeFilter('status', value)} options={choices(meta.statuses || [], '全部状态')} />
-      <SelectControl className="w-36" value={filters.group_id} onChange={(value) => changeFilter('group_id', value)} options={infrastructureGroupFilterOptions(meta.groups || [])} />
-      <Popover><PopoverTrigger asChild><Button variant="outline" size="sm"><SlidersHorizontal size={14} className="mr-1" />更多筛选{advancedFilterCount ? ` (${advancedFilterCount})` : ''}</Button></PopoverTrigger><PopoverContent align="start" className="w-72 space-y-3">
-        {[['org_id', '组织', 'orgs']].map(([key, label, kind]) => <div key={key}><p className="mb-1 text-xs text-muted-foreground">{label}</p><SelectControl className="w-full" value={filters[key]} onChange={(value) => changeFilter(key, value)} options={choices((meta[kind] || []).map((item) => ({ value: item.id, label: item.name })), `全部${label}`)} /></div>)}
-        <div><p className="mb-1 text-xs text-muted-foreground">来源</p><SelectControl className="w-full" value={filters.source_type} onChange={(value) => changeFilter('source_type', value)} options={choices([{ value: 'manual', label: '手工登记' }, { value: 'legacy_server', label: '基础设施台账' }], '全部来源')} /></div>
-        <div><p className="mb-1 text-xs text-muted-foreground">操作系统</p><SelectControl className="w-full" value={filters.os_type} onChange={(value) => changeFilter('os_type', value)} options={choices(directory.data?.filters.os_type || [], '全部操作系统')} /></div>
-        <div><p className="mb-1 text-xs text-muted-foreground">系统版本</p><SelectControl className="w-full" value={filters.os_version} onChange={(value) => changeFilter('os_version', value)} options={choices(directory.data?.filters.os_version || [], '全部系统版本')} /></div>
-        <div><p className="mb-1 text-xs text-muted-foreground">排序</p><SelectControl className="w-full" value={sort} onChange={(value) => { setSort(value); setPage(1) }} options={choices([{ value: 'name', label: '名称升序' }, { value: 'asset_code', label: '编码升序' }], '默认排序')} /></div>
-        <Button variant="ghost" size="sm" className="w-full" onClick={() => { setFilters((current) => ({ ...current, org_id: '', source_type: '', os_type: '', os_version: '' })); setSort(''); setPage(1) }}>重置高级筛选</Button>
-      </PopoverContent></Popover>
-      <div className="ml-auto flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => action.run(() => api.exportInfrastructure(params))}><Download size={14} className="mr-1" />导出</Button><Button variant="outline" size="sm" onClick={() => action.run(() => exportFile('/api/cmdb/assets/template', 'cmdb-template.xlsx'))}>模板</Button><ImportDialog importer={api.importInfrastructure} onImported={() => { query.reload(); directory.reload() }} /></div>
+      {visibleFilters.includes('type_filter') && <SelectControl className="w-36" value={filters.type_filter} onChange={(value) => changeFilter('type_filter', value)} options={choices(infrastructureTypeFilterOptions(meta.categories || [], directory.data?.filters.device_type || []), '全部设备类型')} />}
+      {visibleFilters.includes('status') && <SelectControl className="w-32" value={filters.status} onChange={(value) => changeFilter('status', value)} options={choices(meta.statuses || [], '全部状态')} />}
+      {visibleFilters.includes('group_id') && <SelectControl className="w-36" value={filters.group_id} onChange={(value) => changeFilter('group_id', value)} options={infrastructureGroupFilterOptions(meta.groups || [])} />}
+      {visibleFilters.includes('org_id') && <SelectControl className="w-36" value={filters.org_id} onChange={(value) => changeFilter('org_id', value)} options={choices((meta.orgs || []).map((item) => ({ value: item.id, label: item.name })), '全部组织')} />}
+      {visibleFilters.includes('source_type') && <SelectControl className="w-36" value={filters.source_type} onChange={(value) => changeFilter('source_type', value)} options={choices([{ value: 'manual', label: '手工登记' }, { value: 'legacy_server', label: '基础设施台账' }], '全部来源')} />}
+      {visibleFilters.includes('os_type') && <SelectControl className="w-36" value={filters.os_type} onChange={(value) => changeFilter('os_type', value)} options={choices(directory.data?.filters.os_type || [], '全部操作系统')} />}
+      {visibleFilters.includes('os_version') && <SelectControl className="w-36" value={filters.os_version} onChange={(value) => changeFilter('os_version', value)} options={choices(directory.data?.filters.os_version || [], '全部系统版本')} />}
+      <SelectControl className="w-32" value={sort} onChange={(value) => { setSort(value); setPage(1) }} options={choices([{ value: 'name', label: '名称升序' }, { value: 'asset_code', label: '编码升序' }], '默认排序')} aria-label="排序" />
+      <Button variant="ghost" size="icon" title="重置筛选与排序" aria-label="重置筛选与排序" onClick={() => { setFilters({ status: '', type_filter: '', org_id: '', group_id: '', source_type: '', os_type: '', os_version: '' }); setSort(''); setPage(1); setSelected([]) }}><RotateCcw size={15} /></Button>
     </Toolbar>
     {selected.length > 0 && <Toolbar><span className="text-xs text-muted-foreground">已选 {selected.length} 项</span><Button variant="ghost" size="sm" onClick={() => open({}, true)}>批量编辑</Button><Button variant="ghost" size="sm" onClick={() => setConfirmation({ ids: selected, action: 'clone' })}>克隆</Button><Button variant="ghost" size="sm" onClick={() => setConfirmation({ ids: selected, action: 'archive' })}>注销归档</Button></Toolbar>}
     {(query.error || directory.error) && <ErrorBanner message={query.error || directory.error} onRetry={() => { query.reload(); directory.reload() }} />}

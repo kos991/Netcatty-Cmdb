@@ -51,6 +51,17 @@ func TestCmdbModuleEndpoints(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("新增工单应返回 200，实际 %d %s", rec.Code, rec.Body.String())
 	}
+	var createdWorkOrder struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &createdWorkOrder); err != nil || createdWorkOrder.ID <= 0 {
+		t.Fatalf("新增工单应返回有效 ID: %s", rec.Body.String())
+	}
+	batchBody, _ := json.Marshal(map[string]interface{}{"ids": []int64{createdWorkOrder.ID}, "status": "已关闭"})
+	rec = doJSON(t, mux, http.MethodPost, "/api/cmdb/work-orders/batch", string(batchBody))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("批量结束工单应返回 200，实际 %d %s", rec.Code, rec.Body.String())
+	}
 	rec = doJSON(t, mux, http.MethodPost, "/api/cmdb/work-orders", `{"subject":""}`)
 	if rec.Code == http.StatusOK {
 		t.Fatalf("空主题必须返回错误，实际 200")

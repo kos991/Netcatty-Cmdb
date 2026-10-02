@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link2, Pencil, Server, Settings2, Trash2, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -7,11 +8,12 @@ import { allPages, useAction, useDirectory, useQuery, useTableDensity } from './
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { isApplicationHostInfrastructure } from './state'
 import { ActionIcon, DataTable, ErrorBanner, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
-import ImportDialog from './ImportDialog'
+import AssetTransferMenu from './AssetTransferMenu'
 import NetcattyConnectionFields, { useNetcattyConnectionEditor } from './NetcattyConnectionFields'
 import NetcattyLinks from './NetcattyLinks'
 import { AssetPanel, AssetPanelFields, AssetPanelSave, AssetPanelSection } from './AssetPanel'
 import { businessAddressOptions } from './infrastructureEditorModel'
+import AssetFilterPicker, { useAssetFilterSelection } from './AssetFilterPicker'
 
 const APP_FIELDS = textFields([['app_name', '系统名称'], ['version', '版本'], ['provider', '供应商'], ['port', '端口'], ['access_url', '访问地址'], ['middleware', '中间件'], ['database_info', '数据库'], ['owner', '负责人'], ['description', '说明', 'textarea'], ['remark', '备注', 'textarea']]).map((f) => ({ ...f, required: f.key === 'app_name' }))
 const loadDirectory = () => allPages(api.infrastructure, { scope: 'infrastructure' })
@@ -20,12 +22,20 @@ const loadTaxonomy = async () => {
   return { categories: categories.list || [], groups: groups.list || [] }
 }
 
-export default function Systems({ keyword, focusTarget, meta, command, leadingControl, onPanelOpenChange, onNavigate }) {
+export default function Systems({ keyword, focusTarget, meta, command, leadingControl, headerActions, onPanelOpenChange, onNavigate }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [type, setType] = useState('')
   const [groupId, setGroupId] = useState('')
   const [status, setStatus] = useState('')
+  const filterItems = [{ key: 'app_type', label: '系统分类' }, { key: 'group_id', label: '资产分组' }, { key: 'status', label: '状态' }]
+  const { visible: visibleFilters, toggle: toggleFilter } = useAssetFilterSelection('systems', filterItems, filterItems.map((item) => item.key), (update) => {
+    const current = { app_type: type, group_id: groupId, status }
+    const next = update(current)
+    setType(next.app_type)
+    setGroupId(next.group_id)
+    setStatus(next.status)
+  }, () => setPage(1))
   const [editor, setEditor] = useState(null)
   const [values, setValues] = useState({})
   const [deleting, setDeleting] = useState(null)
@@ -96,10 +106,11 @@ export default function Systems({ keyword, focusTarget, meta, command, leadingCo
     setEditor(null)
     refresh()
   }, '已保存')
-  return <div ref={tableRef} className="flex min-h-0 flex-1 flex-col"><Toolbar>
+  return <div ref={tableRef} className="flex min-h-0 flex-1 flex-col">
+    {headerActions && createPortal(<><AssetFilterPicker items={filterItems} visible={visibleFilters} onToggle={toggleFilter} /><AssetTransferMenu importTitle="设备信息导入" importLabel="导入设备信息" importer={api.importSangfor} onImported={refresh} exporter={() => api.exportApps({ keyword, app_type: type, group_id: groupId, status })} /></>, headerActions)}
+    <Toolbar>
     {leadingControl}
-    <SelectControl className="w-36" value={type} onChange={(v) => { setType(v); setPage(1) }} options={choices(categories.map((item) => item.name), '全部系统分类')} /><SelectControl className="w-36" value={groupId} onChange={(v) => { setGroupId(v); setPage(1) }} options={choices(groups.map((item) => ({ value: item.id, label: item.name })), '全部资产分组')} /><SelectControl className="w-36" value={status} onChange={(v) => { setStatus(v); setPage(1) }} options={choices(meta.app_statuses || [], '全部状态')} />
-    <div className="ml-auto flex gap-2"><ImportDialog title="设备信息导入" importer={api.importSangfor} onImported={refresh} /></div>
+    {visibleFilters.includes('app_type') && <SelectControl className="w-36" value={type} onChange={(v) => { setType(v); setPage(1) }} options={choices(categories.map((item) => item.name), '全部系统分类')} />}{visibleFilters.includes('group_id') && <SelectControl className="w-36" value={groupId} onChange={(v) => { setGroupId(v); setPage(1) }} options={choices(groups.map((item) => ({ value: item.id, label: item.name })), '全部资产分组')} />}{visibleFilters.includes('status') && <SelectControl className="w-36" value={status} onChange={(v) => { setStatus(v); setPage(1) }} options={choices(meta.app_statuses || [], '全部状态')} />}
   </Toolbar>
     {(query.error || directory.error || taxonomy.error) && <ErrorBanner message={query.error || directory.error || taxonomy.error} onRetry={refresh} />}
     <DataTable loading={query.loading} rows={query.error ? [] : query.data?.list || []} columns={visibleColumns} compact={density !== 'wide'} />

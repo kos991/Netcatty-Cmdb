@@ -41,6 +41,7 @@ export const api = {
   createApp: (body) => post('/api/apps', body),
   updateApp: (id, body) => put(`/api/apps/${id}`, body),
   deleteApp: (id) => del(`/api/apps/${id}`),
+  exportApps: (params = {}) => exportFile(`/api/apps/export?${toQuery(params)}`, 'business_systems.xlsx'),
   importSangfor: (commit = false, token) => importFile('/api/import/sangfor', { commit, token }),
 
   infrastructure: (params = {}) => req(`/api/cmdb/assets?${toQuery(params)}`),
@@ -61,6 +62,7 @@ export const api = {
   batchInfrastructure: (ids, action, changes) => post('/api/cmdb/assets/batch', { ids, action, changes }),
   exportInfrastructure: (params = {}) => exportFile(`/api/cmdb/assets/export?${toQuery(params)}`, 'cmdb_assets.xlsx'),
   importInfrastructure: (commit = false, token) => importFile('/api/cmdb/assets/import', { commit, token }),
+  downloadInfrastructureTemplate: () => exportFile('/api/cmdb/assets/template', 'cmdb-template.xlsx'),
   syncInfrastructure: () => post('/api/cmdb/sync/legacy'),
   netcattyLinks: (params = {}) => req(`/api/cmdb/netcatty-links?${toQuery(params)}`),
   netcattyHostUsage: (params) => req(`/api/cmdb/netcatty-links/host-usage?${toQuery(params)}`),
@@ -117,6 +119,7 @@ export const api = {
   workOrders: (params = {}) => req(`/api/cmdb/work-orders?${toQuery(params)}`),
   createWorkOrder: (body) => post('/api/cmdb/work-orders', body),
   updateWorkOrder: (id, body) => put(`/api/cmdb/work-orders/${id}`, body),
+  batchUpdateWorkOrders: (ids, status = '已关闭') => post('/api/cmdb/work-orders/batch', { ids, status }),
   deleteWorkOrder: (id) => del(`/api/cmdb/work-orders/${id}`),
   exportWorkOrders: (params = {}) => exportFile(`/api/cmdb/work-orders/export?${toQuery(params)}`, 'cmdb_work_orders.xlsx'),
   workOrderAttachments: (id) => req(`/api/cmdb/work-orders/${id}/attachments`),

@@ -89,6 +89,21 @@ CREATE TABLE IF NOT EXISTS cmdb_statuses (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_statuses_project_name
     ON cmdb_statuses(project_id, name) WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS cmdb_network_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    sync_id TEXT,
+    name TEXT NOT NULL,
+    remark TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    deleted_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_network_types_project_name
+    ON cmdb_network_types(project_id, name) WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS cmdb_work_order_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER,
