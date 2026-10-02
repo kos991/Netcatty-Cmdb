@@ -30,6 +30,9 @@ release-assets-local/
 preview-*
 cmdb-*-preview.png
 
+# CMDB vendor brand assets are intentional source files, not screenshots.
+!integrations/netcatty/cmdb/vendor-icons/*.png
+
 # Web dependencies and build outputs
 web/dist/
 web/node_modules/
