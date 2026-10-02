@@ -81,6 +81,9 @@ func TestCmdbWorkOrderBatchCompletion(t *testing.T) {
 			t.Fatalf("工单应进入已关闭并记录完成时间: %+v", order)
 		}
 	}
+	if _, err := s.BatchUpdateCmdbWorkOrdersStatusForProject(scope, []int64{first, 999999}, "已关闭"); err == nil {
+		t.Fatalf("包含不存在工单时不应返回成功")
+	}
 	if _, err := s.BatchUpdateCmdbWorkOrdersStatusForProject(scope, []int64{first}, "处理中"); err == nil {
 		t.Fatalf("批量结束不应接受非已关闭状态")
 	}

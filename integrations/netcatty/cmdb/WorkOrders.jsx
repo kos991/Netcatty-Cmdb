@@ -20,7 +20,7 @@ const RESULTS = ['处理成功', '临时规避', '未发现异常', '未解决',
 const PRIORITIES = ['P1（紧急）', 'P2（较高）', 'P3（普通）', 'P4（较低）']
 
 const HANDLER_KEY = 'netcatty_cmdb_work_order_handler'
-const emptyFilters = () => ({ biz_type: '', operation_type: '', priority: '', status: '', result: '', owner: '', maintainer: '', asset_keyword: '', keyword: '' })
+const emptyFilters = () => ({ biz_type: '', operation_type: '', priority: '', status: '', result: '', owner: '', maintainer: '', date_from: '', date_to: '', asset_keyword: '', keyword: '' })
 const orderBody = (values) => ({ ...values, asset_id: (values.assets || []).find((item) => item.asset_type === 'infrastructure')?.asset_id || 0, plan_time: String(values.plan_time || '').replace('T', ' '), actual_time: String(values.actual_time || '').replace('T', ' ') })
 const loadAssets = async () => {
   const [terminals, infrastructure, applications] = await Promise.all([
@@ -92,7 +92,8 @@ function AttachmentPanel({ workOrderId, stagedFiles = [], onAddFiles, onRemoveSt
 
 export default function WorkOrders({ mode = 'create', onModeChange }) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
-  const [filters, setFilters] = useState({ biz_type: '', operation_type: '', priority: '', status: '', result: '', owner: '', maintainer: '', date_from: '', date_to: '', asset_keyword: '', keyword: '' })
+  const [filters, setFilters] = useState(emptyFilters)
+  const [filterOpen, setFilterOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -121,7 +122,18 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
     if (mode !== 'create') return
     setValues((current) => ({ ...newOrderDefaults(), ...current, project_name: projects.data?.list?.[0]?.name || current.project_name || '当前项目' }))
   }, [mode, projects.data])
-  const change = (key, value) => { setFilters((old) => ({ ...old, [key]: value })); setPage(1) }
+  const change = (key, value) => {
+    setFilters((old) => ({ ...old, [key]: value }))
+    setPage(1)
+    setSelectedOrderIds([])
+  }
+  const resetFilters = () => {
+    const next = emptyFilters()
+    setFilters(next)
+    setKeyword('')
+    setPage(1)
+    setSelectedOrderIds([])
+  }
   const open = (record = {}) => { setEditor(record); setStatsValues({ priority: 'P3（普通）', status: '新建', ...record, plan_time: String(record.plan_time || '').replace(' ', 'T'), actual_time: String(record.actual_time || '').replace(' ', 'T') }) }
   const configuredCategories = workConfig.data?.categories?.length ? workConfig.data.categories : BIZ_TYPES
   const configuredOperationTypes = workConfig.data?.operationTypes?.length ? workConfig.data.operationTypes : OPERATION_TYPES
@@ -199,7 +211,7 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
     {mode === 'stats' ? <VaultHeaderSearch className="min-w-[180px] max-w-[520px] flex-1" value={searchValue} onChange={(event) => { const value = event.target.value; setKeyword(value); if (!value) change('keyword', '') }} onKeyDown={(event) => { if (event.key === 'Enter') change('keyword', keyword.trim()) }} placeholder="搜索工单号或主题" rightAdornment={searchValue ? <button type="button" aria-label="清除工单搜索" title="清除工单搜索" className="grid h-6 w-6 place-items-center rounded hover:bg-foreground/10" onClick={() => { setKeyword(''); change('keyword', '') }}><X size={13} /></button> : null} /> : null}
     <span className="min-w-0 flex-1" />
     {mode === 'stats' ? <>
-      <Popover><PopoverTrigger asChild><Button data-work-orders-filter type="button" variant="ghost" size="icon" className={vaultHeaderIconButtonClass} aria-label="选择筛选项" title="选择筛选项"><Filter size={16} /></Button></PopoverTrigger><PopoverContent align="end" sideOffset={8} className="max-h-[min(70vh,560px)] w-[min(320px,calc(100vw-32px))] overflow-y-auto p-3">{renderFilterFields(filters, change, () => { setFilters(emptyFilters()); setKeyword(''); setPage(1) })}</PopoverContent></Popover>
+      <Popover open={filterOpen} onOpenChange={setFilterOpen}><PopoverTrigger asChild><Button data-work-orders-filter type="button" variant="ghost" size="icon" className={vaultHeaderIconButtonClass} aria-label="选择筛选项" title="选择筛选项"><Filter size={16} /></Button></PopoverTrigger><PopoverContent align="end" sideOffset={8} className="max-h-[min(70vh,560px)] w-[min(320px,calc(100vw-32px))] overflow-y-auto p-3">{renderFilterFields(filters, change, resetFilters)}</PopoverContent></Popover>
       <Button type="button" variant="ghost" size="icon" aria-label="导出工单" title="导出工单" className={vaultHeaderIconButtonClass} onClick={() => action.run(() => api.exportWorkOrders(normalizedFilters))}><Download size={16} /></Button>
     </> : <span className="text-xs text-muted-foreground">新建工单</span>}
   </VaultPageHeader>
@@ -225,6 +237,13 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
     <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(p, s) => { setPage(p); setPageSize(s) }} />
     <ModalForm open={!!editor} onOpenChange={(v) => { if (!v) setEditor(null) }} title={editor?.id ? '编辑工单' : '新增工单'} onSubmit={saveExisting} busy={action.busy} wide><Fields fields={fields} value={statsValues} onChange={setStatsValues} /><AssetPicker options={assets.data || []} value={statsValues.assets || []} onChange={(next) => setStatsValues({ ...statsValues, assets: next })} /><AttachmentPanel workOrderId={editor?.id || statsValues.id} /></ModalForm>
     <ConfirmDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null) }} title="删除工单" message={`确认删除“${deleting?.subject || ''}”？`} confirmLabel="删除" destructive busy={action.busy} onConfirm={() => action.run(async () => { await api.deleteWorkOrder(deleting.id); setDeleting(null); query.reload() }, '工单已删除')} />
-    <ConfirmDialog open={completing.length > 0} onOpenChange={(v) => { if (!v) setCompleting([]) }} title="结束工单" message={`确认将 ${completing.length} 张工单标记为已关闭？`} confirmLabel="完成" busy={action.busy} onConfirm={() => action.run(async () => { await api.batchUpdateWorkOrders(completing, '已关闭'); setCompleting([]); setSelectedOrderIds([]); query.reload() }, '工单已完成')} />
+    <ConfirmDialog open={completing.length > 0} onOpenChange={(v) => { if (!v) setCompleting([]) }} title="结束工单" message={`确认将 ${completing.length} 张工单标记为已关闭？`} confirmLabel="完成" busy={action.busy} onConfirm={() => action.run(async () => {
+      const result = await api.batchUpdateWorkOrders(completing, '已关闭')
+      const updated = Number(result?.updated || 0)
+      if (updated !== completing.length) throw new Error(`仅完成 ${updated} 张工单，列表未发生完整更新，请刷新后重试`)
+      await query.reload()
+      setCompleting([])
+      setSelectedOrderIds([])
+    }, '工单已完成')} />
   </div>
 }

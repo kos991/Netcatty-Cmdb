@@ -260,12 +260,21 @@ func (s *Store) BatchUpdateCmdbWorkOrdersStatusForProject(scope ProjectScope, id
 		return 0, fmt.Errorf("至少选择一张有效工单")
 	}
 	placeholders := make([]string, len(unique))
+	idsArgs := []interface{}{scope.ProjectID}
 	args := []interface{}{"已关闭"}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	args = append(args, now, now, scope.ProjectID)
 	for i, id := range unique {
 		placeholders[i] = "?"
+		idsArgs = append(idsArgs, id)
 		args = append(args, id)
+	}
+	var owned int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM cmdb_work_orders WHERE project_id=? AND id IN ("+strings.Join(placeholders, ",")+")", idsArgs...).Scan(&owned); err != nil {
+		return 0, err
+	}
+	if owned != len(unique) {
+		return 0, fmt.Errorf("仅找到 %d/%d 张当前项目工单，未执行结束操作", owned, len(unique))
 	}
 	result, err := s.db.Exec(`UPDATE cmdb_work_orders SET status=?,
 		actual_time=CASE WHEN IFNULL(actual_time,'')='' THEN ? ELSE actual_time END,
