@@ -14,6 +14,32 @@ import (
 
 const maxWorkOrderAttachmentBytes = 50 << 20
 
+// workOrderAttachmentResponse exposes only client-facing attachment metadata.
+// StoredPath remains an internal field used by download/delete flows.
+type workOrderAttachmentResponse struct {
+	store.WorkOrderAttachment
+	LocalPath   string `json:"local_path"`
+	LocalExists bool   `json:"local_exists"`
+}
+
+func attachmentLocalState(attachment store.WorkOrderAttachment) (string, bool) {
+	path := attachment.StoredPath
+	if path == "" {
+		return "", false
+	}
+	info, err := os.Stat(path)
+	return path, err == nil && !info.IsDir()
+}
+
+func newWorkOrderAttachmentResponse(attachment store.WorkOrderAttachment) workOrderAttachmentResponse {
+	path, exists := attachmentLocalState(attachment)
+	return workOrderAttachmentResponse{
+		WorkOrderAttachment: attachment,
+		LocalPath:           path,
+		LocalExists:         exists,
+	}
+}
+
 func workOrderAttachmentIDs(r *http.Request) (int64, int64, bool) {
 	workOrderID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || workOrderID <= 0 {
@@ -37,7 +63,11 @@ func (s *Server) handleListWorkOrderAttachments(w http.ResponseWriter, r *http.R
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"list": list, "total": len(list)})
+	response := make([]workOrderAttachmentResponse, 0, len(list))
+	for _, attachment := range list {
+		response = append(response, newWorkOrderAttachmentResponse(attachment))
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"list": response, "total": len(response)})
 }
 
 func (s *Server) handleUploadWorkOrderAttachment(w http.ResponseWriter, r *http.Request) {

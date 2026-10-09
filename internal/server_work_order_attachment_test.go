@@ -97,6 +97,20 @@ func TestWorkOrderAttachmentEndpoints(t *testing.T) {
 	if !strings.Contains(list.Body.String(), `"s3_status":"synced"`) {
 		t.Fatalf("列表未反映更新后的 S3 状态: %s", list.Body.String())
 	}
+	var listPayload struct {
+		List []struct {
+			LocalExists bool `json:"local_exists"`
+		} `json:"list"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &listPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(listPayload.List) != 1 || !listPayload.List[0].LocalExists {
+		t.Fatalf("附件列表未返回可靠的本地存在状态: %s", list.Body.String())
+	}
+	if strings.Contains(list.Body.String(), `"stored_path"`) {
+		t.Fatalf("附件列表不得暴露内部存储路径: %s", list.Body.String())
+	}
 	for _, metadata := range []string{`"cloud_object_id":"object-1"`, `"encryption_version":1`, `"wrapped_key":"wrapped"`, `"wrapped_key_iv":"wrap-iv"`, `"data_iv":"data-iv"`} {
 		if !strings.Contains(list.Body.String(), metadata) {
 			t.Fatalf("列表缺少附件加密元数据 %s: %s", metadata, list.Body.String())

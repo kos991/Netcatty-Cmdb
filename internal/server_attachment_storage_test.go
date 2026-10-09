@@ -129,6 +129,9 @@ func TestAttachmentCloudEndpointsListPendingAndLocalizeVerifiedDownload(t *testi
 		!bytes.Contains(pending.Body.Bytes(), []byte(`"local_path":`)) {
 		t.Fatalf("读取待同步附件失败: status=%d body=%s", pending.Code, pending.Body.String())
 	}
+	if !bytes.Contains(pending.Body.Bytes(), []byte(`"local_exists":true`)) {
+		t.Fatalf("待同步附件未反映本地文件存在: %s", pending.Body.String())
+	}
 
 	if err := os.Remove(attachment.StoredPath); err != nil {
 		t.Fatal(err)
@@ -138,6 +141,25 @@ func TestAttachmentCloudEndpointsListPendingAndLocalizeVerifiedDownload(t *testi
 		t.Fatal(err)
 	}
 	_ = os.Remove(casPath)
+	missingPending := attachmentStorageRequest(t, mux, http.MethodGet, "/api/cmdb/attachments/pending", nil)
+	if missingPending.Code != http.StatusOK || !bytes.Contains(missingPending.Body.Bytes(), []byte(`"local_exists":false`)) {
+		t.Fatalf("本地附件缺失时状态未反映为 false: status=%d body=%s", missingPending.Code, missingPending.Body.String())
+	}
+	legacyRoot, err := s.Store.AttachmentRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(legacyRoot, fmt.Sprintf("project-%d", scope.ProjectID), fmt.Sprintf("work-order-%d", workOrderID), attachment.StoredName)
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyPath, []byte("cloud-content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	legacyPending := attachmentStorageRequest(t, mux, http.MethodGet, "/api/cmdb/attachments/pending", nil)
+	if legacyPending.Code != http.StatusOK || !bytes.Contains(legacyPending.Body.Bytes(), []byte(`"local_exists":true`)) {
+		t.Fatalf("旧版附件路径未被识别为本地文件: status=%d body=%s", legacyPending.Code, legacyPending.Body.String())
+	}
 
 	targetRec := attachmentStorageRequest(t, mux, http.MethodPost, "/api/cmdb/attachments/temp-target", nil)
 	if targetRec.Code != http.StatusCreated {
