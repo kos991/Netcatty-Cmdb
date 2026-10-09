@@ -97,16 +97,32 @@ func MigrateProjectSchema(db *sql.DB) error {
 		return fmt.Errorf("create project schema: %w", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := tx.Exec(`
-		INSERT INTO cmdb_projects(sync_id, code, name, revision, created_at, updated_at)
-		VALUES (?, ?, ?, 1, ?, ?)
-		ON CONFLICT(code) DO NOTHING
-	`, uuid.NewString(), DefaultProjectCode, DefaultProjectName, now, now); err != nil {
-		return fmt.Errorf("create default project: %w", err)
-	}
-
 	var projectID int64
-	if err := tx.QueryRow(`SELECT id FROM cmdb_projects WHERE code = ? AND deleted_at IS NULL`, DefaultProjectCode).Scan(&projectID); err != nil {
+	err = tx.QueryRow(`SELECT id FROM cmdb_projects WHERE code = ? AND deleted_at IS NULL`, DefaultProjectCode).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		var activeProjects int
+		if err := tx.QueryRow(`SELECT COUNT(*), COALESCE(MAX(id), 0) FROM cmdb_projects WHERE deleted_at IS NULL`).Scan(&activeProjects, &projectID); err != nil {
+			return fmt.Errorf("read active projects: %w", err)
+		}
+		switch activeProjects {
+		case 0:
+			result, err := tx.Exec(`
+				INSERT INTO cmdb_projects(sync_id, code, name, revision, created_at, updated_at)
+				VALUES (?, ?, ?, 1, ?, ?)
+			`, uuid.NewString(), DefaultProjectCode, DefaultProjectName, now, now)
+			if err != nil {
+				return fmt.Errorf("create default project: %w", err)
+			}
+			projectID, err = result.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("read created default project: %w", err)
+			}
+		case 1:
+			// 用户可修改唯一项目的编码；迁移与旧接口继续沿用该项目。
+		default:
+			return fmt.Errorf("read default project: %w", sql.ErrNoRows)
+		}
+	} else if err != nil {
 		return fmt.Errorf("read default project: %w", err)
 	}
 
@@ -410,7 +426,7 @@ func backfillProjectMetadata(tx *sql.Tx, table string, projectID int64, now stri
 	)); err != nil {
 		return fmt.Errorf("index %s project_id: %w", table, err)
 	}
-	if err := createProjectInsertTrigger(tx, table); err != nil {
+	if err := createProjectInsertTrigger(tx, table, projectID); err != nil {
 		return err
 	}
 	if err := createProjectChangeTriggers(tx, table); err != nil {
@@ -419,7 +435,7 @@ func backfillProjectMetadata(tx *sql.Tx, table string, projectID int64, now stri
 	return nil
 }
 
-func createProjectInsertTrigger(tx *sql.Tx, table string) error {
+func createProjectInsertTrigger(tx *sql.Tx, table string, projectID int64) error {
 	const uuidExpression = `(
 		lower(hex(randomblob(4))) || '-' ||
 		lower(hex(randomblob(2))) || '-4' ||
@@ -428,6 +444,9 @@ func createProjectInsertTrigger(tx *sql.Tx, table string) error {
 		substr(lower(hex(randomblob(2))), 2) || '-' ||
 		lower(hex(randomblob(6)))
 	)`
+	if _, err := tx.Exec(fmt.Sprintf("DROP TRIGGER IF EXISTS trg_%s_sync_metadata", table)); err != nil {
+		return fmt.Errorf("drop %s sync metadata trigger: %w", table, err)
+	}
 	query := fmt.Sprintf(`
 		CREATE TRIGGER IF NOT EXISTS trg_%s_sync_metadata
 		AFTER INSERT ON %s
@@ -438,15 +457,13 @@ func createProjectInsertTrigger(tx *sql.Tx, table string) error {
 			OR NEW.updated_at IS NULL OR NEW.updated_at = ''
 		BEGIN
 			UPDATE %s
-			SET project_id = COALESCE(NULLIF(NEW.project_id, 0), (
-					SELECT id FROM cmdb_projects WHERE code = '%s' AND deleted_at IS NULL
-				)),
+			SET project_id = COALESCE(NULLIF(NEW.project_id, 0), %d),
 				sync_id = COALESCE(NULLIF(NEW.sync_id, ''), %s),
 				revision = CASE WHEN NEW.revision IS NULL OR NEW.revision < 1 THEN 1 ELSE NEW.revision END,
 				updated_at = COALESCE(NULLIF(NEW.updated_at, ''), strftime('%%Y-%%m-%%dT%%H:%%M:%%fZ', 'now'))
 			WHERE id = NEW.id;
 		END
-	`, table, table, table, DefaultProjectCode, uuidExpression)
+	`, table, table, table, projectID, uuidExpression)
 	if _, err := tx.Exec(query); err != nil {
 		return fmt.Errorf("create %s sync metadata trigger: %w", table, err)
 	}

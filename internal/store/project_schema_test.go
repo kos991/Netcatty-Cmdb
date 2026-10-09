@@ -45,6 +45,64 @@ func TestProjectMigrationCreatesEmptyDefaultProject(t *testing.T) {
 	}
 }
 
+func TestProjectMigrationKeepsRenamedOnlyProjectAcrossRestart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "renamed-project.db")
+	first, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := first.DefaultProject()
+	if err != nil {
+		first.Close()
+		t.Fatal(err)
+	}
+	project.Code = "CN2026-ZJFY"
+	project.Name = "法院"
+	if err := first.UpdateCmdbProject(project); err != nil {
+		first.Close()
+		t.Fatal(err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	resolved, err := second.DefaultProject()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.ID != project.ID || resolved.Code != "CN2026-ZJFY" {
+		t.Fatalf("重启后默认项目异常: %+v", resolved)
+	}
+	var projectCount int
+	if err := second.db.QueryRow(`SELECT COUNT(*) FROM cmdb_projects WHERE deleted_at IS NULL`).Scan(&projectCount); err != nil {
+		t.Fatal(err)
+	}
+	if projectCount != 1 {
+		t.Fatalf("重启后有效项目数=%d，期望 1", projectCount)
+	}
+
+	result, err := second.db.Exec(`INSERT INTO assets(asset_code, updated_at) VALUES ('RESTART-1', '')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var assetProjectID int64
+	if err := second.db.QueryRow(`SELECT project_id FROM assets WHERE id=?`, assetID).Scan(&assetProjectID); err != nil {
+		t.Fatal(err)
+	}
+	if assetProjectID != project.ID {
+		t.Fatalf("重启后的兼容写入归属项目=%d，期望 %d", assetProjectID, project.ID)
+	}
+}
+
 func TestProjectMigrationBackfillsLegacyRowsIdempotently(t *testing.T) {
 	dbPath := createLegacyProjectFixture(t)
 
