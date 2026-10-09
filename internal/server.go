@@ -921,6 +921,13 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("GET /api/cmdb/work-orders/{id}/attachments/{attachment_id}", s.handleDownloadWorkOrderAttachment)
 	scoped("DELETE /api/cmdb/work-orders/{id}/attachments/{attachment_id}", s.handleDeleteWorkOrderAttachment)
 	scoped("PUT /api/cmdb/work-orders/{id}/attachments/{attachment_id}/s3-status", s.handleUpdateWorkOrderAttachmentS3Status)
+	scoped("PUT /api/cmdb/work-orders/{id}/attachments/{attachment_id}/localize", s.handleLocalizeWorkOrderAttachment)
+	scoped("GET /api/cmdb/attachment-storage", s.handleGetAttachmentStorage)
+	scoped("POST /api/cmdb/attachment-storage/preflight", s.handlePreflightAttachmentStorage)
+	scoped("POST /api/cmdb/attachment-storage/migrate", s.handleMigrateAttachmentStorage)
+	scoped("POST /api/cmdb/attachment-storage/restore-default", s.handleRestoreDefaultAttachmentStorage)
+	scoped("GET /api/cmdb/attachments/pending", s.handleListPendingAttachments)
+	scoped("POST /api/cmdb/attachments/temp-target", s.handleCreateAttachmentTempTarget)
 	scoped("GET /api/cmdb/attachments/hash/{hash}/status", s.handleCheckAttachmentLocalStatus)
 
 	// CMDB 资产盘点

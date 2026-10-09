@@ -135,6 +135,9 @@ func normalizeAttachmentMigrationTarget(s *Store, scope ProjectScope, targetRoot
 		root, err := s.DefaultAttachmentRootForProject(scope)
 		return root, "", err
 	}
+	if !filepath.IsAbs(configured) {
+		return "", "", errors.New("附件目录必须是绝对路径")
+	}
 	abs, err := filepath.Abs(configured)
 	if err != nil {
 		return "", "", err
@@ -164,6 +167,8 @@ func (s *Store) PreflightAttachmentStorageMigration(scope ProjectScope, targetRo
 func (s *Store) attachmentsForStorageMigration(scope ProjectScope) ([]WorkOrderAttachment, error) {
 	rows, err := s.db.Query(`SELECT id, project_id, work_order_id, file_name, stored_name,
 		COALESCE(content_hash, ''), COALESCE(s3_key, ''), COALESCE(s3_status, 'pending'),
+		COALESCE(cloud_object_id, ''), COALESCE(encryption_version, 0), COALESCE(wrapped_key, ''),
+		COALESCE(wrapped_key_iv, ''), COALESCE(data_iv, ''),
 		size_bytes, content_type, created_at
 		FROM cmdb_work_order_attachments WHERE project_id=? ORDER BY id`, scope.ProjectID)
 	if err != nil {
@@ -175,6 +180,7 @@ func (s *Store) attachmentsForStorageMigration(scope ProjectScope) ([]WorkOrderA
 		if err := rows.Scan(
 			&item.ID, &item.ProjectID, &item.WorkOrderID, &item.FileName, &item.StoredName,
 			&item.ContentHash, &item.S3Key, &item.S3Status,
+			&item.CloudObjectID, &item.EncryptionVersion, &item.WrappedKey, &item.WrappedKeyIV, &item.DataIV,
 			&item.SizeBytes, &item.ContentType, &item.CreatedAt,
 		); err != nil {
 			_ = rows.Close()

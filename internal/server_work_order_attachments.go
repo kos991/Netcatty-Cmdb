@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
@@ -9,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"czfy-assets/internal/store"
 )
 
 const maxWorkOrderAttachmentBytes = 50 << 20
@@ -100,10 +101,15 @@ func (s *Server) handleUpdateWorkOrderAttachmentS3Status(w http.ResponseWriter, 
 		return
 	}
 	var req struct {
-		S3Status string `json:"s3_status"`
-		S3Key    string `json:"s3_key"`
+		S3Status          string `json:"s3_status"`
+		S3Key             string `json:"s3_key"`
+		CloudObjectID     string `json:"cloud_object_id"`
+		EncryptionVersion int    `json:"encryption_version"`
+		WrappedKey        string `json:"wrapped_key"`
+		WrappedKeyIV      string `json:"wrapped_key_iv"`
+		DataIV            string `json:"data_iv"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeAttachmentJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
@@ -112,8 +118,34 @@ func (s *Server) handleUpdateWorkOrderAttachmentS3Status(w http.ResponseWriter, 
 		writeErr(w, http.StatusBadRequest, "未知的 S3 状态")
 		return
 	}
-	if err := s.Store.UpdateWorkOrderAttachmentS3Status(requestProjectScope(r), workOrderID, attachmentID, s3Status, strings.TrimSpace(req.S3Key)); err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+	if req.EncryptionVersion < 0 {
+		writeErr(w, http.StatusBadRequest, "附件加密版本不能为负数")
+		return
+	}
+	if s3Status == "synced" && (strings.TrimSpace(req.S3Key) == "" ||
+		strings.TrimSpace(req.CloudObjectID) == "" || req.EncryptionVersion <= 0 ||
+		strings.TrimSpace(req.WrappedKey) == "" || strings.TrimSpace(req.WrappedKeyIV) == "" ||
+		strings.TrimSpace(req.DataIV) == "") {
+		writeErr(w, http.StatusBadRequest, "附件标记为已同步前必须提供完整加密元数据")
+		return
+	}
+	state := store.WorkOrderAttachmentCloudState{
+		S3Status:          s3Status,
+		S3Key:             strings.TrimSpace(req.S3Key),
+		CloudObjectID:     strings.TrimSpace(req.CloudObjectID),
+		EncryptionVersion: req.EncryptionVersion,
+		WrappedKey:        strings.TrimSpace(req.WrappedKey),
+		WrappedKeyIV:      strings.TrimSpace(req.WrappedKeyIV),
+		DataIV:            strings.TrimSpace(req.DataIV),
+	}
+	var updateErr error
+	if state.CloudObjectID != "" || state.EncryptionVersion != 0 || state.WrappedKey != "" || state.WrappedKeyIV != "" || state.DataIV != "" {
+		updateErr = s.Store.UpdateWorkOrderAttachmentCloudState(requestProjectScope(r), workOrderID, attachmentID, state)
+	} else {
+		updateErr = s.Store.UpdateWorkOrderAttachmentS3Status(requestProjectScope(r), workOrderID, attachmentID, state.S3Status, state.S3Key)
+	}
+	if updateErr != nil {
+		writeErr(w, http.StatusBadRequest, updateErr.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "1"})
@@ -125,7 +157,7 @@ func (s *Server) handleCheckAttachmentLocalStatus(w http.ResponseWriter, r *http
 		writeErr(w, http.StatusBadRequest, "缺少文件哈希")
 		return
 	}
-	localPath, err := s.Store.BuildAttachmentLocalPath(hash)
+	localPath, err := s.Store.BuildAttachmentLocalPathForProject(requestProjectScope(r), hash)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return

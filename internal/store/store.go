@@ -4,13 +4,16 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	db   *sql.DB
-	path string
+	db               *sql.DB
+	path             string
+	attachmentTempMu sync.Mutex
+	attachmentTemps  map[string]attachmentTempTarget
 }
 
 func Open(path string) (*Store, error) {

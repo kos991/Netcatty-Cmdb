@@ -123,6 +123,70 @@ func TestCmdbSnapshotIsStableAndOmitsLocalIDsAndPrivateFields(t *testing.T) {
 	}
 }
 
+func TestCmdbSnapshotIncludesAttachmentEncryptionMetadata(t *testing.T) {
+	st, scope := openSnapshotTestStore(t)
+	workOrderID, err := st.CreateCmdbWorkOrderForProject(scope, &CmdbWorkOrder{Subject: "附件同步"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`INSERT INTO cmdb_work_order_attachments(
+		project_id,work_order_id,file_name,stored_name,size_bytes,content_type,created_at,
+		content_hash,s3_key,s3_status,cloud_object_id,encryption_version,wrapped_key,wrapped_key_iv,data_iv
+	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		scope.ProjectID, workOrderID, "证据.txt", "local-name.txt", 8, "text/plain", "2026-10-09 18:00:00",
+		"hash-1", "attachments/object-1.nca", "synced", "object-1", 1, "wrapped-value", "wrap-iv", "data-iv"); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := st.ExportCmdbSnapshot(scope, SnapshotExportOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, exists := snapshot.Collections["cmdb_work_order_attachments"]
+	if !exists {
+		t.Fatal("附件元数据未进入 Cmdb 同步快照")
+	}
+	var records []map[string]any
+	if err := json.Unmarshal(raw, &records); err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("附件元数据数量错误: %d", len(records))
+	}
+	attachment := records[0]
+	for field, expected := range map[string]any{
+		"cloud_object_id": "object-1",
+		"wrapped_key":     "wrapped-value",
+		"wrapped_key_iv":  "wrap-iv",
+		"data_iv":         "data-iv",
+	} {
+		if attachment[field] != expected {
+			t.Fatalf("附件同步字段 %s 错误: got=%v want=%v", field, attachment[field], expected)
+		}
+	}
+	refs, ok := attachment["_refs"].(map[string]any)
+	if !ok || refs["work_order_id"] == nil {
+		t.Fatalf("附件元数据缺少工单稳定引用: %#v", attachment["_refs"])
+	}
+
+	target, targetScope := openSnapshotTestStore(t)
+	if _, err := target.db.Exec(`UPDATE cmdb_projects SET sync_id=? WHERE id=?`, snapshot.ProjectSyncID, targetScope.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := target.ApplyCmdbSnapshot(targetScope, snapshot); err != nil {
+		t.Fatalf("附件元数据快照无法在异机数据库还原: %v", err)
+	}
+	var storedName, cloudObjectID, wrappedKey string
+	if err := target.db.QueryRow(`SELECT stored_name,cloud_object_id,wrapped_key
+		FROM cmdb_work_order_attachments WHERE project_id=?`, targetScope.ProjectID).
+		Scan(&storedName, &cloudObjectID, &wrappedKey); err != nil {
+		t.Fatal(err)
+	}
+	if storedName == "" || cloudObjectID != "object-1" || wrappedKey != "wrapped-value" {
+		t.Fatalf("附件元数据还原错误: stored_name=%q cloud_object_id=%q wrapped_key=%q", storedName, cloudObjectID, wrappedKey)
+	}
+}
+
 func TestCmdbProjectTablesAutomaticallyAdvanceRevisionAndWriteTombstones(t *testing.T) {
 	st, scope := openSnapshotTestStore(t)
 	result, err := st.db.Exec(`INSERT INTO cmdb_work_orders(project_id,subject,status) VALUES(?,?,?)`, scope.ProjectID, "网络中断", "新建")

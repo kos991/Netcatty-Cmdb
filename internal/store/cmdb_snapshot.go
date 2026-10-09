@@ -57,9 +57,7 @@ type CmdbMergePreview struct {
 
 type CmdbMergeResult = CmdbMergePreview
 
-var snapshotExcludedTables = map[string]bool{
-	"cmdb_work_order_attachments": true,
-}
+var snapshotExcludedTables = map[string]bool{}
 
 var snapshotApplyOrder = []string{
 	"cmdb_orgs", "cmdb_groups", "cmdb_device_categories", "cmdb_device_models",
@@ -810,6 +808,10 @@ func withAvailableSnapshotReferences(tx snapshotTransaction, projectID int64, ta
 }
 
 func insertSnapshotRecord(tx snapshotTransaction, table string, allowed map[string]bool, projectID int64, record map[string]any) error {
+	if table == "cmdb_work_order_attachments" && strings.TrimSpace(snapshotString(record["stored_name"])) == "" {
+		digest := sha256.Sum256([]byte(snapshotString(record["sync_id"])))
+		record["stored_name"] = hex.EncodeToString(digest[:]) + ".bin"
+	}
 	columns := []string{"project_id"}
 	values := []any{projectID}
 	for _, column := range sortedSnapshotColumns(record, allowed) {

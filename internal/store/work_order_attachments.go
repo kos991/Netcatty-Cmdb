@@ -16,18 +16,33 @@ import (
 )
 
 type WorkOrderAttachment struct {
-	ID          int64  `json:"id"`
-	ProjectID   int64  `json:"project_id"`
-	WorkOrderID int64  `json:"work_order_id"`
-	FileName    string `json:"file_name"`
-	ContentHash string `json:"content_hash"`
-	S3Key       string `json:"s3_key"`
-	S3Status    string `json:"s3_status"`
-	StoredName  string `json:"-"`
-	StoredPath  string `json:"-"`
-	SizeBytes   int64  `json:"size_bytes"`
-	ContentType string `json:"content_type"`
-	CreatedAt   string `json:"created_at"`
+	ID                int64  `json:"id"`
+	ProjectID         int64  `json:"project_id"`
+	WorkOrderID       int64  `json:"work_order_id"`
+	FileName          string `json:"file_name"`
+	ContentHash       string `json:"content_hash"`
+	S3Key             string `json:"s3_key"`
+	S3Status          string `json:"s3_status"`
+	CloudObjectID     string `json:"cloud_object_id"`
+	EncryptionVersion int    `json:"encryption_version"`
+	WrappedKey        string `json:"wrapped_key"`
+	WrappedKeyIV      string `json:"wrapped_key_iv"`
+	DataIV            string `json:"data_iv"`
+	StoredName        string `json:"-"`
+	StoredPath        string `json:"-"`
+	SizeBytes         int64  `json:"size_bytes"`
+	ContentType       string `json:"content_type"`
+	CreatedAt         string `json:"created_at"`
+}
+
+type WorkOrderAttachmentCloudState struct {
+	S3Status          string
+	S3Key             string
+	CloudObjectID     string
+	EncryptionVersion int
+	WrappedKey        string
+	WrappedKeyIV      string
+	DataIV            string
 }
 
 func (s *Store) AttachmentRoot() (string, error) {
@@ -249,6 +264,8 @@ func (s *Store) ListWorkOrderAttachmentsForProject(scope ProjectScope, workOrder
 	}
 	rows, err := s.db.Query(`SELECT id, project_id, work_order_id, file_name, stored_name,
 		COALESCE(content_hash, ''), COALESCE(s3_key, ''), COALESCE(s3_status, 'pending'),
+		COALESCE(cloud_object_id, ''), COALESCE(encryption_version, 0), COALESCE(wrapped_key, ''),
+		COALESCE(wrapped_key_iv, ''), COALESCE(data_iv, ''),
 		size_bytes, content_type, created_at
 		FROM cmdb_work_order_attachments WHERE project_id=? AND work_order_id=? ORDER BY id`, scope.ProjectID, workOrderID)
 	if err != nil {
@@ -261,6 +278,7 @@ func (s *Store) ListWorkOrderAttachmentsForProject(scope ProjectScope, workOrder
 		if err := rows.Scan(
 			&item.ID, &item.ProjectID, &item.WorkOrderID, &item.FileName, &item.StoredName,
 			&item.ContentHash, &item.S3Key, &item.S3Status,
+			&item.CloudObjectID, &item.EncryptionVersion, &item.WrappedKey, &item.WrappedKeyIV, &item.DataIV,
 			&item.SizeBytes, &item.ContentType, &item.CreatedAt,
 		); err != nil {
 			_ = rows.Close()
@@ -285,11 +303,14 @@ func (s *Store) GetWorkOrderAttachmentForProject(scope ProjectScope, workOrderID
 	var item WorkOrderAttachment
 	err := s.db.QueryRow(`SELECT id, project_id, work_order_id, file_name, stored_name,
 		COALESCE(content_hash, ''), COALESCE(s3_key, ''), COALESCE(s3_status, 'pending'),
+		COALESCE(cloud_object_id, ''), COALESCE(encryption_version, 0), COALESCE(wrapped_key, ''),
+		COALESCE(wrapped_key_iv, ''), COALESCE(data_iv, ''),
 		size_bytes, content_type, created_at
 		FROM cmdb_work_order_attachments WHERE id=? AND project_id=? AND work_order_id=?`, attachmentID, scope.ProjectID, workOrderID).
 		Scan(
 			&item.ID, &item.ProjectID, &item.WorkOrderID, &item.FileName, &item.StoredName,
 			&item.ContentHash, &item.S3Key, &item.S3Status,
+			&item.CloudObjectID, &item.EncryptionVersion, &item.WrappedKey, &item.WrappedKeyIV, &item.DataIV,
 			&item.SizeBytes, &item.ContentType, &item.CreatedAt,
 		)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -303,7 +324,8 @@ func (s *Store) GetWorkOrderAttachmentForProject(scope ProjectScope, workOrderID
 }
 
 func (s *Store) UpdateWorkOrderAttachmentS3Status(scope ProjectScope, workOrderID, attachmentID int64, s3Status, s3Key string) error {
-	result, err := s.db.Exec(`UPDATE cmdb_work_order_attachments SET s3_status=?, s3_key=? WHERE id=? AND project_id=? AND work_order_id=?`,
+	result, err := s.db.Exec(`UPDATE cmdb_work_order_attachments SET s3_status=?, s3_key=?
+		WHERE id=? AND project_id=? AND work_order_id=?`,
 		s3Status, s3Key, attachmentID, scope.ProjectID, workOrderID)
 	if err != nil {
 		return err
@@ -312,6 +334,64 @@ func (s *Store) UpdateWorkOrderAttachmentS3Status(scope ProjectScope, workOrderI
 		return fmt.Errorf("附件不存在: %w", ErrProjectScopedNotFound)
 	}
 	return nil
+}
+
+func (s *Store) UpdateWorkOrderAttachmentCloudState(scope ProjectScope, workOrderID, attachmentID int64, state WorkOrderAttachmentCloudState) error {
+	result, err := s.db.Exec(`UPDATE cmdb_work_order_attachments SET
+		s3_status=?, s3_key=?, cloud_object_id=?, encryption_version=?, wrapped_key=?, wrapped_key_iv=?, data_iv=?
+		WHERE id=? AND project_id=? AND work_order_id=?`,
+		state.S3Status, state.S3Key, state.CloudObjectID, state.EncryptionVersion,
+		state.WrappedKey, state.WrappedKeyIV, state.DataIV,
+		attachmentID, scope.ProjectID, workOrderID)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return fmt.Errorf("附件不存在: %w", ErrProjectScopedNotFound)
+	}
+	return nil
+}
+
+func (s *Store) ListPendingWorkOrderAttachmentsForProject(scope ProjectScope) ([]WorkOrderAttachment, error) {
+	if err := scope.Validate(); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT id, project_id, work_order_id, file_name, stored_name,
+		COALESCE(content_hash, ''), COALESCE(s3_key, ''), COALESCE(s3_status, 'pending'),
+		COALESCE(cloud_object_id, ''), COALESCE(encryption_version, 0), COALESCE(wrapped_key, ''),
+		COALESCE(wrapped_key_iv, ''), COALESCE(data_iv, ''),
+		size_bytes, content_type, created_at
+		FROM cmdb_work_order_attachments
+		WHERE project_id=? AND COALESCE(s3_status, 'pending')<>'synced'
+		ORDER BY id`, scope.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	list := make([]WorkOrderAttachment, 0)
+	for rows.Next() {
+		var item WorkOrderAttachment
+		if err := rows.Scan(
+			&item.ID, &item.ProjectID, &item.WorkOrderID, &item.FileName, &item.StoredName,
+			&item.ContentHash, &item.S3Key, &item.S3Status,
+			&item.CloudObjectID, &item.EncryptionVersion, &item.WrappedKey, &item.WrappedKeyIV, &item.DataIV,
+			&item.SizeBytes, &item.ContentType, &item.CreatedAt,
+		); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		list = append(list, item)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for index := range list {
+		list[index].StoredPath, _ = s.resolveAttachmentPath(&list[index])
+	}
+	return list, nil
 }
 
 func (s *Store) DeleteWorkOrderAttachmentForProject(scope ProjectScope, workOrderID, attachmentID int64) error {
