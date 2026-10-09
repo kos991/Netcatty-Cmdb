@@ -82,6 +82,8 @@ cpSync(join(integrationRoot, "electron", "cmdbService.cjs"), join(target, "elect
 cpSync(join(integrationRoot, "electron", "cmdbService.test.cjs"), join(target, "electron", "cmdbService.test.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbBridge.cjs"), join(target, "electron", "bridges", "cmdbBridge.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbBridge.test.cjs"), join(target, "electron", "bridges", "cmdbBridge.test.cjs"));
+cpSync(join(integrationRoot, "electron", "cmdbAttachmentCloud.cjs"), join(target, "electron", "bridges", "cmdbAttachmentCloud.cjs"));
+cpSync(join(integrationRoot, "electron", "cmdbAttachmentCloud.test.cjs"), join(target, "electron", "bridges", "cmdbAttachmentCloud.test.cjs"));
 
 const cmdbMainBlock = `let cmdbService = null;
 let cmdbStartupError = null;
@@ -192,7 +194,7 @@ update("electron/main/registerBridges.cjs", (source) => {
   let output = replaceOnce(
     source,
     'const { registerSystemNotificationHandlers } = require("../bridges/systemNotification.cjs");',
-    'const { registerSystemNotificationHandlers } = require("../bridges/systemNotification.cjs");\nconst { registerCmdbBridge } = require("../bridges/cmdbBridge.cjs");',
+    'const { registerSystemNotificationHandlers } = require("../bridges/systemNotification.cjs");\nconst { registerCmdbBridge, requestCmdb } = require("../bridges/cmdbBridge.cjs");\nconst { registerCmdbAttachmentCloud } = require("../bridges/cmdbAttachmentCloud.cjs");',
     "electron/main/registerBridges.cjs",
   );
   output = replaceOnce(
@@ -201,7 +203,7 @@ update("electron/main/registerBridges.cjs", (source) => {
     "    getVaultBackupBridge,\n    getCmdbService,\n    getCmdbStartupError,\n    getAppLockController,",
     "electron/main/registerBridges.cjs",
   );
-  return replaceOnce(
+  output = replaceOnce(
     output,
     "    const { ipcMain } = electronModule;",
     `    const { ipcMain } = electronModule;
@@ -210,6 +212,18 @@ update("electron/main/registerBridges.cjs", (source) => {
       dialog: electronModule.dialog,
       getService: getCmdbService,
       getStartupError: getCmdbStartupError,
+    });`,
+    "electron/main/registerBridges.cjs",
+  );
+  return replaceOnce(
+    output,
+    "    const cloudSyncBridge = getCloudSyncBridge();",
+    `    const cloudSyncBridge = getCloudSyncBridge();
+    registerCmdbAttachmentCloud({
+      ipcMain,
+      buildS3Client: cloudSyncBridge.buildS3Client,
+      requestCmdb,
+      getService: getCmdbService,
     });`,
     "electron/main/registerBridges.cjs",
   );
@@ -296,7 +310,10 @@ update("electron/preload/api.cjs", (source) => replaceOnce(
   cmdbRequest: (payload) => ipcRenderer.invoke("netcatty:cmdb:request", payload),
   cmdbImportFile: (payload) => ipcRenderer.invoke("netcatty:cmdb:import-file", payload),
   cmdbUploadFile: (payload) => ipcRenderer.invoke("netcatty:cmdb:upload-file", payload),
-  cmdbExportFile: (payload) => ipcRenderer.invoke("netcatty:cmdb:export-file", payload),`,
+  cmdbExportFile: (payload) => ipcRenderer.invoke("netcatty:cmdb:export-file", payload),
+  cmdbSelectAttachmentDirectory: () => ipcRenderer.invoke("netcatty:cmdb:select-attachment-directory"),
+  cmdbSyncAttachments: (payload) => ipcRenderer.invoke("netcatty:cmdb:sync-attachments", payload),
+  cmdbDownloadAttachment: (payload) => ipcRenderer.invoke("netcatty:cmdb:download-attachment", payload),`,
   "electron/preload/api.cjs",
 ));
 
@@ -308,7 +325,10 @@ update("global.d.ts", (source) => replaceOnce(
     cmdbRequest?(payload: { path: string; method?: string; headers?: Record<string, string>; body?: unknown }): Promise<unknown>;
     cmdbImportFile?(payload: { path: string; commit?: boolean; token?: string }): Promise<unknown>;
     cmdbUploadFile?(payload: { path: string; fileName?: string; bytes?: Uint8Array }): Promise<unknown>;
-    cmdbExportFile?(payload: { path: string; suggestedName?: string }): Promise<{ cancelled: boolean; filePath?: string }>;`,
+    cmdbExportFile?(payload: { path: string; suggestedName?: string }): Promise<{ cancelled: boolean; filePath?: string }>;
+    cmdbSelectAttachmentDirectory?(): Promise<{ cancelled: boolean; directoryPath?: string }>;
+    cmdbSyncAttachments?(payload: unknown): Promise<unknown>;
+    cmdbDownloadAttachment?(payload: unknown): Promise<unknown>;`,
   "global.d.ts",
 ));
 

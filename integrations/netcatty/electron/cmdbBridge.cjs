@@ -19,6 +19,9 @@ const CMDB_CHANNELS = Object.freeze({
   importFile: "netcatty:cmdb:import-file",
   uploadFile: "netcatty:cmdb:upload-file",
   exportFile: "netcatty:cmdb:export-file",
+  selectAttachmentDirectory: "netcatty:cmdb:select-attachment-directory",
+  syncAttachments: "netcatty:cmdb:sync-attachments",
+  downloadAttachment: "netcatty:cmdb:download-attachment",
 });
 
 function normalizeApiPath(path) {
@@ -245,6 +248,14 @@ function registerCmdbBridge({
     if (target.canceled || !target.filePath) return { cancelled: true };
     await writeFileImpl(target.filePath, binary);
     return { cancelled: false, filePath: target.filePath };
+  });
+
+  ipcMain.handle(CMDB_CHANNELS.selectAttachmentDirectory, async () => {
+    const selection = await dialog.showOpenDialog({
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (selection.canceled || !selection.filePaths?.[0]) return { cancelled: true };
+    return { cancelled: false, directoryPath: selection.filePaths[0] };
   });
 }
 

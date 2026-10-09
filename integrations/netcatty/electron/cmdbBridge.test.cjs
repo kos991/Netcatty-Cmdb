@@ -280,6 +280,23 @@ test("writes downloaded binary only to the path accepted by the save dialog", as
   assert.deepEqual(writes, [{ filePath: "C:/exports/assets.xlsx", data: [9, 8] }]);
 });
 
+test("selects an attachment directory with the native directory dialog", async () => {
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async (options) => {
+        assert.deepEqual(options.properties, ["openDirectory", "createDirectory"]);
+        return { canceled: false, filePaths: ["D:/cmdb-files/project-1"] };
+      },
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+  });
+
+  assert.deepEqual(await handlers.get(CMDB_CHANNELS.selectAttachmentDirectory)(), {
+    cancelled: false,
+    directoryPath: "D:/cmdb-files/project-1",
+  });
+});
+
 test("uploads a selected file only to a work-order attachment endpoint", async () => {
   let requestedUrl = "";
   let requestedBody;

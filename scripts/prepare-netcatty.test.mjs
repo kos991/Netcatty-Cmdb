@@ -62,6 +62,10 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   let convergentRuntime
   let hasCmdbCloudSyncModule
   let hasCmdbSnapshotModule
+  let hasCmdbAttachmentCloudBridge
+  let preloadApi
+  let globalTypes
+  let registerBridges
   try {
     git(['worktree', 'add', '--detach', fixture, upstream.commit])
     added = true
@@ -115,6 +119,10 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
     convergentRuntime = readFileSync(join(fixture, 'infrastructure', 'services', 'cloudSync', 'convergentSyncRuntimeMethods.ts'), 'utf8')
     hasCmdbCloudSyncModule = existsSync(join(fixture, 'application', 'CmdbCloudSync.ts'))
     hasCmdbSnapshotModule = existsSync(join(fixture, 'domain', 'CmdbSyncSnapshot.ts'))
+    hasCmdbAttachmentCloudBridge = existsSync(join(fixture, 'electron', 'bridges', 'cmdbAttachmentCloud.cjs'))
+    preloadApi = readFileSync(join(fixture, 'electron', 'preload', 'api.cjs'), 'utf8')
+    globalTypes = readFileSync(join(fixture, 'global.d.ts'), 'utf8')
+    registerBridges = readFileSync(join(fixture, 'electron', 'main', 'registerBridges.cjs'), 'utf8')
     const packageJSON = JSON.parse(readFileSync(join(fixture, 'package.json'), 'utf8'))
     for (const dependency of ['antd', '@ant-design/icons', '@ant-design/v5-patch-for-react-19', 'dayjs']) {
       assert.equal(packageJSON.dependencies[dependency], undefined, `不得装配 ${dependency}`)
@@ -146,6 +154,15 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   assert.match(convergentRuntime, /providerCmdbMismatch/)
   assert.equal(hasCmdbCloudSyncModule, true)
   assert.equal(hasCmdbSnapshotModule, true)
+  assert.equal(hasCmdbAttachmentCloudBridge, true)
+  assert.match(preloadApi, /cmdbSelectAttachmentDirectory/)
+  assert.match(preloadApi, /cmdbSyncAttachments/)
+  assert.match(preloadApi, /cmdbDownloadAttachment/)
+  assert.match(globalTypes, /cmdbSelectAttachmentDirectory/)
+  assert.match(globalTypes, /cmdbSyncAttachments/)
+  assert.match(globalTypes, /cmdbDownloadAttachment/)
+  assert.match(registerBridges, /registerCmdbAttachmentCloud/)
+  assert.match(registerBridges, /buildS3Client: cloudSyncBridge\.buildS3Client/)
   assert.doesNotMatch(appView, /import CmdbWorkspace/)
   assert.match(surface, /from 'lucide-react'/)
   assert.match(surface, /from '\.\.\/ui\/tooltip'/)
