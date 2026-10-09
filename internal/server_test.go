@@ -168,7 +168,7 @@ func TestLegacyAssetExportUsesListFiltersAndIncludeArchived(t *testing.T) {
 				t.Fatalf("导出行数错误，want=%v rows=%v", tc.want, rows)
 			}
 			for i, code := range tc.want {
-				if len(rows[i+1]) < 2 || rows[i+1][1] != code {
+				if len(rows[i+1]) < 3 || rows[i+1][2] != code {
 					t.Fatalf("导出资产不匹配，want=%v rows=%v", tc.want, rows)
 				}
 			}
@@ -209,11 +209,11 @@ func TestLegacyAssetExcelOmitsSoftwareInstallationColumn(t *testing.T) {
 
 func TestLegacyAssetExportOmitsInapplicableOrdinaryDeviceFields(t *testing.T) {
 	values := legacyAssetExportValues(store.Asset{DeviceType: "台式电脑", BoxSN: "PC-SN-1", DisplaySN: "DISPLAY-OLD", TerminalIP: "10.20.30.22"})
-	if values[3] != "PC-SN-1" || values[4] != "" || values[9] != "" {
+	if values[4] != "PC-SN-1" || values[5] != "" || values[10] != "" {
 		t.Fatalf("普通设备导出字段错误: %v", values)
 	}
 	cloudValues := legacyAssetExportValues(store.Asset{DeviceType: "云桌面盒子", BoxSN: "BOX-SN-1", DisplaySN: "DISPLAY-SN-1", TerminalIP: "10.20.30.23"})
-	if cloudValues[4] != "DISPLAY-SN-1" || cloudValues[9] != "10.20.30.23" {
+	if cloudValues[5] != "DISPLAY-SN-1" || cloudValues[10] != "10.20.30.23" {
 		t.Fatalf("云桌面导出未保留双 SN/IP: %v", cloudValues)
 	}
 }

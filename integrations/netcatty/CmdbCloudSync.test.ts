@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import {
+  CMDB_CLOUD_SYNC_REQUEST_KEY,
   applyCmdbCloudSnapshot,
   collectCmdbCloudSnapshot,
   readCmdbCloudSyncSettings,
+  requestCmdbCloudSync,
   scheduleCmdbCloudSync,
   writeCmdbCloudSyncSettings,
 } from './CmdbCloudSync';
@@ -40,6 +42,14 @@ beforeEach(() => {
 });
 
 describe('CmdbCloudSync', () => {
+  it('设置窗口的手动同步请求通过原生跨窗口通道传给主窗口', () => {
+    const messages: Array<{ key: string; value: unknown }> = [];
+    Object.assign(window, { netcatty: { notifySettingsChanged: (payload: { key: string; value: unknown }) => messages.push(payload) } });
+    requestCmdbCloudSync();
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].key, CMDB_CLOUD_SYNC_REQUEST_KEY);
+  });
+
   it('默认关闭，不调用导出接口', async () => {
     let called = false;
     const result = await collectCmdbCloudSnapshot(async () => {

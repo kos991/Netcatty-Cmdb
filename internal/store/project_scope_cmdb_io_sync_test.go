@@ -85,6 +85,12 @@ func TestProjectScopeCmdbIOIsolation(t *testing.T) {
 	if result, err := s.CommitCmdbImportForProject(scopeB, bytes.NewReader(importB)); err != nil || result.Created != 1 {
 		t.Fatalf("项目 B 导入失败: result=%+v err=%v", result, err)
 	}
+	if _, err := s.db.Exec(`UPDATE cmdb_assets SET room='项目 A 机房' WHERE project_id=?`, scopeA.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE cmdb_assets SET room='项目 B 机房' WHERE project_id=?`, scopeB.ProjectID); err != nil {
+		t.Fatal(err)
+	}
 
 	assetsA, err := s.AllCmdbAssetsForProject(scopeA, CmdbAssetQuery{})
 	if err != nil || len(assetsA) != 1 || assetsA[0].ProjectID != scopeA.ProjectID || assetsA[0].CategoryID != categoryA {
@@ -98,9 +104,15 @@ func TestProjectScopeCmdbIOIsolation(t *testing.T) {
 	if err != nil || len(optsA["os_type"]) != 1 || optsA["os_type"][0] != "Linux-A" {
 		t.Fatalf("项目 A 筛选项越界: opts=%+v err=%v", optsA, err)
 	}
+	if len(optsA["location"]) != 1 || optsA["location"][0] != "项目 A 机房" {
+		t.Fatalf("项目 A 位置筛选项越界: opts=%+v", optsA)
+	}
 	optsB, err := s.CmdbAssetFilterOptionsForProject(scopeB)
 	if err != nil || len(optsB["os_type"]) != 1 || optsB["os_type"][0] != "Linux-B" {
 		t.Fatalf("项目 B 筛选项越界: opts=%+v err=%v", optsB, err)
+	}
+	if len(optsB["location"]) != 1 || optsB["location"][0] != "项目 B 机房" {
+		t.Fatalf("项目 B 位置筛选项越界: opts=%+v", optsB)
 	}
 }
 

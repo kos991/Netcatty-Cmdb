@@ -11,7 +11,6 @@ const modules = {
   people: lazy(() => import('./People')),
   ip: lazy(() => import('./IPAM')),
   operations: lazy(() => import('./Operations')),
-  config: lazy(() => import('./ConfigCenter')),
 }
 
 export default function CmdbWorkspace({ activeModule = 'assets', onModuleChange }) {

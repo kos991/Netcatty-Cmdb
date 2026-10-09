@@ -163,8 +163,8 @@ func TestHandleCmdbAssetDetailAggregatesIPAMAndLinks(t *testing.T) {
 	if subnetRec.Code != http.StatusOK {
 		t.Fatalf("创建网段失败: status=%d body=%s", subnetRec.Code, subnetRec.Body.String())
 	}
-	if _, err := s.Store.CreateIPEntry(&store.IPEntry{Subnet: "服务器业务网", IP: "10.20.30.2", Status: "空闲"}); err != nil {
-		t.Fatal(err)
+	if rows, total, err := s.Store.QueryIPEntries(store.IPEntryQuery{Keyword: "10.20.30.2", Page: 1, PageSize: 20}); err != nil || total != 1 || rows[0].OwnerType != "infrastructure" || rows[0].OwnerID != coreID {
+		t.Fatalf("创建网段后应自动纳入交换机管理 IP：rows=%+v total=%d err=%v", rows, total, err)
 	}
 
 	linkBody := fmt.Sprintf(`{"local_interface_id":0,"local_port":"Gi1/0/12","direction":"downlink","peer_asset_id":%d,"peer_port":"eth0","vlan":"230","vni":"10230","status":"在线"}`, serverID)

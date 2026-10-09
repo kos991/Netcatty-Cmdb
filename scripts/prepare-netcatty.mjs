@@ -2,6 +2,14 @@ import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import {
+  patchSettingsApplicationTab,
+  patchSettingsPageWithCmdb,
+  patchSettingsSystemTab,
+  patchStartupUpdateAction,
+  patchUpdateRepositoryConfig,
+  patchUpdateTranslations,
+} from "./netcatty-update-integration.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const integrationRoot = join(repositoryRoot, "integrations", "netcatty");
@@ -54,7 +62,6 @@ function assertContainsOnce(relativePath, anchor) {
   ["components/TopTabs.tsx", "{/* Fixed left tabs: Vaults and SFTP */}"],
   ["application/app/AppView.tsx", "<AppVaultThemeSurface VaultViewContainer={VaultViewContainer}>"],
   ["application/app/AppHandlers.ts", "export function handleGlobalHotkeyKeyDownImpl"],
-  ["application/app/workTabSurface.ts", "return activeTabId === 'vault' || activeTabId === 'sftp';"],
   ["electron/preload/api.cjs", "function createPreloadApi"],
   ["global.d.ts", "interface NetcattyBridge {"],
 ].forEach(([file, anchor]) => assertContainsOnce(file, anchor));
@@ -229,12 +236,14 @@ update("components/TopTabs.tsx", (source) => {
   );
 });
 
-update("application/app/workTabSurface.ts", (source) => replaceOnce(
-  source,
-  "return activeTabId === 'vault' || activeTabId === 'sftp';",
-  "return activeTabId === 'vault' || activeTabId === 'cmdb' || activeTabId === 'sftp';",
-  "application/app/workTabSurface.ts",
-));
+update("application/app/workTabSurface.ts", (source) => {
+  const legacy = "return activeTabId === 'vault' || activeTabId === 'sftp';";
+  if (source.includes(legacy)) {
+    return source.replace(legacy, "return activeTabId === 'vault' || activeTabId === 'cmdb' || activeTabId === 'sftp';");
+  }
+  if (source.includes("activeTabId === 'cmdb'")) return `${source}\n`;
+  throw new Error("Integration anchor is missing in application/app/workTabSurface.ts");
+});
 
 update("application/app/AppActiveTabChrome.tsx", (source) => replaceOnce(
   source,
@@ -335,6 +344,14 @@ update("electron-builder.config.cjs", (source) => {
     "electron-builder.config.cjs",
   );
 });
+
+update("infrastructure/services/updateService.ts", patchUpdateRepositoryConfig);
+update("electron-builder.config.cjs", patchUpdateRepositoryConfig);
+update("components/SettingsApplicationTab.tsx", patchSettingsApplicationTab);
+update("components/SettingsPage.tsx", patchSettingsPageWithCmdb);
+update("components/settings/tabs/SettingsSystemTab.tsx", patchSettingsSystemTab);
+update("application/app/useAppStartupEffects.ts", patchStartupUpdateAction);
+update("application/i18n/locales/zh-CN/core.ts", patchUpdateTranslations);
 
 update("eslint.config.js", (source) => replaceOnce(
   source,
@@ -761,7 +778,13 @@ update("application/app/AppSideEffects.tsx", (source) => replaceOnce(
   useEffect(() => {
     const handleCmdbSyncRequest = () => { void handleSyncNowManual(); };
     window.addEventListener('netcatty:cmdb-cloud-sync-request', handleCmdbSyncRequest);
-    return () => window.removeEventListener('netcatty:cmdb-cloud-sync-request', handleCmdbSyncRequest);
+    const unsubscribe = netcattyBridge.get()?.onSettingsChanged?.((payload) => {
+      if (payload?.key === 'netcatty.cmdb.cloudSync.request') handleCmdbSyncRequest();
+    });
+    return () => {
+      window.removeEventListener('netcatty:cmdb-cloud-sync-request', handleCmdbSyncRequest);
+      unsubscribe?.();
+    };
   }, [handleSyncNowManual]);
 
   // Update check hook`,

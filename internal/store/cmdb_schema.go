@@ -1,5 +1,7 @@
 package store
 
+import "fmt"
+
 // cmdbSchema 为 nettopo CMDB 复刻的六张基础表 DDL。
 // 全部使用 IF NOT EXISTS，可重复执行。
 const cmdbSchema = `
@@ -368,6 +370,19 @@ CREATE INDEX IF NOT EXISTS idx_cmdb_cf_class ON cmdb_custom_fields(asset_class);
 
 // InitCmdbSchema 幂等创建 CMDB 相关表，可重复调用。
 func (s *Store) InitCmdbSchema() error {
+	cols := map[string]string{
+		"content_hash": "TEXT NOT NULL DEFAULT ''",
+		"s3_key":       "TEXT NOT NULL DEFAULT ''",
+		"s3_status":    "TEXT NOT NULL DEFAULT 'pending'",
+	}
+	for col, colType := range cols {
+		var exists int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('cmdb_work_order_attachments') WHERE name=?`, col).Scan(&exists)
+		if exists == 0 {
+			_, _ = s.db.Exec(fmt.Sprintf(`ALTER TABLE cmdb_work_order_attachments ADD COLUMN %s %s`, col, colType))
+		}
+	}
+
 	if _, err := s.db.Exec(cmdbSchema); err != nil {
 		return err
 	}

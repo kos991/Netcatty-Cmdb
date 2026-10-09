@@ -12,10 +12,9 @@ import { buildTaxonomyTree, filterTaxonomyTree, taxonomyParentOptions } from './
 import { EmptyState, ErrorBanner, SelectControl } from './ui'
 
 const KINDS = [
-  ['terminal-categories', '终端资产分类'],
-  ['infrastructure-categories', '基础设施分类'],
-  ['application-categories', '业务系统分类'],
-  ['groups', '资产分组'],
+  ['terminal-categories', '终端设备类型'],
+  ['infrastructure-categories', '基础设施设备类型'],
+  ['application-categories', '业务系统类型'],
 ]
 
 function TaxonomyNode({ node, depth, selectedId, expanded, onToggle, onSelect }) {
@@ -46,7 +45,7 @@ export default function Taxonomy({ open, onOpenChange, onChanged, initialKind = 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const title = KINDS.find(([value]) => value === kind)?.[1] || '分类'
+  const title = KINDS.find(([value]) => value === kind)?.[1] || '设备类型'
 
   const load = useCallback(async (preferredId = 0) => {
     setLoading(true)
@@ -123,7 +122,7 @@ export default function Taxonomy({ open, onOpenChange, onChanged, initialKind = 
   return <>
     <Dialog open={open} onOpenChange={(next) => { if (!saving) onOpenChange?.(next) }}>
       <DialogContent className="flex h-[min(680px,calc(100vh-40px))] w-[min(900px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
-        <DialogHeader className="border-b border-border px-5 py-4"><DialogTitle className="flex items-center gap-2 text-sm"><Layers3 size={16} />分类与分组管理</DialogTitle></DialogHeader>
+        <DialogHeader className="border-b border-border px-5 py-4"><DialogTitle className="flex items-center gap-2 text-sm"><Layers3 size={16} />设备类型管理</DialogTitle></DialogHeader>
         <Tabs value={kind} onValueChange={(value) => { setKind(value); setSearch(''); setSelectedId(0); setDraft(null) }} className="border-b border-border px-5 py-2">
           <TabsList className="h-8">{KINDS.map(([value, label]) => <TabsTrigger key={value} value={value} className="h-7 px-3 text-xs">{label}</TabsTrigger>)}</TabsList>
         </Tabs>
@@ -136,7 +135,7 @@ export default function Taxonomy({ open, onOpenChange, onChanged, initialKind = 
             <div className="flex gap-2 border-b border-border/70 px-3 py-2"><Button type="button" variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => beginCreate(0)}><Plus size={13} className="mr-1" />新增大类</Button><Button type="button" variant="outline" size="sm" className="h-7 flex-1 text-xs" disabled={!draft?.id} onClick={() => beginCreate(draft.id)}><FolderPlus size={13} className="mr-1" />新增子类</Button></div>
             <div className="min-h-0 flex-1 overflow-y-auto p-2">{loading ? <div className="grid h-full place-items-center"><Spinner /></div> : tree.length ? tree.map((node) => <TaxonomyNode key={node.id} node={node} depth={0} selectedId={selectedId} expanded={expanded} onToggle={toggle} onSelect={selectNode} />) : <EmptyState label={search ? '没有匹配项' : `暂无${title}`} />}</div>
           </section>
-          <section className="min-h-0 overflow-y-auto p-5" aria-label="分类编辑">
+          <section className="min-h-0 overflow-y-auto p-5" aria-label="类型编辑">
             {draft ? <div className="mx-auto max-w-lg space-y-5">
               <div><h3 className="text-sm font-semibold">{draft.id ? `编辑${title}` : `新增${title}`}</h3><p className="mt-1 text-xs text-muted-foreground">保存后立即同步到资产筛选和新增、编辑表单。</p></div>
               <div className="grid gap-4">

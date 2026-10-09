@@ -1,5 +1,11 @@
 const missing = (value) => String(value || '').trim() || '未分配'
 
+export function terminalOwnerPresentation(asset = {}) {
+  const label = String(asset.user_name || '').trim() || '公用 / 闲置'
+  const room = String(asset.room || '').trim()
+  return { label, room, editable: Boolean(asset.id) }
+}
+
 export function resolveDeviceKind(asset = {}) {
   const type = [asset.device_type, asset.category_name, asset.asset_class].filter(Boolean).join(' ').toLowerCase()
   if (/switch|交换机/.test(type)) return 'switch'
@@ -11,7 +17,7 @@ export function resolveDeviceKind(asset = {}) {
 
 export function deviceTypeLabel(asset = {}) {
   const labels = { server: '服务器', virtual_machine: '虚拟机', switch: '交换机', router: '路由器', security_device: '安全设备', storage: '存储设备', hyperconverged: '超融合', cloud_desktop: '云桌面' }
-  return asset.category_name || labels[asset.device_type] || asset.device_type || (asset.source_type === 'legacy_server' ? '服务器' : '未分类')
+  return labels[asset.device_type] || asset.device_type || asset.category_name || (asset.source_type === 'legacy_server' ? '服务器' : '未配置')
 }
 
 const DISTRO_NAMES = {

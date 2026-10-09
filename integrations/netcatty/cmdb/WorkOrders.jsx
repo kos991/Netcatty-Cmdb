@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { BarChart3, CheckCircle2, ChevronDown, Download, FileDown, Filter, Link2, Paperclip, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -11,6 +12,7 @@ import { api } from './api'
 import { allPages, useAction, useQuery } from './hooks'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { formatLocalDateTimeInput, normalizeWorkOrderFilters } from './state'
+import { summarizeWorkOrders } from './workOrderStatsModel'
 import { ActionIcon, DataTable, ErrorBanner, Field, ModalForm, Pagination, SearchBox, SelectControl, StatusPill, statusTone } from './ui'
 
 const BIZ_TYPES = ['故障处理', '日常维护', '变更操作', '资产调配']
@@ -90,8 +92,9 @@ function AttachmentPanel({ workOrderId, stagedFiles = [], onAddFiles, onRemoveSt
   </div></Field>
 }
 
-export default function WorkOrders({ mode = 'create', onModeChange }) {
+export default function WorkOrders({ mode = 'stats', onModeChange }) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [filters, setFilters] = useState(emptyFilters)
   const [filterOpen, setFilterOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
@@ -112,16 +115,19 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
   const normalizedFilters = normalizeWorkOrderFilters(filters)
   const loader = useCallback(() => api.workOrders({ ...normalizeWorkOrderFilters(filters), page, page_size: pageSize }), [filters, page, pageSize])
   const query = useQuery(loader)
+  const statsLoader = useCallback(() => allPages(api.workOrders, normalizeWorkOrderFilters(filters)).then(summarizeWorkOrders), [filters])
+  const statsQuery = useQuery(statsLoader, { total: 0, pending: 0, processing: 0, completedThisMonth: 0 })
   const reloadWorkOrders = query.reload
+  const reloadWorkOrderStats = statsQuery.reload
   useEffect(() => {
-    const refresh = () => reloadWorkOrders()
+    const refresh = () => { reloadWorkOrders(); reloadWorkOrderStats() }
     window.addEventListener('cmdb:refresh-work-orders', refresh)
     return () => window.removeEventListener('cmdb:refresh-work-orders', refresh)
-  }, [reloadWorkOrders])
+  }, [reloadWorkOrders, reloadWorkOrderStats])
   useEffect(() => {
-    if (mode !== 'create') return
+    if (!createOpen) return
     setValues((current) => ({ ...newOrderDefaults(), ...current, project_name: projects.data?.list?.[0]?.name || current.project_name || '当前项目' }))
-  }, [mode, projects.data])
+  }, [createOpen, projects.data])
   const change = (key, value) => {
     setFilters((old) => ({ ...old, [key]: value }))
     setPage(1)
@@ -175,7 +181,7 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
       workOrderId = created.id
       setValues((current) => ({ ...current, id: created.id, order_no: created.order_no }))
     }
-    query.reload()
+    await Promise.all([query.reload(), statsQuery.reload()])
     if (stagedFiles.length && workOrderId) {
       let uploaded = 0
       try {
@@ -192,6 +198,7 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
     if (values.maintainer && typeof window !== 'undefined') window.localStorage.setItem(HANDLER_KEY, values.maintainer)
     setValues({ ...newOrderDefaults(), project_name: values.project_name })
     setStagedFiles([])
+    setCreateOpen(false)
   }, values.id ? '工单已保存' : '工单已创建')
   const saveExisting = () => action.run(async () => {
     const source = statsValues
@@ -200,13 +207,13 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
     if (id) await api.updateWorkOrder(id, orderBody(source))
     else await api.createWorkOrder(orderBody(source))
     setEditor(null)
-    query.reload()
+    await Promise.all([query.reload(), statsQuery.reload()])
   }, '工单已保存')
   const searchValue = keyword
   const completeWorkOrders = (ids) => setCompleting(ids.filter(Boolean))
   const header = <VaultPageHeader dataSection="cmdb-operations-header" contentClassName="h-auto min-h-14 flex-wrap">
-    <Dropdown open={modeMenuOpen} onOpenChange={setModeMenuOpen}><DropdownTrigger asChild><Button data-work-order-mode-trigger type="button" variant="secondary" className={vaultHeaderSecondaryButtonClass}><Plus size={15} />新建工单<ChevronDown size={14} /></Button></DropdownTrigger><DropdownContent align="start" sideOffset={8} className="w-40">
-      {[["create", "新建工单", Plus], ["stats", "工单查询", BarChart3]].map(([key, label, Icon]) => <button type="button" data-work-order-mode-option={key} key={key} onClick={() => { setModeMenuOpen(false); onModeChange(key) }} className="flex h-10 w-full items-center gap-3 rounded px-3 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"><Icon size={16} className="text-primary" /><span>{label}</span></button>)}
+    <Dropdown open={modeMenuOpen} onOpenChange={setModeMenuOpen}><DropdownTrigger asChild><Button data-work-order-mode-trigger type="button" variant="secondary" className={vaultHeaderSecondaryButtonClass}><Plus size={15} />新建工单<ChevronDown size={14} /></Button></DropdownTrigger><DropdownContent align="start" sideOffset={8} className="w-44 p-1">
+      {[["create", "新建工单", Plus], ["stats", "统计与查询", BarChart3]].map(([key, label, Icon]) => <button type="button" data-work-order-mode-option={key} key={key} onClick={() => { setModeMenuOpen(false); if (key === 'create') setCreateOpen(true); else onModeChange?.('stats') }} className="flex h-9 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-secondary"><Icon size={14} /><span>{label}</span></button>)}
     </DropdownContent></Dropdown>
     {mode === 'stats' ? <VaultHeaderSearch className="min-w-[180px] max-w-[520px] flex-1" value={searchValue} onChange={(event) => { const value = event.target.value; setKeyword(value); if (!value) change('keyword', '') }} onKeyDown={(event) => { if (event.key === 'Enter') change('keyword', keyword.trim()) }} placeholder="搜索工单号或主题" rightAdornment={searchValue ? <button type="button" aria-label="清除工单搜索" title="清除工单搜索" className="grid h-6 w-6 place-items-center rounded hover:bg-foreground/10" onClick={() => { setKeyword(''); change('keyword', '') }}><X size={13} /></button> : null} /> : null}
     <span className="min-w-0 flex-1" />
@@ -215,18 +222,17 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
       <Button type="button" variant="ghost" size="icon" aria-label="导出工单" title="导出工单" className={vaultHeaderIconButtonClass} onClick={() => action.run(() => api.exportWorkOrders(normalizedFilters))}><Download size={16} /></Button>
     </> : <span className="text-xs text-muted-foreground">新建工单</span>}
   </VaultPageHeader>
-  if (mode === 'create') return <div className="flex min-h-0 flex-1 flex-col">{header}{workConfig.error && <ErrorBanner message={workConfig.error} onRetry={workConfig.reload} />}
-    <div data-work-order-editor className="min-h-0 flex-1 overflow-y-auto"><div className="mx-auto w-full max-w-[960px] px-5">
-      <header className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/40 py-2"><h2 className="text-sm font-semibold">新建工单</h2><div className="min-w-0 truncate text-xs text-muted-foreground"><span>{values.project_name || '当前项目'}</span><span className="mx-2 text-border">/</span><span>{values.order_no || '待生成编号'}</span></div></header>
-      <form id="cmdb-work-order-form" onSubmit={(event) => { event.preventDefault(); saveDraft() }}>
-        <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">受理信息</h3><Fields fields={createFields.slice(2, 8)} value={values} onChange={setValues} className="gap-3" /></section>
-        <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">处理内容</h3><Fields fields={createFields.slice(8)} value={values} onChange={setValues} className="gap-3" /></section>
-        <section className="py-4"><h3 className="mb-3 text-sm font-semibold">资源与附件</h3><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><Field label="关联资源"><div className="flex min-w-0 items-center gap-2"><AssetPicker floating options={assets.data || []} value={values.assets || []} onChange={(next) => setValues({ ...values, assets: next })} /><span className="min-w-0 truncate text-xs text-muted-foreground">{values.assets?.length ? `已关联 ${values.assets.length} 项 · ${values.assets.map((item) => item.asset_name).join('、')}` : '未关联资源'}</span></div></Field><AttachmentPanel workOrderId={values.id} refreshKey={attachmentRefresh} stagedFiles={stagedFiles} onAddFiles={(files) => { const accepted = files.filter((file) => file.size <= 50 * 1024 * 1024); if (accepted.length !== files.length) toast.error('超过 50 MiB 的附件未加入'); setStagedFiles((current) => [...current, ...accepted]) }} onRemoveStagedFile={(file) => setStagedFiles((current) => current.filter((item) => item !== file))} busy={action.busy} className="sm:col-span-1" /></div></section>
-      </form>
-      <div className="flex justify-end gap-2 border-t border-border/70 py-3"><Button type="button" variant="outline" disabled={action.busy} onClick={() => { setValues((current) => ({ ...newOrderDefaults(), project_name: current.project_name })); setStagedFiles([]) }}>清空</Button><Button type="submit" form="cmdb-work-order-form" disabled={action.busy}>{action.busy ? '保存中…' : values.id ? '继续保存' : '创建工单'}</Button></div>
-    </div></div></div>
   return <div className="flex min-h-0 flex-1 flex-col">{header}
     {query.error && <ErrorBanner message={query.error} onRetry={query.reload} />}
+    {statsQuery.error && <ErrorBanner message={`统计加载失败：${statsQuery.error}`} onRetry={statsQuery.reload} />}
+    {mode === 'stats' ? <section data-work-order-stats aria-label="工单统计" className="grid shrink-0 grid-cols-2 border-b border-border/70 lg:grid-cols-4">
+      {[
+        ['total', '全部工单', statsQuery.data?.total || 0, 'text-foreground'],
+        ['pending', '待处理', statsQuery.data?.pending || 0, 'text-amber-500'],
+        ['processing', '处理中', statsQuery.data?.processing || 0, 'text-sky-500'],
+        ['completedThisMonth', '本月已完成', statsQuery.data?.completedThisMonth || 0, 'text-emerald-500'],
+      ].map(([key, label, value, tone]) => <div key={key} className="border-r border-border/70 px-4 py-2.5 last:border-r-0"><span className="text-[11px] text-muted-foreground">{label}</span><strong data-work-order-stat={key} className={`mt-0.5 block font-mono text-lg tabular-nums ${tone}`}>{statsQuery.loading || statsQuery.error ? '—' : value}</strong></div>)}
+    </section> : null}
     {selectedOrderIds.length ? <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2 text-xs"><span className="text-muted-foreground">已选 {selectedOrderIds.length} 张工单</span><Button type="button" size="sm" onClick={() => completeWorkOrders(selectedOrderIds)} disabled={action.busy}><CheckCircle2 size={14} className="mr-1" />批量完成</Button></div> : null}
     <DataTable loading={query.loading} rows={query.error ? [] : query.data?.list || []} selected={selectedOrderIds} onSelectedChange={setSelectedOrderIds} columns={[
       { key: 'order_no', label: '工单号' }, { key: 'priority', label: '优先级', render: (v) => <StatusPill tone={v === '高' ? 'danger' : v === '中' ? 'warning' : 'neutral'}>{v}</StatusPill> },
@@ -235,13 +241,32 @@ export default function WorkOrders({ mode = 'create', onModeChange }) {
       { key: 'actions', label: '操作', render: (_, row) => <div className="flex"><ActionIcon label="编辑工单" onClick={() => open(row)}><Pencil size={15} /></ActionIcon>{!['已关闭', '已取消'].includes(row.status) && <ActionIcon label="结束工单" onClick={() => completeWorkOrders([row.id])}><CheckCircle2 size={15} /></ActionIcon>}<ActionIcon label="删除工单" danger onClick={() => setDeleting(row)}><Trash2 size={15} /></ActionIcon></div> },
     ]} />
     <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(p, s) => { setPage(p); setPageSize(s) }} />
+    <Dialog open={createOpen} onOpenChange={(next) => { if (!action.busy) setCreateOpen(next) }}>
+      <DialogContent data-work-order-create-dialog className="flex h-[min(680px,calc(100vh-40px))] w-[min(900px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+        <DialogHeader className="shrink-0 border-b border-border px-5 py-4"><DialogTitle className="flex items-center gap-2 text-sm tracking-normal"><Plus size={16} />新建工单</DialogTitle><div className="flex min-w-0 flex-wrap gap-2 text-xs text-muted-foreground"><span>{values.project_name || '当前项目'}</span><span>/</span><span>{values.order_no || '待生成编号'}</span></div></DialogHeader>
+        {createOpen && <>
+          {workConfig.error && <ErrorBanner message={workConfig.error} onRetry={workConfig.reload} />}
+          {assets.error && <ErrorBanner message={assets.error} onRetry={assets.reload} />}
+          <div data-work-order-editor className="min-h-0 flex-1 overflow-y-auto px-5">
+            <form id="cmdb-work-order-form" onSubmit={(event) => { event.preventDefault(); saveDraft() }}>
+              <fieldset disabled={action.busy} className="min-w-0">
+                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">受理信息</h3><Fields fields={createFields.slice(2, 8)} value={values} onChange={setValues} className="gap-3" /></section>
+                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">处理内容</h3><Fields fields={createFields.slice(8)} value={values} onChange={setValues} className="gap-3" /></section>
+                <section className="py-4"><h3 className="mb-3 text-sm font-semibold">资源与附件</h3><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><Field label="关联资源"><div className="flex min-w-0 items-center gap-2"><AssetPicker floating options={assets.data || []} value={values.assets || []} onChange={(next) => setValues({ ...values, assets: next })} /><span className="min-w-0 truncate text-xs text-muted-foreground">{values.assets?.length ? `已关联 ${values.assets.length} 项 · ${values.assets.map((item) => item.asset_name).join('、')}` : '未关联资源'}</span></div></Field><AttachmentPanel workOrderId={values.id} refreshKey={attachmentRefresh} stagedFiles={stagedFiles} onAddFiles={(files) => { const accepted = files.filter((file) => file.size <= 50 * 1024 * 1024); if (accepted.length !== files.length) toast.error('超过 50 MiB 的附件未加入'); setStagedFiles((current) => [...current, ...accepted]) }} onRemoveStagedFile={(file) => setStagedFiles((current) => current.filter((item) => item !== file))} busy={action.busy} className="min-w-0 sm:col-span-1" /></div></section>
+              </fieldset>
+            </form>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 border-t border-border px-5 py-3"><Button type="button" variant="ghost" disabled={action.busy} onClick={() => { setValues((current) => ({ ...newOrderDefaults(), project_name: current.project_name })); setStagedFiles([]) }}>清空</Button><span className="flex-1" /><Button type="button" variant="outline" disabled={action.busy} onClick={() => setCreateOpen(false)}>取消</Button><Button type="submit" form="cmdb-work-order-form" disabled={action.busy}>{action.busy ? '保存中…' : values.id ? '继续保存' : '创建工单'}</Button></div>
+        </>}
+      </DialogContent>
+    </Dialog>
     <ModalForm open={!!editor} onOpenChange={(v) => { if (!v) setEditor(null) }} title={editor?.id ? '编辑工单' : '新增工单'} onSubmit={saveExisting} busy={action.busy} wide><Fields fields={fields} value={statsValues} onChange={setStatsValues} /><AssetPicker options={assets.data || []} value={statsValues.assets || []} onChange={(next) => setStatsValues({ ...statsValues, assets: next })} /><AttachmentPanel workOrderId={editor?.id || statsValues.id} /></ModalForm>
-    <ConfirmDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null) }} title="删除工单" message={`确认删除“${deleting?.subject || ''}”？`} confirmLabel="删除" destructive busy={action.busy} onConfirm={() => action.run(async () => { await api.deleteWorkOrder(deleting.id); setDeleting(null); query.reload() }, '工单已删除')} />
+    <ConfirmDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null) }} title="删除工单" message={`确认删除“${deleting?.subject || ''}”？`} confirmLabel="删除" destructive busy={action.busy} onConfirm={() => action.run(async () => { await api.deleteWorkOrder(deleting.id); setDeleting(null); await Promise.all([query.reload(), statsQuery.reload()]) }, '工单已删除')} />
     <ConfirmDialog open={completing.length > 0} onOpenChange={(v) => { if (!v) setCompleting([]) }} title="结束工单" message={`确认将 ${completing.length} 张工单标记为已关闭？`} confirmLabel="完成" busy={action.busy} onConfirm={() => action.run(async () => {
       const result = await api.batchUpdateWorkOrders(completing, '已关闭')
       const updated = Number(result?.updated || 0)
       if (updated !== completing.length) throw new Error(`仅完成 ${updated} 张工单，列表未发生完整更新，请刷新后重试`)
-      await query.reload()
+      await Promise.all([query.reload(), statsQuery.reload()])
       setCompleting([])
       setSelectedOrderIds([])
     }, '工单已完成')} />

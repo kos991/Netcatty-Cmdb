@@ -14,7 +14,7 @@ function git(args) {
   return execFileSync('git', args, { cwd: pinnedSource, encoding: 'utf8', stdio: 'pipe' }).trim()
 }
 
-test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
+test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置', (t) => {
   if (!existsSync(join(pinnedSource, '.git'))) {
     t.skip(`未找到锁定的 Netcatty 测试源: ${pinnedSource}`)
     return
@@ -28,6 +28,7 @@ test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
   let activeChrome
   let appHandlers
   let appView
+  let appSideEffects
   let surface
   let workspace
   let workspaceState
@@ -42,6 +43,7 @@ test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
   let people
   let workOrders
   let configCenter
+  let settingsPage
   let netcattyConnectionFields
   let deviceWorkspace
   let deviceImages
@@ -71,6 +73,7 @@ test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
     activeChrome = readFileSync(join(fixture, 'application', 'app', 'AppActiveTabChrome.tsx'), 'utf8')
     appHandlers = readFileSync(join(fixture, 'application', 'app', 'AppHandlers.ts'), 'utf8')
     appView = readFileSync(join(fixture, 'application', 'app', 'AppView.tsx'), 'utf8')
+    appSideEffects = readFileSync(join(fixture, 'application', 'app', 'AppSideEffects.tsx'), 'utf8')
     surface = readFileSync(join(fixture, 'components', 'cmdb', 'CmdbSurface.tsx'), 'utf8')
     workspace = readFileSync(join(fixture, 'components', 'cmdb', 'CmdbWorkspace.jsx'), 'utf8')
     workspaceState = readFileSync(join(fixture, 'components', 'cmdb', 'state.js'), 'utf8')
@@ -85,6 +88,7 @@ test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
     people = readFileSync(join(fixture, 'components', 'cmdb', 'People.jsx'), 'utf8')
     workOrders = readFileSync(join(fixture, 'components', 'cmdb', 'WorkOrders.jsx'), 'utf8')
     configCenter = readFileSync(join(fixture, 'components', 'cmdb', 'ConfigCenter.jsx'), 'utf8')
+    settingsPage = readFileSync(join(fixture, 'components', 'SettingsPage.tsx'), 'utf8')
     netcattyConnectionFields = readFileSync(join(fixture, 'components', 'cmdb', 'NetcattyConnectionFields.jsx'), 'utf8')
     const deviceWorkspacePath = join(fixture, 'components', 'cmdb', 'DeviceWorkspace.jsx')
     const deviceOwnershipBarPath = join(fixture, 'components', 'cmdb', 'DeviceOwnershipBar.jsx')
@@ -228,8 +232,8 @@ test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
   assert.match(infrastructure, /api\.customFields/)
   assert.match(infrastructureEditor, /customFieldDefinitions/)
   assert.match(infrastructureEditor, /infrastructureFieldProfile/)
-  for (const retainedConfig of ['分类与分组', '型号库', '网络类型', '工单配置', '导入模板', '项目设置']) assert.match(configCenter, new RegExp(retainedConfig))
-  for (const removedConfig of ['资产配置', '资产字典', '扩展字段', '软件目录', '凭证中心', '编码与标签']) assert.doesNotMatch(configCenter, new RegExp(removedConfig))
+  for (const retainedConfig of ['设备类型', '型号库', '网络类型', '工单配置', '导入模板', '项目设置', '资产配置', '项目与数据']) assert.match(configCenter, new RegExp(retainedConfig))
+  for (const removedConfig of ['资产字典', '扩展字段', '软件目录', '凭证中心', '编码与标签']) assert.doesNotMatch(configCenter, new RegExp(removedConfig))
   assert.doesNotMatch(configCenter, /custom-fields|api\.customFields|saveCustomField|deleteCustomField/)
   assert.match(configCenter, /data-section="cmdb-data-maintenance"/)
   assert.match(configCenter, /同步历史台账/)
@@ -246,13 +250,14 @@ test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
   assert.doesNotMatch(ipam, /data-ipam-filter|<Filter|IP 筛选/)
   assert.doesNotMatch(ipam, /<RefreshCw/)
   assert.doesNotMatch(infrastructure, /同步旧台账|api\.syncInfrastructure/)
-  assert.match(infrastructure, /label: '型号 \/ 系统'/)
+  assert.match(infrastructure, /label: '品牌 \/ 型号'/)
+  assert.match(infrastructure, /label: '操作系统'/)
   assert.match(infrastructure, /data-infrastructure-technical-cell/)
-  assert.match(infrastructure, /VendorBrandValue[\s\S]{0,180}max-w-\[55%\]/)
+  assert.match(infrastructure, /VendorBrandValue[\s\S]{0,180}min-w-0/)
   assert.doesNotMatch(infrastructure, /VendorBrandValue[\s\S]{0,180}className="[^"]*flex-1[^"]*"/)
   assert.doesNotMatch(configCenter, /import Credentials|import Labels|kind === 'software'/)
   assert.doesNotMatch(terminalAssets, /软件安装情况|security_software|config\('software'\)/)
-  assert.doesNotMatch(infrastructureEditor, /软件安装情况|security_software|资产标签/)
+  assert.doesNotMatch(infrastructureEditor, /软件安装情况|security_software/)
   assert.match(terminalAssets, /NetcattyConnectionFields/)
   assert.match(infrastructureEditor, /NetcattyConnectionFields/)
   assert.match(infrastructureEditor, /preserveZero/)
@@ -277,7 +282,9 @@ test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
   assert.match(workOrders, /mode === 'stats'/)
   assert.match(workOrders, /batchUpdateWorkOrders/)
   assert.match(workOrders, /selectedOrderIds/)
-  assert.match(workOrders, /mx-auto w-full max-w-\[960px\]/)
+  assert.match(workOrders, /data-work-order-create-dialog/)
+  assert.match(workOrders, /data-work-order-stats/)
+  assert.match(workOrders, /completedThisMonth/)
   assert.doesNotMatch(workOrders, /刷新当前页面|<RefreshCw/)
   assert.match(deviceImages, /api\.saveAssetImage/)
   assert.match(terminalAssets, /DeviceImages/)
@@ -289,12 +296,22 @@ test('装配为原生 Cmdb 根标签和左侧五入口工作区', (t) => {
   assert.match(cmdbUi, /<AsidePanel[\s\S]+layout="overlay"[\s\S]+resizable/)
   assert.match(cmdbUi, /dataSection="cmdb-detail-panel"/)
   assert.doesNotMatch(cmdbUi, /w-\[min\(760px/)
-  for (const icon of ['Monitor', 'Users', 'Network', 'ChartNoAxesCombined', 'Settings2']) {
+  for (const icon of ['Monitor', 'Users', 'Network', 'ChartNoAxesCombined']) {
     assert.match(surface, new RegExp(`\\b${icon}\\b`))
   }
-  for (const key of ['assets', 'people', 'ip', 'operations', 'config']) {
+  for (const key of ['assets', 'people', 'ip', 'operations']) {
     assert.match(workspaceState, new RegExp(`key: '${key}'`))
   }
+  assert.doesNotMatch(workspaceState, /key: 'config'/)
+  assert.match(settingsPage, /value="cmdb"/)
+  assert.match(settingsPage, /LazyCmdbConfigCenter/)
+  assert.match(appSideEffects, /netcattyBridge\.get\(\)\?\.onSettingsChanged/)
+  assert.doesNotMatch(appSideEffects, /window\.netcatty\?\.onSettingsChanged/)
+  assert.match(configCenter, /data-section="cmdb-settings-catalog"/)
+  assert.match(configCenter, /section="cmdb-settings-network"/)
+  assert.match(configCenter, /data-section="cmdb-settings-work-orders"/)
+  assert.match(configCenter, /data-section="cmdb-settings-project"/)
+  assert.doesNotMatch(configCenter, /配置项目|const GROUPS =/)
   for (const key of ['search', 'infrastructure', 'systems']) {
     assert.doesNotMatch(workspaceState, new RegExp(`key: '${key}'`))
   }

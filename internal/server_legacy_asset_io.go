@@ -15,6 +15,8 @@ var legacyAssetImportHeaders = [][]string{
 	{"当前使用人"}, {"所属组织"}, {"房间/位置"}, {"设备/业务IP"}, {"终端物理IP"}, {"状态"}, {"网络类型"}, {"备注"},
 }
 
+const legacyAssetNameImportHeader = "资产名称"
+
 type legacyAssetImportRow struct {
 	Row     int         `json:"row"`
 	Name    string      `json:"name"`
@@ -65,6 +67,7 @@ func parseLegacyAssetImport(r io.Reader) ([]legacyAssetImportRow, []string, erro
 		}
 		return ""
 	}
+	assetNameIndex, hasAssetName := indexes[legacyAssetNameImportHeader]
 	parsed := make([]legacyAssetImportRow, 0, len(rows)-1)
 	errors := []string{}
 	seen := map[string]bool{}
@@ -75,7 +78,10 @@ func parseLegacyAssetImport(r io.Reader) ([]legacyAssetImportRow, []string, erro
 			TerminalIP: value(row, "终端物理IP"), OSType: value(row, "操作系统类型"), OSVersion: value(row, "操作系统版本"),
 			Status: value(row, "状态"), NetType: value(row, "网络类型"), Remark: value(row, "备注"),
 		}
-		if asset.AssetCode == "" && asset.DeviceType == "" && asset.BoxSN == "" && asset.UserName == "" {
+		if hasAssetName && assetNameIndex < len(row) {
+			asset.AssetName = strings.TrimSpace(row[assetNameIndex])
+		}
+		if asset.AssetName == "" && asset.AssetCode == "" && asset.DeviceType == "" && asset.BoxSN == "" && asset.UserName == "" {
 			continue
 		}
 		message := "可导入"
@@ -89,15 +95,16 @@ func parseLegacyAssetImport(r io.Reader) ([]legacyAssetImportRow, []string, erro
 		if asset.Status == "" {
 			asset.Status = "在用"
 		}
-		if asset.NetType == "" {
-			asset.NetType = "专网"
-		}
 		if asset.DeviceType != "" && !isCloudDesktopImportDeviceType(asset.DeviceType) {
 			asset.DisplaySN = ""
 			asset.TerminalIP = ""
 		}
 		seen[asset.AssetCode] = asset.AssetCode != ""
-		parsed = append(parsed, legacyAssetImportRow{Row: index + 2, Name: asset.AssetCode, Asset: asset, Message: message})
+		previewName := asset.AssetName
+		if previewName == "" {
+			previewName = asset.AssetCode
+		}
+		parsed = append(parsed, legacyAssetImportRow{Row: index + 2, Name: previewName, Asset: asset, Message: message})
 	}
 	return parsed, errors, nil
 }

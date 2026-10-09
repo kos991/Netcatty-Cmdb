@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -46,12 +47,34 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	deptSet := map[string]bool{}
 	roomSet := map[string]bool{}
+	userSet := map[string]bool{}
+	deviceTypeSet := map[string]bool{}
+	networkTypeSet := map[string]bool{}
+	osTypeSet := map[string]bool{}
+	statusSet := map[string]bool{}
 	for _, a := range allAssets {
 		if a.Department != "" {
 			deptSet[a.Department] = true
 		}
 		if a.Room != "" {
 			roomSet[a.Room] = true
+		}
+		if a.UserName != "" {
+			userSet[a.UserName] = true
+		}
+		if a.DeviceType != "" {
+			deviceTypeSet[a.DeviceType] = true
+		}
+		for _, networkType := range []string{a.IPNetworkType, a.NetType, a.TerminalIPNetworkType} {
+			if networkType != "" {
+				networkTypeSet[networkType] = true
+			}
+		}
+		if a.OSType != "" {
+			osTypeSet[a.OSType] = true
+		}
+		if a.Status != "" {
+			statusSet[a.Status] = true
 		}
 	}
 	var depts []string
@@ -62,38 +85,53 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	for rm := range roomSet {
 		rooms = append(rooms, rm)
 	}
+	var users, deviceTypes, networkTypes, osTypes, assetStatuses []string
+	for value := range userSet {
+		users = append(users, value)
+	}
+	for value := range deviceTypeSet {
+		deviceTypes = append(deviceTypes, value)
+	}
+	for value := range networkTypeSet {
+		networkTypes = append(networkTypes, value)
+	}
+	for value := range osTypeSet {
+		osTypes = append(osTypes, value)
+	}
+	for value := range statusSet {
+		assetStatuses = append(assetStatuses, value)
+	}
+	for _, values := range [][]string{depts, rooms, users, deviceTypes, networkTypes, osTypes, assetStatuses} {
+		sort.Strings(values)
+	}
 
 	writeJSON(w, 200, map[string]interface{}{
-		"departments":     depts,
-		"rooms":           rooms,
-		"statuses":        []string{"在用", "闲置", "维修中", "仓库备用", "待报废", "已报废"},
-		"log_types":       []string{"调换使用人", "设备维修更换", "信息修改", "建档入库", "设备回收注销"},
-		"subnets":         []string{"7段", "8段", "9段", "10段", "外网"},
-		"server_statuses": []string{"运行中", "已停机", "维护中", "备用"},
-		"app_types":       []string{"业务应用", "中间件服务", "数据库服务", "基础支撑"},
-		"app_statuses":    []string{"正常运行", "待部署", "停止", "异常"},
+		"departments":         depts,
+		"rooms":               rooms,
+		"asset_users":         users,
+		"asset_device_types":  deviceTypes,
+		"asset_network_types": networkTypes,
+		"asset_os_types":      osTypes,
+		"asset_statuses":      assetStatuses,
+		"statuses":            []string{"在用", "闲置", "维修中", "仓库备用", "待报废", "已报废"},
+		"log_types":           []string{"调换使用人", "设备维修更换", "信息修改", "建档入库", "设备回收注销"},
+		"subnets":             []string{"7段", "8段", "9段", "10段", "外网"},
+		"server_statuses":     []string{"运行中", "已停机", "维护中", "备用"},
+		"app_types":           []string{"业务应用", "中间件服务", "数据库服务", "基础支撑"},
+		"app_statuses":        []string{"正常运行", "待部署", "停止", "异常"},
 	})
 }
 
 // ---- 终端资产列表查询 ----
 func (s *Server) handleListAssets(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
-	kw := r.URL.Query().Get("keyword")
-	dept := r.URL.Query().Get("dept")
-	status := r.URL.Query().Get("status")
-	secSoft := r.URL.Query().Get("security_software")
-	deviceType := r.URL.Query().Get("device_type")
-	groupID, _ := strconv.ParseInt(r.URL.Query().Get("group_id"), 10, 64)
-	includeArchived := r.URL.Query().Get("include_archived") == "1" || r.URL.Query().Get("include_archived") == "true"
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
-
-	list, total, err := s.Store.QueryAssetsWithTaxonomyForProject(scope, kw, dept, status, secSoft, deviceType, groupID, page, pageSize, includeArchived)
+	query := legacyAssetQueryFromRequest(r)
+	list, total, err := s.Store.QueryAssetsForProject(scope, query)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	summary, err := s.Store.AssetStatusSummaryWithTaxonomyForProject(scope, kw, dept, secSoft, deviceType, groupID, includeArchived)
+	summary, err := s.Store.AssetStatusSummaryForQueryForProject(scope, query)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -102,9 +140,23 @@ func (s *Server) handleListAssets(w http.ResponseWriter, r *http.Request) {
 		"list":      list,
 		"total":     total,
 		"summary":   summary,
-		"page":      page,
-		"page_size": pageSize,
+		"page":      query.Page,
+		"page_size": query.PageSize,
 	})
+}
+
+func legacyAssetQueryFromRequest(r *http.Request) store.AssetQuery {
+	query := r.URL.Query()
+	groupID, _ := strconv.ParseInt(query.Get("group_id"), 10, 64)
+	page, _ := strconv.Atoi(query.Get("page"))
+	pageSize, _ := strconv.Atoi(query.Get("page_size"))
+	return store.AssetQuery{
+		Keyword: query.Get("keyword"), DeviceType: query.Get("device_type"), Department: query.Get("dept"),
+		UserName: query.Get("user_name"), Room: query.Get("room"), NetType: query.Get("net_type"),
+		OSType: query.Get("os_type"), Status: query.Get("status"), GroupID: groupID,
+		IncludeArchived: query.Get("include_archived") == "1" || query.Get("include_archived") == "true",
+		Page:            page, PageSize: pageSize,
+	}
 }
 
 func (s *Server) handleSangforImport(w http.ResponseWriter, r *http.Request) {
@@ -527,14 +579,10 @@ func (s *Server) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListAllApps(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
-	kw := r.URL.Query().Get("keyword")
-	appType := r.URL.Query().Get("app_type")
-	status := r.URL.Query().Get("status")
-	groupID, _ := strconv.ParseInt(r.URL.Query().Get("group_id"), 10, 64)
-
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
-	apps, total, err := s.Store.QueryAllAppsWithGroupForProject(scope, kw, appType, status, groupID, page, pageSize)
+	query := serverAppQueryFromRequest(r, page, pageSize)
+	apps, total, err := s.Store.QueryServerAppsForProject(scope, query)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -548,10 +596,20 @@ func (s *Server) handleListAllApps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{"list": apps, "total": total, "page": page, "page_size": pageSize})
 }
 
+func serverAppQueryFromRequest(r *http.Request, page, pageSize int) store.ServerAppQuery {
+	values := r.URL.Query()
+	groupID, _ := strconv.ParseInt(values.Get("group_id"), 10, 64)
+	hostID, _ := strconv.ParseInt(values.Get("host_id"), 10, 64)
+	return store.ServerAppQuery{
+		Keyword: values.Get("keyword"), AppType: values.Get("app_type"), Status: values.Get("status"),
+		Provider: values.Get("provider"), Owner: values.Get("owner"), NetworkType: values.Get("network_type"),
+		GroupID: groupID, HostID: hostID, HostLinked: values.Get("host_linked"), Page: page, PageSize: pageSize,
+	}
+}
+
 func (s *Server) handleExportApps(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
-	query := r.URL.Query()
-	groupID, _ := strconv.ParseInt(query.Get("group_id"), 10, 64)
+	query := serverAppQueryFromRequest(r, 1, 500)
 	f := excelize.NewFile()
 	defer f.Close()
 	const sheet = "业务系统"
@@ -559,20 +617,21 @@ func (s *Server) handleExportApps(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	headers := []interface{}{"序号", "系统名称", "系统分类", "资产分组", "版本", "供应商", "承载服务器", "业务 IP", "端口", "访问地址", "中间件", "数据库", "负责人", "状态", "说明"}
+	headers := []interface{}{"序号", "系统名称", "系统分类", "资产分组", "版本", "供应商", "承载服务器", "业务 IP", "网络类型", "端口", "访问地址", "中间件", "数据库", "负责人", "状态", "说明"}
 	if err := f.SetSheetRow(sheet, "A1", &headers); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
 	row := 2
 	for page := 1; ; page++ {
-		apps, total, err := s.Store.QueryAllAppsWithGroupForProject(scope, query.Get("keyword"), query.Get("app_type"), query.Get("status"), groupID, page, 500)
+		query.Page = page
+		apps, total, err := s.Store.QueryServerAppsForProject(scope, query)
 		if err != nil {
 			writeErr(w, 500, err.Error())
 			return
 		}
 		for _, app := range apps {
-			values := []interface{}{row - 1, app.AppName, app.AppType, app.GroupName, app.Version, app.Provider, app.ServerName, app.ServiceIP, app.Port, app.AccessURL, app.Middleware, app.DatabaseInfo, app.Owner, app.Status, app.Description}
+			values := []interface{}{row - 1, app.AppName, app.AppType, app.GroupName, app.Version, app.Provider, app.ServerName, app.ServiceIP, app.NetworkType, app.Port, app.AccessURL, app.Middleware, app.DatabaseInfo, app.Owner, app.Status, app.Description}
 			if err := f.SetSheetRow(sheet, "A"+strconv.Itoa(row), &values); err != nil {
 				writeErr(w, 500, err.Error())
 				return
@@ -682,17 +741,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 // ---- 导出终端资产 Excel ----
 func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
-	includeArchived := r.URL.Query().Get("include_archived") == "1" || r.URL.Query().Get("include_archived") == "true"
-	groupID, _ := strconv.ParseInt(r.URL.Query().Get("group_id"), 10, 64)
-	assets, err := s.Store.AllAssetsFilteredWithTaxonomyForProject(scope,
-		r.URL.Query().Get("keyword"),
-		r.URL.Query().Get("dept"),
-		r.URL.Query().Get("status"),
-		r.URL.Query().Get("security_software"),
-		r.URL.Query().Get("device_type"),
-		groupID,
-		includeArchived,
-	)
+	assets, err := s.Store.AllAssetsMatchingQueryForProject(scope, legacyAssetQueryFromRequest(r))
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -703,7 +752,7 @@ func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
 	sheet := "资产台账"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"序号", "资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "使用人", "部门", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注"}
+	headers := []string{"序号", "资产名称", "资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "使用人", "部门", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(sheet, cell, h)
@@ -730,7 +779,7 @@ func legacyAssetExportValues(a store.Asset) []interface{} {
 		terminalIP = ""
 	}
 	return []interface{}{
-		a.ID, a.AssetCode, a.DeviceType, a.BoxSN, displaySN, a.UserName, a.Department, a.Room, a.IP, terminalIP, a.OSType, a.OSVersion, a.Status, a.NetType, a.Remark,
+		a.ID, a.AssetName, a.AssetCode, a.DeviceType, a.BoxSN, displaySN, a.UserName, a.Department, a.Room, a.IP, terminalIP, a.OSType, a.OSVersion, a.Status, a.NetType, a.Remark,
 	}
 }
 
@@ -742,13 +791,13 @@ func (s *Server) handleDownloadTemplate(w http.ResponseWriter, r *http.Request) 
 	sheet := "资产导入模板"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "当前使用人", "所属组织", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注"}
+	headers := []string{"资产名称", "资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "当前使用人", "所属组织", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(sheet, cell, h)
 	}
 
-	example := []interface{}{"ASSET-2026-001", "云桌面盒子", "BOX-SN-001", "DISPLAY-SN-001", "示例人员", "信息技术部", "A101", "10.10.1.10", "10.10.1.11", "统信 UOS", "20", "在用", "内网", "云桌面双 SN 示例；普通设备只填写设备 SN"}
+	example := []interface{}{"示例办公终端", "ASSET-2026-001", "云桌面盒子", "BOX-SN-001", "DISPLAY-SN-001", "示例人员", "信息技术部", "A101", "10.10.1.10", "10.10.1.11", "统信 UOS", "20", "在用", "内网", "云桌面双 SN 示例；普通设备只填写设备 SN"}
 	for colIdx, v := range example {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 2)
 		f.SetCellValue(sheet, cell, v)
@@ -774,6 +823,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("GET /api/assets/{id}", s.handleGetAsset)
 	scoped("GET /api/assets/{id}/relations", s.handleAssetRelations)
 	scoped("POST /api/assets", s.handleCreateAsset)
+	scoped("POST /api/assets/batch", s.handleBatchTerminalAssets)
 	scoped("PUT /api/assets/{id}", s.handleUpdateAsset)
 	scoped("DELETE /api/assets/{id}", s.handleDeleteAsset)
 	scoped("POST /api/assets/{id}/transfer", s.handleTransferUser)
@@ -870,6 +920,8 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("POST /api/cmdb/work-orders/{id}/attachments", s.handleUploadWorkOrderAttachment)
 	scoped("GET /api/cmdb/work-orders/{id}/attachments/{attachment_id}", s.handleDownloadWorkOrderAttachment)
 	scoped("DELETE /api/cmdb/work-orders/{id}/attachments/{attachment_id}", s.handleDeleteWorkOrderAttachment)
+	scoped("PUT /api/cmdb/work-orders/{id}/attachments/{attachment_id}/s3-status", s.handleUpdateWorkOrderAttachmentS3Status)
+	scoped("GET /api/cmdb/attachments/hash/{hash}/status", s.handleCheckAttachmentLocalStatus)
 
 	// CMDB 资产盘点
 	scoped("GET /api/cmdb/inventory", s.handleListCmdbInventory)

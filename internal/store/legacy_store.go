@@ -23,7 +23,9 @@ func (s *Store) AllAssetsForProject(scope ProjectScope) ([]Asset, error) {
 	if _, err := s.ResolveProject(scope); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(`SELECT a.id,a.project_id,IFNULL(a.asset_code,''),IFNULL(a.device_type,''),IFNULL(a.box_sn,''),IFNULL(a.display_sn,''),IFNULL(a.user_name,''),IFNULL(a.department,''),IFNULL(a.room,''),IFNULL(a.ip,''),IFNULL(a.terminal_ip,''),IFNULL(a.os_type,''),IFNULL(a.os_version,''),IFNULL(a.security_software,''),IFNULL(a.status,''),IFNULL(a.net_type,''),a.group_id,IFNULL(g.name,''),IFNULL(a.remark,''),IFNULL(a.created_at,''),IFNULL(a.updated_at,'')
+	rows, err := s.db.Query(`SELECT a.id,a.project_id,IFNULL(a.asset_name,''),IFNULL(a.asset_code,''),IFNULL(a.device_type,''),IFNULL(a.box_sn,''),IFNULL(a.display_sn,''),IFNULL(a.user_name,''),IFNULL(a.department,''),IFNULL(a.room,''),IFNULL(a.ip,''),IFNULL(a.terminal_ip,''),IFNULL(a.os_type,''),IFNULL(a.os_version,''),IFNULL(a.security_software,''),IFNULL(a.status,''),IFNULL(a.net_type,''),a.group_id,IFNULL(g.name,''),IFNULL(a.remark,''),IFNULL(a.created_at,''),IFNULL(a.updated_at,''),
+		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.ip ORDER BY ip.id LIMIT 1),''),
+		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.terminal_ip ORDER BY ip.id LIMIT 1),'')
 		FROM assets a LEFT JOIN cmdb_groups g ON g.id=a.group_id AND g.project_id=a.project_id
 		WHERE a.project_id=? ORDER BY a.id DESC`, scope.ProjectID)
 	if err != nil {
@@ -34,7 +36,7 @@ func (s *Store) AllAssetsForProject(scope ProjectScope) ([]Asset, error) {
 	var list []Asset
 	for rows.Next() {
 		var a Asset
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.OSType, &a.OSVersion, &a.SecuritySoftware, &a.Status, &a.NetType, &a.GroupID, &a.GroupName, &a.Remark, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.AssetName, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.OSType, &a.OSVersion, &a.SecuritySoftware, &a.Status, &a.NetType, &a.GroupID, &a.GroupName, &a.Remark, &a.CreatedAt, &a.UpdatedAt, &a.IPNetworkType, &a.TerminalIPNetworkType); err != nil {
 			return nil, err
 		}
 		list = append(list, a)
@@ -55,11 +57,15 @@ func (s *Store) AllAssetsFilteredForProject(scope ProjectScope, kw, dept, status
 }
 
 func (s *Store) AllAssetsFilteredWithTaxonomyForProject(scope ProjectScope, kw, dept, status, secSoft, deviceType string, groupID int64, includeArchived bool) ([]Asset, error) {
+	return s.AllAssetsMatchingQueryForProject(scope, AssetQuery{Keyword: kw, Department: dept, Status: status, SecuritySoftware: secSoft, DeviceType: deviceType, GroupID: groupID, IncludeArchived: includeArchived})
+}
+
+func (s *Store) AllAssetsMatchingQueryForProject(scope ProjectScope, q AssetQuery) ([]Asset, error) {
 	assets, err := s.AllAssetsForProject(scope)
 	if err != nil {
 		return nil, err
 	}
-	return filterAssetsWithTaxonomy(assets, kw, dept, status, secSoft, deviceType, groupID, includeArchived), nil
+	return filterAssetsWithQuery(assets, q), nil
 }
 
 func isArchivedAssetStatus(status string) bool {
@@ -76,38 +82,92 @@ func filterAssets(assets []Asset, kw, dept, status, secSoft string, includeArchi
 }
 
 func filterAssetsWithTaxonomy(assets []Asset, kw, dept, status, secSoft, deviceType string, groupID int64, includeArchived bool) []Asset {
-	kw = strings.TrimSpace(kw)
-	dept = strings.TrimSpace(dept)
-	status = strings.TrimSpace(status)
-	secSoft = strings.TrimSpace(secSoft)
-	deviceType = strings.TrimSpace(deviceType)
-	explicitArchived := isArchivedAssetStatus(status)
+	return filterAssetsWithQuery(assets, AssetQuery{Keyword: kw, Department: dept, Status: status, SecuritySoftware: secSoft, DeviceType: deviceType, GroupID: groupID, IncludeArchived: includeArchived})
+}
+
+func filterAssetsWithQuery(assets []Asset, q AssetQuery) []Asset {
+	q.Keyword = strings.TrimSpace(q.Keyword)
+	q.Department = strings.TrimSpace(q.Department)
+	q.UserName = strings.TrimSpace(q.UserName)
+	q.Room = strings.TrimSpace(q.Room)
+	q.NetType = strings.TrimSpace(q.NetType)
+	q.OSType = strings.TrimSpace(q.OSType)
+	q.Status = strings.TrimSpace(q.Status)
+	q.SecuritySoftware = strings.TrimSpace(q.SecuritySoftware)
+	q.DeviceType = strings.TrimSpace(q.DeviceType)
+	explicitArchived := isArchivedAssetStatus(q.Status)
 	filtered := make([]Asset, 0, len(assets))
 	for _, a := range assets {
-		if !includeArchived && !explicitArchived && isArchivedAssetStatus(a.Status) {
+		if !q.IncludeArchived && !explicitArchived && isArchivedAssetStatus(a.Status) {
 			continue
 		}
-		if kw != "" && !strings.Contains(a.UserName+a.Department+a.Room+a.IP+a.TerminalIP+a.BoxSN+a.DisplaySN+a.AssetCode+a.OSType+a.OSVersion, kw) {
+		if q.Keyword != "" && !strings.Contains(a.AssetName+a.UserName+a.Department+a.Room+a.IP+a.TerminalIP+a.BoxSN+a.DisplaySN+a.AssetCode+a.OSType+a.OSVersion, q.Keyword) {
 			continue
 		}
-		if dept != "" && a.Department != dept {
+		if !matchesAssetQueryValue(a.Department, q.Department) {
 			continue
 		}
-		if status != "" && a.Status != status {
+		if !matchesAssetQueryValue(a.UserName, q.UserName) {
 			continue
 		}
-		if secSoft != "" && a.SecuritySoftware != secSoft {
+		if !matchesAssetQueryValue(a.Room, q.Room) {
 			continue
 		}
-		if deviceType != "" && a.DeviceType != deviceType {
+		if !matchesAssetNetworkType(a, q.NetType) {
 			continue
 		}
-		if groupID > 0 && a.GroupID != groupID {
+		if !matchesAssetQueryValue(a.OSType, q.OSType) {
+			continue
+		}
+		if !matchesAssetQueryValue(a.Status, q.Status) {
+			continue
+		}
+		if q.SecuritySoftware != "" && a.SecuritySoftware != q.SecuritySoftware {
+			continue
+		}
+		if !matchesAssetQueryValue(a.DeviceType, q.DeviceType) {
+			continue
+		}
+		if q.GroupID == -1 && a.GroupID != 0 {
+			continue
+		}
+		if q.GroupID > 0 && a.GroupID != q.GroupID {
 			continue
 		}
 		filtered = append(filtered, a)
 	}
 	return filtered
+}
+
+func matchesAssetQueryValue(actual, expected string) bool {
+	if expected == "" {
+		return true
+	}
+	if expected == AssetUnconfiguredFilter {
+		return strings.TrimSpace(actual) == ""
+	}
+	return actual == expected
+}
+
+func matchesAssetNetworkType(asset Asset, expected string) bool {
+	if expected == "" {
+		return true
+	}
+	values := []string{asset.IPNetworkType, asset.NetType, asset.TerminalIPNetworkType}
+	if expected == AssetUnconfiguredFilter {
+		for _, value := range values {
+			if strings.TrimSpace(value) != "" {
+				return false
+			}
+		}
+		return true
+	}
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) QueryAssetsWithArchived(kw, dept, status, secSoft string, page, pageSize int, includeArchived bool) ([]Asset, int, error) {
@@ -123,27 +183,42 @@ func (s *Store) QueryAssetsWithArchivedForProject(scope ProjectScope, kw, dept, 
 }
 
 func (s *Store) QueryAssetsWithTaxonomyForProject(scope ProjectScope, kw, dept, status, secSoft, deviceType string, groupID int64, page, pageSize int, includeArchived bool) ([]Asset, int, error) {
-	assets, err := s.AllAssetsForProject(scope)
+	return s.QueryAssetsForProject(scope, AssetQuery{Keyword: kw, Department: dept, Status: status, SecuritySoftware: secSoft, DeviceType: deviceType, GroupID: groupID, Page: page, PageSize: pageSize, IncludeArchived: includeArchived})
+}
+
+func (s *Store) QueryAssetsForProject(scope ProjectScope, q AssetQuery) ([]Asset, int, error) {
+	filtered, err := s.AllAssetsMatchingQueryForProject(scope, q)
 	if err != nil {
 		return nil, 0, err
 	}
-	filtered := filterAssetsWithTaxonomy(assets, kw, dept, status, secSoft, deviceType, groupID, includeArchived)
 	total := len(filtered)
-	if page < 1 {
-		page = 1
+	if q.Page < 1 {
+		q.Page = 1
 	}
-	if pageSize < 1 {
-		pageSize = 20
+	if q.PageSize < 1 {
+		q.PageSize = 20
 	}
-	start := (page - 1) * pageSize
+	start := (q.Page - 1) * q.PageSize
 	if start > total {
 		return []Asset{}, total, nil
 	}
-	end := start + pageSize
+	end := start + q.PageSize
 	if end > total {
 		end = total
 	}
 	return filtered[start:end], total, nil
+}
+
+func (s *Store) AssetStatusSummaryForQueryForProject(scope ProjectScope, q AssetQuery) (map[string]int, error) {
+	assets, err := s.AllAssetsMatchingQueryForProject(scope, q)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]int{"total": len(assets)}
+	for _, asset := range assets {
+		m[asset.Status]++
+	}
+	return m, nil
 }
 
 func (s *Store) AssetStatusSummary(kw, dept, secSoft string, includeArchived bool) (map[string]int, error) {
@@ -184,10 +259,12 @@ func (s *Store) GetAssetForProject(scope ProjectScope, id int64) (*Asset, []Asse
 		return nil, nil, err
 	}
 	var a Asset
-	err := s.db.QueryRow(`SELECT a.id,a.project_id,IFNULL(a.asset_code,''),IFNULL(a.device_type,''),IFNULL(a.box_sn,''),IFNULL(a.display_sn,''),IFNULL(a.user_name,''),IFNULL(a.department,''),IFNULL(a.room,''),IFNULL(a.ip,''),IFNULL(a.terminal_ip,''),IFNULL(a.os_type,''),IFNULL(a.os_version,''),IFNULL(a.security_software,''),IFNULL(a.status,''),IFNULL(a.net_type,''),a.group_id,IFNULL(g.name,''),IFNULL(a.remark,''),IFNULL(a.created_at,''),IFNULL(a.updated_at,'')
+	err := s.db.QueryRow(`SELECT a.id,a.project_id,IFNULL(a.asset_name,''),IFNULL(a.asset_code,''),IFNULL(a.device_type,''),IFNULL(a.box_sn,''),IFNULL(a.display_sn,''),IFNULL(a.user_name,''),IFNULL(a.department,''),IFNULL(a.room,''),IFNULL(a.ip,''),IFNULL(a.terminal_ip,''),IFNULL(a.os_type,''),IFNULL(a.os_version,''),IFNULL(a.security_software,''),IFNULL(a.status,''),IFNULL(a.net_type,''),a.group_id,IFNULL(g.name,''),IFNULL(a.remark,''),IFNULL(a.created_at,''),IFNULL(a.updated_at,''),
+		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.ip ORDER BY ip.id LIMIT 1),''),
+		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.terminal_ip ORDER BY ip.id LIMIT 1),'')
 		FROM assets a LEFT JOIN cmdb_groups g ON g.id=a.group_id AND g.project_id=a.project_id
 		WHERE a.id=? AND a.project_id=?`, id, scope.ProjectID).Scan(
-		&a.ID, &a.ProjectID, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.OSType, &a.OSVersion, &a.SecuritySoftware, &a.Status, &a.NetType, &a.GroupID, &a.GroupName, &a.Remark, &a.CreatedAt, &a.UpdatedAt,
+		&a.ID, &a.ProjectID, &a.AssetName, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.OSType, &a.OSVersion, &a.SecuritySoftware, &a.Status, &a.NetType, &a.GroupID, &a.GroupName, &a.Remark, &a.CreatedAt, &a.UpdatedAt, &a.IPNetworkType, &a.TerminalIPNetworkType,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -339,9 +416,9 @@ func (s *Store) CreateAssetForProject(scope ProjectScope, a *Asset, operator str
 		return 0, err
 	}
 	defer tx.Rollback()
-	res, err := tx.Exec(`INSERT INTO assets (project_id,asset_code,device_type,box_sn,display_sn,user_name,department,room,ip,terminal_ip,os_type,os_version,security_software,status,net_type,group_id,remark,created_at,updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		scope.ProjectID, a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.OSType, a.OSVersion, a.SecuritySoftware, a.Status, a.NetType, a.GroupID, a.Remark, now, now,
+	res, err := tx.Exec(`INSERT INTO assets (project_id,asset_name,asset_code,device_type,box_sn,display_sn,user_name,department,room,ip,terminal_ip,os_type,os_version,security_software,status,net_type,group_id,remark,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		scope.ProjectID, a.AssetName, a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.OSType, a.OSVersion, a.SecuritySoftware, a.Status, a.NetType, a.GroupID, a.Remark, now, now,
 	)
 	if err != nil {
 		return 0, err
@@ -378,9 +455,9 @@ func (s *Store) ImportAssetsForProject(scope ProjectScope, assets []Asset) error
 	for index := range assets {
 		a := &assets[index]
 		normalizeLegacyAssetForWrite(a)
-		res, err := tx.Exec(`INSERT INTO assets (project_id,asset_code,device_type,box_sn,display_sn,user_name,department,room,ip,terminal_ip,os_type,os_version,security_software,status,net_type,group_id,remark,created_at,updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			scope.ProjectID, a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.OSType, a.OSVersion, a.SecuritySoftware, a.Status, a.NetType, a.GroupID, a.Remark, now, now,
+		res, err := tx.Exec(`INSERT INTO assets (project_id,asset_name,asset_code,device_type,box_sn,display_sn,user_name,department,room,ip,terminal_ip,os_type,os_version,security_software,status,net_type,group_id,remark,created_at,updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			scope.ProjectID, a.AssetName, a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.OSType, a.OSVersion, a.SecuritySoftware, a.Status, a.NetType, a.GroupID, a.Remark, now, now,
 		)
 		if err != nil {
 			return fmt.Errorf("第 %d 条资产写入失败: %w", index+1, err)
@@ -425,8 +502,8 @@ func (s *Store) UpdateAssetForProject(scope ProjectScope, a *Asset, operator str
 	if err != nil {
 		return err
 	}
-	res, err := tx.Exec(`UPDATE assets SET asset_code=?,device_type=?,box_sn=?,display_sn=?,user_name=?,department=?,room=?,ip=?,terminal_ip=?,os_type=?,os_version=?,security_software=?,status=?,net_type=?,group_id=?,remark=?,updated_at=? WHERE id=? AND project_id=?`,
-		a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.OSType, a.OSVersion, a.SecuritySoftware, a.Status, a.NetType, a.GroupID, a.Remark, now, a.ID, scope.ProjectID,
+	res, err := tx.Exec(`UPDATE assets SET asset_name=?,asset_code=?,device_type=?,box_sn=?,display_sn=?,user_name=?,department=?,room=?,ip=?,terminal_ip=?,os_type=?,os_version=?,security_software=?,status=?,net_type=?,group_id=?,remark=?,updated_at=? WHERE id=? AND project_id=?`,
+		a.AssetName, a.AssetCode, a.DeviceType, a.BoxSN, a.DisplaySN, a.UserName, a.Department, a.Room, a.IP, a.TerminalIP, a.OSType, a.OSVersion, a.SecuritySoftware, a.Status, a.NetType, a.GroupID, a.Remark, now, a.ID, scope.ProjectID,
 	)
 	if err != nil {
 		return err
@@ -747,6 +824,13 @@ func syncAssetIPPoolInTx(tx *sql.Tx, projectID, assetID int64, oldIP, oldTermina
 	}
 	for _, ip := range newIPs {
 		if ip == "" {
+			continue
+		}
+		if ip == strings.TrimSpace(oldIP) || ip == strings.TrimSpace(oldTerminalIP) {
+			// 原地址只同步本资产的归属信息，不重新抢占或校验历史数据。
+			if _, err := tx.Exec(`UPDATE ip_pool SET account=?,department=?,room=?,owner_name=? WHERE project_id=? AND ip=? AND owner_type='terminal' AND owner_id=?`, asset.UserName, asset.Department, asset.Room, asset.AssetCode, projectID, ip, assetID); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := ensureHostIPInDefinedSubnets(tx, projectID, ip); err != nil {
@@ -1358,53 +1442,104 @@ func (s *Store) QueryAllApps(kw, appType, status string, page, pageSize int) ([]
 }
 
 func (s *Store) QueryAllAppsForProject(scope ProjectScope, kw, appType, status string, page, pageSize int) ([]ServerApp, int, error) {
-	return s.QueryAllAppsWithGroupForProject(scope, kw, appType, status, 0, page, pageSize)
+	return s.QueryServerAppsForProject(scope, ServerAppQuery{Keyword: kw, AppType: appType, Status: status, Page: page, PageSize: pageSize})
 }
 
 func (s *Store) QueryAllAppsWithGroupForProject(scope ProjectScope, kw, appType, status string, groupID int64, page, pageSize int) ([]ServerApp, int, error) {
+	return s.QueryServerAppsForProject(scope, ServerAppQuery{Keyword: kw, AppType: appType, Status: status, GroupID: groupID, Page: page, PageSize: pageSize})
+}
+
+func (s *Store) QueryServerAppsForProject(scope ProjectScope, q ServerAppQuery) ([]ServerApp, int, error) {
 	if _, err := s.ResolveProject(scope); err != nil {
 		return nil, 0, err
 	}
-	page, pageSize = normalizeLegacyPage(page, pageSize)
+	q.Page, q.PageSize = normalizeLegacyPage(q.Page, q.PageSize)
 	where := []string{"app.project_id=?"}
 	args := []interface{}{scope.ProjectID}
-	if kw = strings.TrimSpace(kw); kw != "" {
-		pattern := "%" + kw + "%"
+	if q.Keyword = strings.TrimSpace(q.Keyword); q.Keyword != "" {
+		pattern := "%" + q.Keyword + "%"
 		where = append(where, `(app.app_name LIKE ? OR app.app_type LIKE ? OR app.access_url LIKE ?
-			OR app.middleware LIKE ? OR app.database_info LIKE ? OR app.provider LIKE ? OR app.owner LIKE ? OR app.remark LIKE ?)`)
-		for i := 0; i < 8; i++ {
+			OR app.middleware LIKE ? OR app.database_info LIKE ? OR app.provider LIKE ? OR app.owner LIKE ? OR app.remark LIKE ?
+			OR app.service_ip LIKE ? OR server.device_name LIKE ? OR asset.name LIKE ?)`)
+		for i := 0; i < 11; i++ {
 			args = append(args, pattern)
 		}
 	}
-	if appType = strings.TrimSpace(appType); appType != "" {
-		where = append(where, "app.app_type = ?")
-		args = append(args, appType)
+	if q.AppType = strings.TrimSpace(q.AppType); q.AppType != "" {
+		if q.AppType == AssetUnconfiguredFilter {
+			where = append(where, "TRIM(IFNULL(app.app_type,'')) = ''")
+		} else {
+			where = append(where, "app.app_type = ?")
+			args = append(args, q.AppType)
+		}
 	}
-	if status = strings.TrimSpace(status); status != "" {
-		where = append(where, "app.status = ?")
-		args = append(args, status)
+	if q.Status = strings.TrimSpace(q.Status); q.Status != "" {
+		if q.Status == AssetUnconfiguredFilter {
+			where = append(where, "TRIM(IFNULL(app.status,'')) = ''")
+		} else {
+			where = append(where, "app.status = ?")
+			args = append(args, q.Status)
+		}
 	}
-	if groupID > 0 {
+	if q.GroupID == -1 {
+		where = append(where, "app.group_id = 0")
+	} else if q.GroupID > 0 {
 		where = append(where, "app.group_id = ?")
-		args = append(args, groupID)
+		args = append(args, q.GroupID)
+	}
+	for _, filter := range []struct {
+		column string
+		value  string
+	}{
+		{column: "app.provider", value: q.Provider},
+		{column: "app.owner", value: q.Owner},
+	} {
+		column, value := filter.column, strings.TrimSpace(filter.value)
+		if value == AssetUnconfiguredFilter {
+			where = append(where, "TRIM(IFNULL("+column+",'')) = ''")
+		} else if value != "" {
+			where = append(where, column+" = ?")
+			args = append(args, value)
+		}
+	}
+	if q.HostID > 0 {
+		where = append(where, "app.cmdb_asset_id = ?")
+		args = append(args, q.HostID)
+	}
+	switch strings.TrimSpace(q.HostLinked) {
+	case "linked":
+		where = append(where, "(app.cmdb_asset_id > 0 OR app.server_id > 0)")
+	case "unlinked":
+		where = append(where, "app.cmdb_asset_id = 0 AND app.server_id = 0")
+	}
+	if q.NetworkType = strings.TrimSpace(q.NetworkType); q.NetworkType == AssetUnconfiguredFilter {
+		where = append(where, "TRIM(IFNULL(subnet.category,'')) = ''")
+	} else if q.NetworkType != "" {
+		where = append(where, "subnet.category = ?")
+		args = append(args, q.NetworkType)
 	}
 	whereSQL := strings.Join(where, " AND ")
 	var total int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM server_apps app
 		LEFT JOIN servers server ON server.id=app.server_id AND server.project_id=app.project_id
 		LEFT JOIN cmdb_assets asset ON asset.id=app.cmdb_asset_id AND asset.project_id=app.project_id
+		LEFT JOIN ip_pool ip ON ip.project_id=app.project_id AND ip.ip=app.service_ip
+		LEFT JOIN ip_subnets subnet ON subnet.project_id=ip.project_id AND subnet.name=ip.subnet
 		WHERE `+whereSQL, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	queryArgs := append(append([]interface{}{}, args...), pageSize, (page-1)*pageSize)
+	queryArgs := append(append([]interface{}{}, args...), q.PageSize, (q.Page-1)*q.PageSize)
 	rows, err := s.db.Query(`SELECT app.id,app.project_id,IFNULL(app.server_id,0),IFNULL(app.cmdb_asset_id,0),app.group_id,IFNULL(g.name,''),IFNULL(app.app_name,''),IFNULL(app.app_type,''),
 		IFNULL(app.port,''), IFNULL(app.access_url,''), IFNULL(app.middleware,''), IFNULL(app.database_info,''),
 		IFNULL(app.provider,''), IFNULL(app.owner,''), IFNULL(app.status,''), IFNULL(app.remark,''), IFNULL(app.created_at,''), IFNULL(app.updated_at,''),
-		COALESCE(NULLIF(server.device_name,''), NULLIF(asset.name,''), ''), IFNULL(app.service_ip,'')
+		COALESCE(NULLIF(server.device_name,''), NULLIF(asset.name,''), ''), IFNULL(app.service_ip,''),
+		IFNULL(app.service_ip,''), IFNULL(subnet.category,'')
 		FROM server_apps app
 		LEFT JOIN servers server ON server.id = app.server_id AND server.project_id=app.project_id
 		LEFT JOIN cmdb_assets asset ON asset.id = app.cmdb_asset_id AND asset.project_id=app.project_id
 		LEFT JOIN cmdb_groups g ON g.id=app.group_id AND g.project_id=app.project_id
+		LEFT JOIN ip_pool ip ON ip.project_id=app.project_id AND ip.ip=app.service_ip
+		LEFT JOIN ip_subnets subnet ON subnet.project_id=ip.project_id AND subnet.name=ip.subnet
 		WHERE `+whereSQL+` ORDER BY app.id DESC LIMIT ? OFFSET ?`, queryArgs...)
 	if err != nil {
 		return nil, 0, err
@@ -1415,11 +1550,10 @@ func (s *Store) QueryAllAppsWithGroupForProject(scope ProjectScope, kw, appType,
 		var app ServerApp
 		if err := rows.Scan(&app.ID, &app.ProjectID, &app.ServerID, &app.CmdbAssetID, &app.GroupID, &app.GroupName, &app.AppName, &app.AppType, &app.Port, &app.AccessURL,
 			&app.Middleware, &app.DatabaseInfo, &app.Provider, &app.Owner, &app.Status, &app.Remark, &app.CreatedAt,
-			&app.UpdatedAt, &app.ServerName, &app.ServerBizIP); err != nil {
+			&app.UpdatedAt, &app.ServerName, &app.ServerBizIP, &app.ServiceIP, &app.NetworkType); err != nil {
 			return nil, 0, err
 		}
 		setLegacyServerAppFields(&app)
-		app.ServiceIP = app.ServerBizIP
 		apps = append(apps, app)
 	}
 	if err := rows.Err(); err != nil {

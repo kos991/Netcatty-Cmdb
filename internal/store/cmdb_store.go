@@ -150,12 +150,16 @@ type CmdbAssetQuery struct {
 	Department    string
 	Owner         string
 	OwnerID       int64
+	Vendor        string
+	Model         string
+	NetType       string
 	Status        string
 	AssetClass    string
 	DeviceType    string
 	OSType        string
 	OSVersion     string
 	MgmtIP        string
+	Location      string
 	SourceType    string
 	ResourceScope string
 	Page          int
@@ -163,6 +167,8 @@ type CmdbAssetQuery struct {
 	SortBy        string
 	SortOrder     string
 }
+
+const CmdbAssetUnconfiguredFilter = "__unconfigured__"
 
 // 只有白名单内的字段允许出现在 ORDER BY 中，防止 SQL 注入。
 var cmdbSortWhitelist = map[string]string{
@@ -352,24 +358,21 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		args = append(args, pat, pat, pat, pat, pat, pat, pat, pat)
 	}
 	deviceType := strings.TrimSpace(q.DeviceType)
-	if q.CategoryID > 0 || (deviceType != "" && deviceType != "全部") {
-		var typeWhere []string
-		var typeArgs []interface{}
-		if q.CategoryID > 0 {
-			typeWhere = append(typeWhere, "a.category_id = ?")
-			typeArgs = append(typeArgs, q.CategoryID)
+	if q.CategoryID > 0 {
+		where = append(where, "a.category_id = ?")
+		args = append(args, q.CategoryID)
+	} else if q.CategoryID == -1 {
+		where = append(where, "IFNULL(a.category_id,0) = 0")
+	} else if deviceType != "" && deviceType != "全部" {
+		aliases := cmdbDeviceTypeAliases(deviceType)
+		placeholders := make([]string, len(aliases))
+		for i, alias := range aliases {
+			placeholders[i] = "?"
+			args = append(args, alias)
 		}
-		if deviceType != "" && deviceType != "全部" {
-			aliases := cmdbDeviceTypeAliases(deviceType)
-			placeholders := make([]string, len(aliases))
-			for i, alias := range aliases {
-				placeholders[i] = "?"
-				typeArgs = append(typeArgs, alias)
-			}
-			typeWhere = append(typeWhere, "lower(trim(IFNULL(a.device_type,''))) IN ("+strings.Join(placeholders, ",")+")")
-		}
-		where = append(where, "("+strings.Join(typeWhere, " OR ")+")")
-		args = append(args, typeArgs...)
+		where = append(where, `lower(trim(COALESCE(NULLIF(trim(a.device_type),''),
+			(SELECT type_category.name FROM cmdb_device_categories type_category
+			 WHERE type_category.id = a.category_id AND type_category.project_id = a.project_id),''))) IN (`+strings.Join(placeholders, ",")+")")
 	}
 	if q.OrgID > 0 {
 		where = append(where, "a.org_id = ?")
@@ -381,33 +384,46 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		where = append(where, "a.group_id = ?")
 		args = append(args, q.GroupID)
 	}
-	if dept := strings.TrimSpace(q.Department); dept != "" && dept != "全部" {
-		where = append(where, "a.department = ?")
-		args = append(args, dept)
-	}
-	if owner := strings.TrimSpace(q.Owner); owner != "" && owner != "全部" {
-		where = append(where, "a.owner = ?")
-		args = append(args, owner)
-	}
+	appendCmdbExactFilter(&where, &args, "a.department", q.Department)
+	appendCmdbExactFilter(&where, &args, "a.owner", q.Owner)
+	appendCmdbExactFilter(&where, &args, "a.vendor", q.Vendor)
+	appendCmdbExactFilter(&where, &args, "a.model", q.Model)
 	if q.OwnerID > 0 {
 		where = append(where, "a.owner_id = ?")
 		args = append(args, q.OwnerID)
 	}
-	if st := strings.TrimSpace(q.Status); st != "" && st != "全部" {
-		where = append(where, "a.status = ?")
-		args = append(args, st)
-	}
+	appendCmdbExactFilter(&where, &args, "a.status", q.Status)
 	if cls := strings.TrimSpace(q.AssetClass); cls != "" && cls != "全部" {
 		where = append(where, "a.asset_class = ?")
 		args = append(args, cls)
 	}
-	if v := strings.TrimSpace(q.OSType); v != "" && v != "全部" {
-		where = append(where, "IFNULL(a.os_type,'') = ?")
-		args = append(args, v)
+	appendCmdbExactFilter(&where, &args, "a.os_type", q.OSType)
+	appendCmdbExactFilter(&where, &args, "a.os_version", q.OSVersion)
+	if location := strings.TrimSpace(q.Location); location != "" && location != "全部" {
+		locationColumns := []string{"a.room", "a.data_center", "a.floor", "a.cabinet_name", "a.area", "a.cabinet_pos"}
+		if location == CmdbAssetUnconfiguredFilter {
+			checks := make([]string, 0, len(locationColumns))
+			for _, column := range locationColumns {
+				checks = append(checks, "TRIM(IFNULL("+column+",'')) = ''")
+			}
+			where = append(where, "("+strings.Join(checks, " AND ")+")")
+		} else {
+			checks := make([]string, 0, len(locationColumns))
+			for _, column := range locationColumns {
+				checks = append(checks, "TRIM(IFNULL("+column+",'')) = ?")
+				args = append(args, location)
+			}
+			where = append(where, "("+strings.Join(checks, " OR ")+")")
+		}
 	}
-	if v := strings.TrimSpace(q.OSVersion); v != "" && v != "全部" {
-		where = append(where, "IFNULL(a.os_version,'') = ?")
-		args = append(args, v)
+	if netType := strings.TrimSpace(q.NetType); netType != "" && netType != "全部" {
+		interfaceZone := `EXISTS (SELECT 1 FROM cmdb_asset_interfaces i WHERE i.asset_id=a.id AND (IFNULL(i.network_zone,'') = ? OR IFNULL(i.net_zone,'') = ?))`
+		if netType == CmdbAssetUnconfiguredFilter {
+			where = append(where, `IFNULL(a.net_type,'') = '' AND NOT EXISTS (SELECT 1 FROM cmdb_asset_interfaces i WHERE i.asset_id=a.id AND (IFNULL(i.network_zone,'') <> '' OR IFNULL(i.net_zone,'') <> ''))`)
+		} else {
+			where = append(where, "(IFNULL(a.net_type,'') = ? OR "+interfaceZone+")")
+			args = append(args, netType, netType, netType)
+		}
 	}
 	if v := strings.TrimSpace(q.MgmtIP); v != "" && v != "全部" {
 		where = append(where, "(IFNULL(a.mgmt_ip,'') LIKE ? OR IFNULL(a.manage_ip,'') LIKE ?)")
@@ -443,6 +459,71 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		clause = " WHERE " + strings.Join(where, " AND ")
 	}
 	return clause, args
+}
+
+// CmdbAssetLocationSummary 生成列表导出共用的基础设施位置摘要。
+func CmdbAssetLocationSummary(a CmdbAsset) string {
+	parts := make([]string, 0, 7)
+	appendUnique := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, current := range parts {
+			if current == value {
+				return
+			}
+		}
+		parts = append(parts, value)
+	}
+	appendUnique(a.Room)
+	if strings.TrimSpace(a.DataCenter) != "" {
+		appendUnique(a.DataCenter)
+	} else {
+		appendUnique(a.Area)
+	}
+	appendUnique(a.Floor)
+	if strings.TrimSpace(a.CabinetName) != "" {
+		appendUnique(a.CabinetName)
+	} else {
+		appendUnique(a.CabinetPos)
+	}
+	rowColumn := make([]string, 0, 2)
+	if value := strings.TrimSpace(a.CabinetRow); value != "" {
+		rowColumn = append(rowColumn, value)
+	}
+	if a.CabinetCol > 0 {
+		rowColumn = append(rowColumn, fmt.Sprintf("%d 列", a.CabinetCol))
+	}
+	appendUnique(strings.Join(rowColumn, " / "))
+	start, height := a.StartU, a.HeightU
+	if start == 0 {
+		start = a.UStart
+	}
+	if height == 0 {
+		height = a.UHeight
+	}
+	if start > 0 && height > 1 {
+		appendUnique(fmt.Sprintf("%dU–%dU", start, start+height-1))
+	} else if start > 0 {
+		appendUnique(fmt.Sprintf("%dU", start))
+	} else {
+		appendUnique(a.RackUnit)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func appendCmdbExactFilter(where *[]string, args *[]interface{}, column, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "全部" {
+		return
+	}
+	if value == CmdbAssetUnconfiguredFilter {
+		*where = append(*where, "IFNULL("+column+",'') = ''")
+		return
+	}
+	*where = append(*where, column+" = ?")
+	*args = append(*args, value)
 }
 
 func (s *Store) buildCmdbWhereForProject(scope ProjectScope, q CmdbAssetQuery) (string, []interface{}) {
@@ -509,6 +590,65 @@ func (s *Store) QueryCmdbAssetsForProject(scope ProjectScope, q CmdbAssetQuery) 
 		list = append(list, item)
 	}
 	return list, total, rows.Err()
+}
+
+func (s *Store) AttachCmdbAssetInterfacesForProject(scope ProjectScope, assets []CmdbAsset) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	if len(assets) == 0 {
+		return nil
+	}
+	ids := make([]interface{}, 0, len(assets)+1)
+	placeholders := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		placeholders = append(placeholders, "?")
+		ids = append(ids, asset.ID)
+	}
+	ids = append([]interface{}{scope.ProjectID}, ids...)
+	rows, err := s.db.Query(`SELECT id, asset_id, IFNULL(asset_name,''), IFNULL(name,''), IFNULL(if_name,''),
+		IFNULL(ip,''), IFNULL(additional_ips_json,'[]'), IFNULL(mask,''), IFNULL(gateway,''), IFNULL(mac,''),
+		IFNULL(network_zone,''), IFNULL(net_zone,''), is_primary, vlan_id, IFNULL(remark,'')
+		FROM cmdb_asset_interfaces WHERE project_id=? AND asset_id IN (`+strings.Join(placeholders, ",")+") ORDER BY asset_id, is_primary DESC, id ASC", ids...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	interfacesByAsset := make(map[int64][]CmdbAssetInterface, len(assets))
+	for rows.Next() {
+		var iface CmdbAssetInterface
+		if err := rows.Scan(&iface.ID, &iface.AssetID, &iface.AssetName, &iface.Name, &iface.IfName,
+			&iface.IP, &iface.AdditionalIPsJSON, &iface.Mask, &iface.Gateway, &iface.MAC,
+			&iface.NetworkZone, &iface.NetZone, &iface.IsPrimary, &iface.VlanID, &iface.Remark); err != nil {
+			return err
+		}
+		if iface.Name == "" && iface.IfName != "" {
+			iface.Name = iface.IfName
+		}
+		if iface.IfName == "" && iface.Name != "" {
+			iface.IfName = iface.Name
+		}
+		if iface.NetworkZone == "" && iface.NetZone != "" {
+			iface.NetworkZone = iface.NetZone
+		}
+		if iface.NetZone == "" && iface.NetworkZone != "" {
+			iface.NetZone = iface.NetworkZone
+		}
+		if err := normalizeInterfaceAddresses(&iface); err != nil {
+			return err
+		}
+		interfacesByAsset[iface.AssetID] = append(interfacesByAsset[iface.AssetID], iface)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for index := range assets {
+		assets[index].Interfaces = interfacesByAsset[assets[index].ID]
+		if assets[index].Interfaces == nil {
+			assets[index].Interfaces = []CmdbAssetInterface{}
+		}
+	}
+	return nil
 }
 
 // GetCmdbAsset 读取单个资产及其全部网络接口。

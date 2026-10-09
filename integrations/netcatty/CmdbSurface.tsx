@@ -5,7 +5,6 @@ import {
   ChartNoAxesCombined,
   Monitor,
   Network,
-  Settings2,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -50,7 +49,6 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
   Users,
   Network,
   ChartNoAxesCombined,
-  Settings2,
 };
 
 export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { onConnectHost?: (host: Host) => void }) {

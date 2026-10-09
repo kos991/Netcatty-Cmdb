@@ -20,10 +20,13 @@ func TestAppExportUsesCurrentFiltersAndIncludesAllPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 501; i++ {
-		app := &store.ServerApp{AppName: fmt.Sprintf("目标系统-%03d", i), AppType: "审判业务", GroupID: groupID, Status: "正常运行", Provider: "测试供应商"}
+		app := &store.ServerApp{AppName: fmt.Sprintf("目标系统-%03d", i), AppType: "审判业务", GroupID: groupID, Status: "正常运行", Provider: "测试供应商", Owner: "张三"}
 		if _, err := st.CreateApp(app); err != nil {
 			t.Fatalf("准备第 %d 条业务系统失败: %v", i, err)
 		}
+	}
+	if _, err := st.CreateApp(&store.ServerApp{AppName: "目标系统-错误负责人", AppType: "审判业务", GroupID: groupID, Status: "正常运行", Provider: "测试供应商", Owner: "李四"}); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := st.CreateApp(&store.ServerApp{AppName: "其他系统", AppType: "审判业务", Status: "正常运行"}); err != nil {
 		t.Fatal(err)
@@ -36,7 +39,7 @@ func TestAppExportUsesCurrentFiltersAndIncludesAllPages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	params := url.Values{"keyword": {"目标系统"}, "app_type": {"审判业务"}, "group_id": {fmt.Sprint(groupID)}, "status": {"正常运行"}, "page": {"2"}, "page_size": {"1"}}
+	params := url.Values{"keyword": {"目标系统"}, "app_type": {"审判业务"}, "group_id": {fmt.Sprint(groupID)}, "provider": {"测试供应商"}, "owner": {"张三"}, "host_linked": {"unlinked"}, "status": {"正常运行"}, "page": {"2"}, "page_size": {"1"}}
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/apps/export?"+params.Encode(), nil))
 	if rec.Code != http.StatusOK {

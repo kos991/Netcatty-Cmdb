@@ -169,7 +169,7 @@ func TestQueryCmdbAssetsInfrastructureScopeIncludesHyperconverged(t *testing.T) 
 	}
 }
 
-func TestQueryCmdbAssetsTypeFilterIncludesCategoryAndLegacyDeviceType(t *testing.T) {
+func TestQueryCmdbAssetsCategoryFilterDoesNotORLegacyDeviceType(t *testing.T) {
 	s := newCmdbTestStore(t)
 	result, err := s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('交换机', 0, 0)`)
 	if err != nil {
@@ -182,24 +182,39 @@ func TestQueryCmdbAssetsTypeFilterIncludesCategoryAndLegacyDeviceType(t *testing
 	categoryAssetID := insertCmdbAsset(t, s, CmdbAsset{Name: "分类交换机", CategoryID: categoryID})
 	legacyAssetID := insertCmdbAsset(t, s, CmdbAsset{Name: "历史交换机", DeviceType: "switch"})
 	insertCmdbAsset(t, s, CmdbAsset{Name: "历史路由器", DeviceType: "router"})
+	result, err = s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('网络设备', 0, 0)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	networkCategoryID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	classifiedSwitchID := insertCmdbAsset(t, s, CmdbAsset{Name: "已归类交换机", CategoryID: networkCategoryID, DeviceType: "交换机"})
 
 	query := CmdbAssetQuery{CategoryID: categoryID, DeviceType: "switch", Page: 1, PageSize: 20}
 	list, total, err := s.QueryCmdbAssets(query)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total != 2 || len(list) != 2 {
-		t.Fatalf("交换机筛选应同时返回分类记录和历史类型记录: total=%d list=%+v", total, list)
+	if total != 1 || len(list) != 1 {
+		t.Fatalf("选择分类时必须按 category_id 精确匹配: total=%d list=%+v", total, list)
 	}
-	want := map[int64]bool{categoryAssetID: true, legacyAssetID: true}
-	for _, asset := range list {
-		if !want[asset.ID] {
-			t.Fatalf("交换机筛选混入其他设备: %+v", asset)
-		}
+	if list[0].ID != categoryAssetID {
+		t.Fatalf("分类筛选返回了非该分类设备: %+v", list[0])
 	}
 	exported, err := s.AllCmdbAssets(query)
-	if err != nil || len(exported) != 2 {
-		t.Fatalf("导出与列表的设备类型筛选不一致: len=%d err=%v", len(exported), err)
+	if err != nil || len(exported) != 1 || exported[0].ID != categoryAssetID {
+		t.Fatalf("导出与列表的精确分类筛选不一致: len=%d err=%v", len(exported), err)
+	}
+
+	typeOnly, typeTotal, err := s.QueryCmdbAssets(CmdbAssetQuery{DeviceType: "switch", Page: 1, PageSize: 20})
+	if err != nil || typeTotal != 3 || len(typeOnly) != 3 || typeOnly[0].ID != categoryAssetID || typeOnly[1].ID != legacyAssetID || typeOnly[2].ID != classifiedSwitchID {
+		t.Fatalf("设备类型筛选应同时返回已分类资产与未分类旧记录: total=%d list=%+v err=%v", typeTotal, typeOnly, err)
+	}
+	typeExport, err := s.AllCmdbAssets(CmdbAssetQuery{DeviceType: "switch"})
+	if err != nil || len(typeExport) != 3 {
+		t.Fatalf("设备类型导出应与列表一致: len=%d err=%v", len(typeExport), err)
 	}
 }
 
@@ -228,5 +243,87 @@ func TestQueryCmdbAssetsUnassignedGroup(t *testing.T) {
 	exported, err := s.AllCmdbAssets(query)
 	if err != nil || len(exported) != 2 {
 		t.Fatalf("导出与列表的未分组筛选不一致: len=%d err=%v", len(exported), err)
+	}
+}
+
+func TestCmdbAssetFiltersMatchActualOwnerBrandModelAndNetworkFields(t *testing.T) {
+	s := newCmdbTestStore(t)
+	managedID := insertCmdbAsset(t, s, CmdbAsset{
+		Name: "边界交换机", DeviceType: "switch", Vendor: "华三", Model: "S5560X",
+		Owner: "张三", Department: "信息处", Status: "在线",
+	})
+	if _, err := s.db.Exec(`INSERT INTO cmdb_asset_interfaces(asset_id,name,network_zone,net_zone) VALUES (?, '管理口', '设备管理网', '')`, managedID); err != nil {
+		t.Fatal(err)
+	}
+	unconfiguredID := insertCmdbAsset(t, s, CmdbAsset{
+		Name: "未配网络设备", DeviceType: "router", Vendor: "华三", Status: "离线",
+	})
+
+	list, total, err := s.QueryCmdbAssets(CmdbAssetQuery{
+		Owner: "张三", Department: "信息处", Vendor: "华三", Model: "S5560X",
+		NetType: "设备管理网", Page: 1, PageSize: 20,
+	})
+	if err != nil || total != 1 || len(list) != 1 || list[0].ID != managedID {
+		t.Fatalf("负责人、部门、品牌、型号和接口网络筛选必须取交集: total=%d list=%+v err=%v", total, list, err)
+	}
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AttachCmdbAssetInterfacesForProject(scope, list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list[0].Interfaces) != 1 || list[0].Interfaces[0].NetworkZone != "设备管理网" {
+		t.Fatalf("列表数据应带回真实网络接口区域: %+v", list[0].Interfaces)
+	}
+	list, total, err = s.QueryCmdbAssets(CmdbAssetQuery{NetType: CmdbAssetUnconfiguredFilter, Page: 1, PageSize: 20})
+	if err != nil || total != 1 || len(list) != 1 || list[0].ID != unconfiguredID {
+		t.Fatalf("未配置网络筛选未按管理字段和接口字段判断: total=%d list=%+v err=%v", total, list, err)
+	}
+}
+
+func TestQueryCmdbAssetsLocationMatchesListExportAndUnconfigured(t *testing.T) {
+	s := newCmdbTestStore(t)
+	roomID := insertCmdbAsset(t, s, CmdbAsset{
+		Name: "核心服务器", DeviceType: "server", Room: "东区机房 301", DataCenter: "常州中院数据中心",
+	})
+	legacyID := insertCmdbAsset(t, s, CmdbAsset{
+		Name: "历史存储", DeviceType: "storage", Area: "灾备机房", CabinetPos: "B08",
+	})
+	emptyID := insertCmdbAsset(t, s, CmdbAsset{Name: "待上架服务器", DeviceType: "server"})
+
+	for _, fixture := range []struct {
+		location string
+		wantID   int64
+	}{
+		{location: "东区机房 301", wantID: roomID},
+		{location: "常州中院数据中心", wantID: roomID},
+		{location: "灾备机房", wantID: legacyID},
+		{location: "B08", wantID: legacyID},
+		{location: CmdbAssetUnconfiguredFilter, wantID: emptyID},
+	} {
+		query := CmdbAssetQuery{Location: fixture.location, Page: 1, PageSize: 20}
+		list, total, err := s.QueryCmdbAssets(query)
+		if err != nil || total != 1 || len(list) != 1 || list[0].ID != fixture.wantID {
+			t.Fatalf("位置筛选 %q 错误: total=%d list=%+v err=%v", fixture.location, total, list, err)
+		}
+		exported, err := s.AllCmdbAssets(query)
+		if err != nil || len(exported) != 1 || exported[0].ID != fixture.wantID {
+			t.Fatalf("位置筛选 %q 的列表与导出不一致: list=%+v err=%v", fixture.location, exported, err)
+		}
+	}
+}
+
+func TestCmdbAssetLocationSummaryUsesActualLocationFields(t *testing.T) {
+	got := CmdbAssetLocationSummary(CmdbAsset{
+		Room: "东区机房 301", DataCenter: "常州中院数据中心", Floor: "3 楼",
+		CabinetName: "A01", CabinetRow: "2 排", CabinetCol: 3, StartU: 10, HeightU: 2,
+	})
+	want := "东区机房 301 · 常州中院数据中心 · 3 楼 · A01 · 2 排 / 3 列 · 10U–11U"
+	if got != want {
+		t.Fatalf("位置摘要错误: got=%q want=%q", got, want)
+	}
+	if got := CmdbAssetLocationSummary(CmdbAsset{Area: "灾备机房", CabinetPos: "B08", UStart: 20, UHeight: 1}); got != "灾备机房 · B08 · 20U" {
+		t.Fatalf("旧位置字段没有兼容: %q", got)
 	}
 }

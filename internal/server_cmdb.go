@@ -66,6 +66,10 @@ func (s *Server) handleListCmdbAssets(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []store.CmdbAsset{}
 	}
+	if err := s.Store.AttachCmdbAssetInterfacesForProject(scope, list); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
 	writeJSON(w, 200, map[string]interface{}{
 		"list":      list,
 		"total":     total,

@@ -95,6 +95,7 @@ func (s *Store) InitSchema() error {
 
 	CREATE TABLE IF NOT EXISTS assets (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		asset_name TEXT NOT NULL DEFAULT '',
 		asset_code TEXT,
 		device_type TEXT,
 		box_sn TEXT,
@@ -199,6 +200,7 @@ func (s *Store) InitSchema() error {
 		return fmt.Errorf("init schema: %w", err)
 	}
 	if err := addMissingColumns(s.db, "assets", map[string]string{
+		"asset_name":  "TEXT NOT NULL DEFAULT ''",
 		"device_type": "TEXT DEFAULT ''", "os_type": "TEXT DEFAULT ''", "os_version": "TEXT DEFAULT ''",
 		"group_id":    "INTEGER NOT NULL DEFAULT 0",
 		"front_image": "TEXT NOT NULL DEFAULT ''", "back_image": "TEXT NOT NULL DEFAULT ''",

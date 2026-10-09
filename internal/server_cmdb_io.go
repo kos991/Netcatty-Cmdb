@@ -19,16 +19,24 @@ func cmdbQueryFromRequest(r *http.Request, page, pageSize int) store.CmdbAssetQu
 	categoryID, _ := strconv.ParseInt(q.Get("category_id"), 10, 64)
 	orgID, _ := strconv.ParseInt(q.Get("org_id"), 10, 64)
 	groupID, _ := strconv.ParseInt(q.Get("group_id"), 10, 64)
+	ownerID, _ := strconv.ParseInt(q.Get("owner_id"), 10, 64)
 	return store.CmdbAssetQuery{
 		Keyword:       q.Get("keyword"),
 		CategoryID:    categoryID,
 		DeviceType:    q.Get("device_type"),
 		OrgID:         orgID,
 		GroupID:       groupID,
+		Owner:         q.Get("owner"),
+		OwnerID:       ownerID,
+		Department:    q.Get("department"),
+		Vendor:        q.Get("vendor"),
+		Model:         q.Get("model"),
+		NetType:       q.Get("net_type"),
 		Status:        q.Get("status"),
 		OSType:        q.Get("os_type"),
 		OSVersion:     q.Get("os_version"),
 		MgmtIP:        q.Get("mgmt_ip"),
+		Location:      q.Get("location"),
 		SourceType:    q.Get("source_type"),
 		ResourceScope: q.Get("scope"),
 		Page:          page,
@@ -61,6 +69,12 @@ func (s *Server) handleCmdbAssetFilters(w http.ResponseWriter, r *http.Request) 
 		"device_type": opts["device_type"],
 		"os_type":     opts["os_type"],
 		"os_version":  opts["os_version"],
+		"owner":       opts["owner"],
+		"department":  opts["department"],
+		"vendor":      opts["vendor"],
+		"model":       opts["model"],
+		"location":    opts["location"],
+		"net_type":    opts["net_type"],
 		"categories":  cats,
 	})
 }
@@ -89,7 +103,7 @@ var cmdbExportColumns = []struct {
 	{"所属区域", func(a store.CmdbAsset) string { return a.DataCenter }},
 	{"楼层", func(a store.CmdbAsset) string { return a.Floor }},
 	{"机柜名称", func(a store.CmdbAsset) string { return a.CabinetName }},
-	{"位置标识", func(a store.CmdbAsset) string { return "" }},
+	{"位置标识", store.CmdbAssetLocationSummary},
 	{"高度", func(a store.CmdbAsset) string { return strconv.FormatInt(a.HeightU, 10) }},
 	{"起始U位", func(a store.CmdbAsset) string { return strconv.FormatInt(a.StartU, 10) }},
 	{"端口数量", func(a store.CmdbAsset) string { return strconv.FormatInt(a.PortCount, 10) }},

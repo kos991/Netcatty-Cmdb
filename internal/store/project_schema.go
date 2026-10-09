@@ -133,6 +133,17 @@ func MigrateProjectSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	attachmentColumns := map[string]string{
+		"content_hash": "TEXT NOT NULL DEFAULT ''",
+		"s3_key":       "TEXT NOT NULL DEFAULT ''",
+		"s3_status":    "TEXT NOT NULL DEFAULT 'pending'",
+	}
+	if err := addMissingColumns(tx, "cmdb_work_order_attachments", attachmentColumns); err != nil {
+		return fmt.Errorf("add CAS columns to cmdb_work_order_attachments: %w", err)
+	}
+	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_cmdb_wo_attachments_hash ON cmdb_work_order_attachments(content_hash)`); err != nil {
+		return fmt.Errorf("create attachment hash index: %w", err)
+	}
 	if _, err := tx.Exec(`DROP INDEX IF EXISTS idx_cmdb_network_types_sync_id`); err != nil {
 		return fmt.Errorf("drop network type sync index: %w", err)
 	}

@@ -35,8 +35,8 @@ export function PageHeader({ title, description, actions }) {
   </header>
 }
 
-export function Toolbar({ children, className }) {
-  return <div className={cn('flex flex-wrap items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-2', className)}>{children}</div>
+export function Toolbar({ children, className, hidden = false }) {
+  return <div hidden={hidden} className={cn(hidden ? 'hidden' : 'flex', 'shrink-0 flex-wrap items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-2', className)}>{children}</div>
 }
 
 export function SearchBox({ value, onChange, onSearch, placeholder, inputRef, className, ...props }) {
@@ -55,12 +55,12 @@ export function SearchBox({ value, onChange, onSearch, placeholder, inputRef, cl
   </div>
 }
 
-export function SelectControl({ value, onChange, options = [], placeholder = '请选择', className, disabled, id, searchable = false, 'aria-label': label }) {
+export function SelectControl({ value, onChange, options = [], placeholder = '请选择', prefix, className, disabled, id, searchable = false, 'aria-label': label }) {
   const [open, setOpen] = React.useState(false)
   const normalized = value === undefined || value === null || value === '' ? EMPTY_VALUE : String(value)
   if (searchable) return <Combobox ariaLabel={label || placeholder} disabled={disabled} className={className} triggerClassName="h-[32px] text-[12px]" allowCreate={false} options={options.map((option) => typeof option === 'object' ? { ...option, value: String(option.value ?? '') } : { value: String(option), label: String(option) })} value={normalized === EMPTY_VALUE ? '' : normalized} onValueChange={onChange} placeholder={placeholder} emptyText="没有匹配选项" />
   return <Select value={normalized} open={open} onOpenChange={setOpen} onValueChange={(next) => { if ((!next || next === EMPTY_VALUE) && normalized !== EMPTY_VALUE && !open) return; onChange?.(next === EMPTY_VALUE ? '' : next) }} disabled={disabled}>
-    <SelectTrigger id={id} aria-label={label || placeholder} className={cn('h-[32px] min-w-[132px] text-[12px]', className)}><SelectValue placeholder={placeholder} /></SelectTrigger>
+    <SelectTrigger id={id} aria-label={label || prefix || placeholder} className={cn('h-[32px] min-w-[132px] text-[12px]', className)}>{prefix ? <span className="shrink-0 text-muted-foreground">{prefix}：</span> : null}<SelectValue placeholder={placeholder} /></SelectTrigger>
     <SelectContent>
       {options.map((option) => {
         const item = typeof option === 'object' ? option : { value: option, label: option }
@@ -133,24 +133,31 @@ export function statusTone(value = '') {
   return 'neutral'
 }
 
-export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = '暂无数据', selected = [], onSelectedChange, onRowClick, compact = false }) {
+export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = '暂无数据', selected = [], onSelectedChange, onRowClick, compact = false, rowClassName, pinSelection = false }) {
   const selectable = typeof onSelectedChange === 'function'
   const selectedSet = new Set(selected)
   const allSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row[rowKey]))
+  const hasPinnedColumns = pinSelection || columns.some((column) => column.sticky)
+  const selectionWidth = pinSelection ? 40 : 36
+  const columnStyle = (column, index) => ({
+    ...(column.width ? { width: column.width, minWidth: column.width } : {}),
+    ...(column.sticky === 'left' ? { left: (selectable && pinSelection ? selectionWidth : 0) + columns.slice(0, index).filter((item) => item.sticky === 'left').reduce((sum, item) => sum + item.width, 0) } : {}),
+    ...(column.sticky === 'right' ? { right: columns.slice(index + 1).filter((item) => item.sticky === 'right').reduce((sum, item) => sum + item.width, 0) } : {}),
+  })
   return <div className="min-h-0 flex-1 overflow-auto">
-    <table className={cn('w-full border-collapse text-left text-[12px]', compact ? 'table-fixed' : 'min-w-[760px]')}>
-      <thead className="sticky top-0 z-[1] bg-secondary/30 text-[11px] text-muted-foreground backdrop-blur">
+    <table className={cn('w-full text-left text-[12px]', hasPinnedColumns ? 'border-separate border-spacing-0' : 'border-collapse', compact ? 'table-fixed' : 'min-w-[760px]')}>
+      <thead className={cn('sticky top-0 z-20 text-[11px] text-muted-foreground', hasPinnedColumns ? 'bg-background' : 'bg-secondary/30 backdrop-blur')}>
         <tr className="border-b border-border/30">
-          {selectable ? <th className="w-9 px-3 py-1"><input type="checkbox" aria-label="选择全部" checked={allSelected} onChange={(event) => onSelectedChange(event.target.checked ? rows.map((row) => row[rowKey]) : [])} /></th> : null}
-          {columns.map((column) => <th key={column.key} className={cn('h-[30px] whitespace-nowrap px-3 py-1 font-medium', column.headerClassName)}>{column.label}</th>)}
+          {selectable ? <th style={{ width: selectionWidth, minWidth: selectionWidth }} className={cn('px-3 py-1', hasPinnedColumns && 'border-b border-border/30', pinSelection && 'sticky left-0 z-10 bg-background')}><input type="checkbox" aria-label="选择全部" checked={allSelected} onChange={(event) => onSelectedChange(event.target.checked ? rows.map((row) => row[rowKey]) : [])} /></th> : null}
+          {columns.map((column, index) => <th key={column.key} style={columnStyle(column, index)} className={cn('h-[30px] whitespace-nowrap px-3 py-1 font-medium', column.headerClassName, hasPinnedColumns && 'border-b border-border/30', column.sticky && 'sticky z-10 bg-background')}>{column.label}</th>)}
         </tr>
       </thead>
       <tbody>
         {loading ? <tr><td colSpan={columns.length + (selectable ? 1 : 0)} className="h-40 text-center"><Spinner className="mx-auto text-muted-foreground" /></td></tr> : null}
         {!loading && !rows.length ? <tr><td colSpan={columns.length + (selectable ? 1 : 0)}><EmptyState label={empty} /></td></tr> : null}
         {!loading && rows.map((row) => <tr key={row[rowKey]} onClick={() => onRowClick?.(row)} className={cn('group border-b border-border/30 transition-colors hover:bg-secondary/60', onRowClick && 'cursor-pointer')}>
-          {selectable ? <td className="px-3 py-1" onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label="选择此行" checked={selectedSet.has(row[rowKey])} onChange={(event) => onSelectedChange(event.target.checked ? [...selected, row[rowKey]] : selected.filter((id) => id !== row[rowKey]))} /></td> : null}
-          {columns.map((column) => <td key={column.key} className={cn('h-[38px] px-3 py-1 align-middle text-foreground', column.className)}>{column.render ? column.render(row[column.key], row) : (row[column.key] ?? '-')}</td>)}
+          {selectable ? <td className={cn('px-3 py-1', hasPinnedColumns && 'border-b border-border/30', pinSelection && 'sticky left-0 z-10 bg-background group-hover:bg-secondary')} onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label="选择此行" checked={selectedSet.has(row[rowKey])} onChange={(event) => onSelectedChange(event.target.checked ? [...selected, row[rowKey]] : selected.filter((id) => id !== row[rowKey]))} /></td> : null}
+          {columns.map((column, index) => <td key={column.key} style={columnStyle(column, index)} className={cn('h-[38px] px-3 py-1 align-middle text-foreground', rowClassName, column.className, hasPinnedColumns && 'border-b border-border/30', column.sticky && 'sticky z-10 bg-background group-hover:bg-secondary')}>{column.render ? column.render(row[column.key], row) : (row[column.key] ?? '-')}</td>)}
         </tr>)}
       </tbody>
     </table>

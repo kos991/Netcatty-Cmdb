@@ -24,6 +24,7 @@ export const api = {
   assetRelations: (id) => req(`/api/assets/${id}/relations`),
   createAsset: (body) => post('/api/assets', body),
   updateAsset: (id, body) => put(`/api/assets/${id}`, body),
+  batchUpdateAssets: (ids, changes) => post('/api/assets/batch', { ids, changes }),
   archiveAsset: (id) => del(`/api/assets/${id}`, { reason: '资产注销归档', operator: '资产管理员' }),
   transferAsset: (id, body) => post(`/api/assets/${id}/transfer`, body),
   maintainAsset: (id, body) => post(`/api/assets/${id}/maintenance`, body),

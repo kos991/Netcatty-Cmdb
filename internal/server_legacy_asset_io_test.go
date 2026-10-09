@@ -2,6 +2,8 @@ package internal
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"czfy-assets/internal/store"
@@ -64,10 +66,43 @@ func TestParseLegacyAssetImportReadsOptionalOperatingSystemColumns(t *testing.T)
 	}
 }
 
+func TestParseLegacyAssetImportReadsIndependentAssetName(t *testing.T) {
+	headers := []string{"资产名称", "资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "当前使用人", "所属组织", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注"}
+	data := legacyAssetImportWorkbookWithHeaders(t, headers, []string{"执行局办公终端", "ASSET-NAME-1", "台式电脑", "SN-1", "", "张三", "执行局", "502室", "10.0.0.40", "", "统信 UOS", "20", "在用", "内网", "名称导入"})
+	rows, errors, err := parseLegacyAssetImport(bytes.NewReader(data))
+	if err != nil || len(errors) != 0 || len(rows) != 1 {
+		t.Fatalf("rows=%d errors=%v err=%v", len(rows), errors, err)
+	}
+	if rows[0].Asset.AssetName != "执行局办公终端" || rows[0].Asset.AssetCode != "ASSET-NAME-1" {
+		t.Fatalf("独立资产名称与编码必须分别导入: %+v", rows[0].Asset)
+	}
+}
+
 func TestLegacyAssetExportIncludesOperatingSystemColumns(t *testing.T) {
-	values := legacyAssetExportValues(store.Asset{ID: 9, AssetCode: "OS-EXPORT", DeviceType: "台式电脑", OSType: "Windows 11", OSVersion: "23H2", Status: "在用"})
-	if len(values) != 15 || values[10] != "Windows 11" || values[11] != "23H2" {
+	values := legacyAssetExportValues(store.Asset{ID: 9, AssetName: "出口名称", AssetCode: "OS-EXPORT", DeviceType: "台式电脑", OSType: "Windows 11", OSVersion: "23H2", Status: "在用"})
+	if len(values) != 16 || values[1] != "出口名称" || values[11] != "Windows 11" || values[12] != "23H2" {
 		t.Fatalf("终端导出系统列错误: %#v", values)
+	}
+}
+
+func TestLegacyAssetTemplateIncludesIndependentAssetName(t *testing.T) {
+	_, _, mux := newLegacyHandlerTestServer(t)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/template/assets", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("模板下载失败: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(rec.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer book.Close()
+	rows, err := book.GetRows(book.GetSheetName(0))
+	if err != nil || len(rows) == 0 {
+		t.Fatalf("读取模板失败: %v", err)
+	}
+	if rows[0][0] != "资产名称" || rows[0][1] != "资产编码" {
+		t.Fatalf("模板必须将名称与编码分开: %v", rows[0])
 	}
 }
 

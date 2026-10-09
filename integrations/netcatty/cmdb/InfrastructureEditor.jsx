@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { toast } from '@/components/ui/toast'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { additionalEditorRows, prepareInfrastructureEditorValues, resolveInfrastructureModelID } from './infrastructureEditorModel'
+import { infrastructureNetworkZoneOptions } from './infrastructureTableModel'
 import { customFieldDefinitions, infrastructureDeviceTypeOptions, infrastructureFieldProfile, supportsInfrastructurePhotos } from './state'
 import { Field, SelectControl } from './ui'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
@@ -62,6 +63,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
   const deviceTypes = useMemo(() => directory?.deviceTypes || [], [directory?.deviceTypes])
   const models = useMemo(() => meta.models || [], [meta.models])
   const customFields = useMemo(() => directory?.customFields || [], [directory?.customFields])
+  const networkZones = useMemo(() => infrastructureNetworkZoneOptions(meta.net_zones || []), [meta.net_zones])
 
   useEffect(() => {
     if (!open || !record) return
@@ -69,7 +71,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
     setValues(prepareInfrastructureEditorValues(record, models))
   }, [open, record, models])
 
-  const deviceTypeName = deviceTypes.find((item) => item.id === Number(values.category_id))?.name || values.device_type || ''
+  const deviceTypeName = values.device_type || deviceTypes.find((item) => item.id === Number(values.category_id))?.name || ''
   const profile = infrastructureFieldProfile(deviceTypeName)
   const photosSupported = supportsInfrastructurePhotos({ ...values, category_name: deviceTypeName })
   useEffect(() => {
@@ -77,7 +79,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
   }, [photosSupported, photoDraft, onPhotoDraftChange])
   const basicFields = useMemo(() => [
     { key: 'name', label: '设备名称', required: true },
-    { key: 'asset_code', label: '资产编码' },
+    { key: 'asset_code', label: '资产标签编号（可选）' },
     { key: 'category_id', label: '设备类型', numeric: true, preserveZero: !!record?.id && !Number(values.category_id) && !!values.device_type, searchable: true, options: choices(infrastructureDeviceTypeOptions(deviceTypes, record?.id ? values : {}), '未分配'), derive: (id) => {
       const item = deviceTypes.find((entry) => entry.id === Number(id))
       const nextProfile = infrastructureFieldProfile(item?.name || '')
@@ -96,7 +98,6 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
 
   const ownershipFields = [
     { key: 'org_id', label: '所属组织', numeric: true, searchable: true, options: optionList(meta.orgs) },
-    { key: 'group_id', label: '所属分组', numeric: true, searchable: true, options: optionList(meta.groups) },
     { key: 'owner_id', label: '负责人', numeric: true, searchable: true, options: choices(people.map((person) => ({ value: person.id, label: [person.name, person.department].filter(Boolean).join(' · ') })), '未分配'), derive: (id) => {
       const person = people.find((item) => item.id === id)
       return person ? { owner: person.name, department: person.department } : { owner: '', department: '' }
@@ -154,7 +155,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
           <Section sectionKey="connection" title="凭证中心" sectionRefs={sectionRefs}><NetcattyConnectionFields asset={values} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} createHost={netcatty.createHost} createCredential={netcatty.createCredential} /></Section>
           <Section sectionKey="ownership" title="归属关系" sectionRefs={sectionRefs}><Fields fields={ownershipFields} value={values} onChange={setValues} /></Section>
           {profile.kind !== 'virtual' ? <Section sectionKey="location" title="安装位置" sectionRefs={sectionRefs}><Fields fields={locationFields} value={values} onChange={setValues} /></Section> : null}
-          <Section sectionKey="network" title="网络配置" sectionRefs={sectionRefs}><div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Field label="管理 IP"><Input className="h-9 font-mono" value={values.mgmt_ip || ''} onChange={(event) => setValues({ ...values, mgmt_ip: event.target.value })} /></Field><Field label="业务 IP（兼容字段）"><Input className="h-9 font-mono" value={values.biz_ip || ''} onChange={(event) => setValues({ ...values, biz_ip: event.target.value })} /></Field></div><p className="text-[11px] text-muted-foreground">管理 IP 用于默认连接。带外和多个业务地址登记在下方接口中；相同 IP 可同时用于管理和业务。</p>{profile.deviceMac ? <div className="max-w-md"><Field label="设备级 MAC 地址"><Input className="h-9 font-mono" value={values.mac || ''} onChange={(event) => setValues({ ...values, mac: event.target.value })} /></Field></div> : null}<NetworkInterfaces interfaces={values.interfaces || []} zones={meta.net_zones || []} managementIP={values.mgmt_ip} onChange={(interfaces) => setValues({ ...values, interfaces })} /></Section>
+          <Section sectionKey="network" title="网络配置" sectionRefs={sectionRefs}><div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Field label="管理 IP"><Input className="h-9 font-mono" value={values.mgmt_ip || ''} onChange={(event) => setValues({ ...values, mgmt_ip: event.target.value })} /></Field><Field label="管理网络"><SelectControl className="w-full" value={values.net_type || ''} onChange={(value) => setValues({ ...values, net_type: value })} options={choices(networkZones, '未配置')} /></Field><Field label="业务 IP（兼容字段）"><Input className="h-9 font-mono" value={values.biz_ip || ''} onChange={(event) => setValues({ ...values, biz_ip: event.target.value })} /></Field></div><p className="text-[11px] text-muted-foreground">管理 IP 用于默认连接；内网、外网、专网等网络区域在这里标记。多个业务、带外地址请在下方接口中登记，并分别填写网络分区。</p>{profile.deviceMac ? <div className="max-w-md"><Field label="设备级 MAC 地址"><Input className="h-9 font-mono" value={values.mac || ''} onChange={(event) => setValues({ ...values, mac: event.target.value })} /></Field></div> : null}<NetworkInterfaces interfaces={values.interfaces || []} zones={networkZones} managementIP={values.mgmt_ip} onChange={(interfaces) => setValues({ ...values, interfaces })} /></Section>
           {profile.systemSection ? <Section sectionKey="system" title={profile.systemSection} sectionRefs={sectionRefs}><Fields fields={systemFields} value={values} onChange={setValues} /></Section> : null}
           {photosSupported ? <Section sectionKey="photos" title="设备照片" sectionRefs={sectionRefs}><DeviceImages kind="infrastructure" id={record.id} draftMode={!record.id || Object.keys(photoDraft).length > 0} draftImages={photoDraft} onDraftChange={onPhotoDraftChange} onBusyChange={setPhotoBusy} /></Section> : null}
         </form>

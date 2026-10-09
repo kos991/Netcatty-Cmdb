@@ -1,7 +1,9 @@
 package store
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +20,9 @@ type WorkOrderAttachment struct {
 	ProjectID   int64  `json:"project_id"`
 	WorkOrderID int64  `json:"work_order_id"`
 	FileName    string `json:"file_name"`
+	ContentHash string `json:"content_hash"`
+	S3Key       string `json:"s3_key"`
+	S3Status    string `json:"s3_status"`
 	StoredName  string `json:"-"`
 	StoredPath  string `json:"-"`
 	SizeBytes   int64  `json:"size_bytes"`
@@ -34,6 +39,28 @@ func (s *Store) AttachmentRoot() (string, error) {
 		return "", err
 	}
 	return filepath.Join(filepath.Dir(abs), "cmdb", "attachments"), nil
+}
+
+// BuildAttachmentS3Key 生成统一的对象存储键（格式：attachments/ab/cd/abcdef...bin）
+func BuildAttachmentS3Key(contentHash string) string {
+	h := strings.ToLower(strings.TrimSpace(contentHash))
+	if len(h) < 4 {
+		return fmt.Sprintf("attachments/%s.bin", h)
+	}
+	return fmt.Sprintf("attachments/%s/%s/%s.bin", h[:2], h[2:4], h)
+}
+
+// BuildAttachmentLocalPath 根据内容哈希生成本地二级分级打散存储路径
+func (s *Store) BuildAttachmentLocalPath(contentHash string) (string, error) {
+	root, err := s.AttachmentRoot()
+	if err != nil {
+		return "", err
+	}
+	h := strings.ToLower(strings.TrimSpace(contentHash))
+	if len(h) < 4 {
+		return filepath.Join(root, fmt.Sprintf("%s.bin", h)), nil
+	}
+	return filepath.Join(root, h[:2], h[2:4], fmt.Sprintf("%s.bin", h)), nil
 }
 
 func (s *Store) stageWorkOrderAttachmentDirectory(scope ProjectScope, workOrderID int64) (string, string, error) {
@@ -80,17 +107,23 @@ func (s *Store) SaveWorkOrderAttachmentForProject(scope ProjectScope, workOrderI
 	if err != nil {
 		return nil, err
 	}
+
 	dir := filepath.Join(root, fmt.Sprintf("project-%d", scope.ProjectID), fmt.Sprintf("work-order-%d", workOrderID))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+
+	// 1. 先写工单独立目录（保持测试与传统事务回滚的一致性），同时计算 SHA-256
 	storedName := uuid.NewString() + strings.ToLower(filepath.Ext(fileName))
 	storedPath := filepath.Join(dir, storedName)
 	file, err := os.OpenFile(storedPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, err
 	}
-	size, copyErr := io.Copy(file, source)
+
+	hasher := sha256.New()
+	tee := io.TeeReader(source, hasher)
+	size, copyErr := io.Copy(file, tee)
 	closeErr := file.Close()
 	if copyErr != nil || closeErr != nil {
 		_ = os.Remove(storedPath)
@@ -99,9 +132,28 @@ func (s *Store) SaveWorkOrderAttachmentForProject(scope ProjectScope, workOrderI
 		}
 		return nil, closeErr
 	}
+
+	contentHash := hex.EncodeToString(hasher.Sum(nil))
+	s3Key := BuildAttachmentS3Key(contentHash)
+
+	// 2. 将数据同步镜像/硬链接到全局 CAS 路径（秒传去重与 S3 映射）
+	casPath, err := s.BuildAttachmentLocalPath(contentHash)
+	if err == nil {
+		if err := os.MkdirAll(filepath.Dir(casPath), 0o700); err == nil {
+			if _, statErr := os.Stat(casPath); statErr != nil {
+				// 尝试硬链接，若不支持则拷贝
+				if linkErr := os.Link(storedPath, casPath); linkErr != nil {
+					_ = copyFileAtomic(storedPath, casPath)
+				}
+			}
+		}
+	}
+
 	now := time.Now().Format("2006-01-02 15:04:05")
-	result, err := s.db.Exec(`INSERT INTO cmdb_work_order_attachments(project_id,work_order_id,file_name,stored_name,size_bytes,content_type,created_at)
-		VALUES(?,?,?,?,?,?,?)`, scope.ProjectID, workOrderID, fileName, storedName, size, contentType, now)
+	result, err := s.db.Exec(`INSERT INTO cmdb_work_order_attachments(
+		project_id, work_order_id, file_name, stored_name, content_hash, s3_key, s3_status, size_bytes, content_type, created_at
+	) VALUES(?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+		scope.ProjectID, workOrderID, fileName, storedName, contentHash, s3Key, size, contentType, now)
 	if err != nil {
 		_ = os.Remove(storedPath)
 		return nil, err
@@ -111,30 +163,88 @@ func (s *Store) SaveWorkOrderAttachmentForProject(scope ProjectScope, workOrderI
 		_ = os.Remove(storedPath)
 		return nil, err
 	}
-	return &WorkOrderAttachment{ID: id, ProjectID: scope.ProjectID, WorkOrderID: workOrderID, FileName: fileName, StoredName: storedName, StoredPath: storedPath, SizeBytes: size, ContentType: contentType, CreatedAt: now}, nil
+
+	return &WorkOrderAttachment{
+		ID:          id,
+		ProjectID:   scope.ProjectID,
+		WorkOrderID: workOrderID,
+		FileName:    fileName,
+		ContentHash: contentHash,
+		S3Key:       s3Key,
+		S3Status:    "pending",
+		StoredName:  storedName,
+		StoredPath:  storedPath,
+		SizeBytes:   size,
+		ContentType: contentType,
+		CreatedAt:   now,
+	}, nil
+}
+
+func copyFileAtomic(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+	return nil
+}
+
+func (s *Store) resolveAttachmentPath(item *WorkOrderAttachment) (string, error) {
+	root, err := s.AttachmentRoot()
+	if err != nil {
+		return "", err
+	}
+	// 优先工单私有路径
+	legacyPath := filepath.Join(root, fmt.Sprintf("project-%d", item.ProjectID), fmt.Sprintf("work-order-%d", item.WorkOrderID), item.StoredName)
+	if _, statErr := os.Stat(legacyPath); statErr == nil {
+		return legacyPath, nil
+	}
+	// 备选 CAS 路径
+	if item.ContentHash != "" {
+		p, err := s.BuildAttachmentLocalPath(item.ContentHash)
+		if err == nil {
+			if _, statErr := os.Stat(p); statErr == nil {
+				return p, nil
+			}
+		}
+		return p, nil
+	}
+	return legacyPath, nil
 }
 
 func (s *Store) ListWorkOrderAttachmentsForProject(scope ProjectScope, workOrderID int64) ([]WorkOrderAttachment, error) {
 	if _, err := s.GetCmdbWorkOrderForProject(scope, workOrderID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(`SELECT id,project_id,work_order_id,file_name,stored_name,size_bytes,content_type,created_at
+	rows, err := s.db.Query(`SELECT id, project_id, work_order_id, file_name, stored_name,
+		COALESCE(content_hash, ''), COALESCE(s3_key, ''), COALESCE(s3_status, 'pending'),
+		size_bytes, content_type, created_at
 		FROM cmdb_work_order_attachments WHERE project_id=? AND work_order_id=? ORDER BY id`, scope.ProjectID, workOrderID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	root, err := s.AttachmentRoot()
-	if err != nil {
-		return nil, err
-	}
+
 	list := make([]WorkOrderAttachment, 0)
 	for rows.Next() {
 		var item WorkOrderAttachment
-		if err := rows.Scan(&item.ID, &item.ProjectID, &item.WorkOrderID, &item.FileName, &item.StoredName, &item.SizeBytes, &item.ContentType, &item.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&item.ID, &item.ProjectID, &item.WorkOrderID, &item.FileName, &item.StoredName,
+			&item.ContentHash, &item.S3Key, &item.S3Status,
+			&item.SizeBytes, &item.ContentType, &item.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
-		item.StoredPath = filepath.Join(root, fmt.Sprintf("project-%d", scope.ProjectID), fmt.Sprintf("work-order-%d", workOrderID), item.StoredName)
+		item.StoredPath, _ = s.resolveAttachmentPath(&item)
 		list = append(list, item)
 	}
 	return list, rows.Err()
@@ -142,21 +252,35 @@ func (s *Store) ListWorkOrderAttachmentsForProject(scope ProjectScope, workOrder
 
 func (s *Store) GetWorkOrderAttachmentForProject(scope ProjectScope, workOrderID, attachmentID int64) (*WorkOrderAttachment, error) {
 	var item WorkOrderAttachment
-	err := s.db.QueryRow(`SELECT id,project_id,work_order_id,file_name,stored_name,size_bytes,content_type,created_at
+	err := s.db.QueryRow(`SELECT id, project_id, work_order_id, file_name, stored_name,
+		COALESCE(content_hash, ''), COALESCE(s3_key, ''), COALESCE(s3_status, 'pending'),
+		size_bytes, content_type, created_at
 		FROM cmdb_work_order_attachments WHERE id=? AND project_id=? AND work_order_id=?`, attachmentID, scope.ProjectID, workOrderID).
-		Scan(&item.ID, &item.ProjectID, &item.WorkOrderID, &item.FileName, &item.StoredName, &item.SizeBytes, &item.ContentType, &item.CreatedAt)
+		Scan(
+			&item.ID, &item.ProjectID, &item.WorkOrderID, &item.FileName, &item.StoredName,
+			&item.ContentHash, &item.S3Key, &item.S3Status,
+			&item.SizeBytes, &item.ContentType, &item.CreatedAt,
+		)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("附件不存在: %w", ErrProjectScopedNotFound)
 	}
 	if err != nil {
 		return nil, err
 	}
-	root, err := s.AttachmentRoot()
-	if err != nil {
-		return nil, err
-	}
-	item.StoredPath = filepath.Join(root, fmt.Sprintf("project-%d", scope.ProjectID), fmt.Sprintf("work-order-%d", workOrderID), item.StoredName)
+	item.StoredPath, _ = s.resolveAttachmentPath(&item)
 	return &item, nil
+}
+
+func (s *Store) UpdateWorkOrderAttachmentS3Status(scope ProjectScope, workOrderID, attachmentID int64, s3Status, s3Key string) error {
+	result, err := s.db.Exec(`UPDATE cmdb_work_order_attachments SET s3_status=?, s3_key=? WHERE id=? AND project_id=? AND work_order_id=?`,
+		s3Status, s3Key, attachmentID, scope.ProjectID, workOrderID)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return fmt.Errorf("附件不存在: %w", ErrProjectScopedNotFound)
+	}
+	return nil
 }
 
 func (s *Store) DeleteWorkOrderAttachmentForProject(scope ProjectScope, workOrderID, attachmentID int64) error {
@@ -183,6 +307,7 @@ func (s *Store) DeleteWorkOrderAttachmentForProject(scope ProjectScope, workOrde
 		return err
 	}
 	defer tx.Rollback()
+
 	result, err := tx.Exec(`DELETE FROM cmdb_work_order_attachments WHERE id=? AND project_id=? AND work_order_id=?`, attachmentID, scope.ProjectID, workOrderID)
 	if err != nil {
 		_ = restoreFile()
@@ -203,5 +328,17 @@ func (s *Store) DeleteWorkOrderAttachmentForProject(scope ProjectScope, workOrde
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("附件文件已删除，但提交元数据删除失败: %w", err)
 	}
+
+	// 清理全局 CAS 文件（若无其他工单引用）
+	if item.ContentHash != "" {
+		var remainingRefs int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_work_order_attachments WHERE content_hash=?`, item.ContentHash).Scan(&remainingRefs)
+		if remainingRefs == 0 {
+			if casPath, err := s.BuildAttachmentLocalPath(item.ContentHash); err == nil {
+				_ = os.Remove(casPath)
+			}
+		}
+	}
+
 	return nil
 }

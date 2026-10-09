@@ -8,6 +8,7 @@ function scheduleCmdbCloudSync() {
     scheduledSync = setTimeout(() => {
       scheduledSync = undefined
       globalThis.window?.dispatchEvent(new CustomEvent('netcatty:cmdb-cloud-sync-request'))
+      globalThis.window?.netcatty?.notifySettingsChanged?.({ key: 'netcatty.cmdb.cloudSync.request', value: Date.now() })
     }, 800)
   } catch {
     // 本机同步设置损坏时，不影响已经成功的 Cmdb 写入。

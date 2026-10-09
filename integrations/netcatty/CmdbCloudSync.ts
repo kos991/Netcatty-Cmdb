@@ -2,6 +2,7 @@ import type { CmdbSyncSnapshot } from './CmdbSyncSnapshot';
 
 export const CMDB_CLOUD_SYNC_STORAGE_KEY = 'netcatty.cmdb.cloudSync.v1';
 export const CMDB_CLOUD_SYNC_REQUEST_EVENT = 'netcatty:cmdb-cloud-sync-request';
+export const CMDB_CLOUD_SYNC_REQUEST_KEY = 'netcatty.cmdb.cloudSync.request';
 export const CMDB_CLOUD_SYNC_SETTINGS_EVENT = 'netcatty:cmdb-cloud-sync-settings';
 
 export interface CmdbCloudSyncSettings {
@@ -65,6 +66,14 @@ export function writeCmdbCloudSyncSettings(
     globalThis.window.dispatchEvent(new CustomEvent(CMDB_CLOUD_SYNC_SETTINGS_EVENT, { detail: next }));
   }
   return next;
+}
+
+export function requestCmdbCloudSync(): void {
+  globalThis.window?.dispatchEvent(new CustomEvent(CMDB_CLOUD_SYNC_REQUEST_EVENT));
+  globalThis.window?.netcatty?.notifySettingsChanged?.({
+    key: CMDB_CLOUD_SYNC_REQUEST_KEY,
+    value: Date.now(),
+  });
 }
 
 export function scheduleCmdbCloudSync(delay = 800): void {

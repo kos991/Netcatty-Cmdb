@@ -1,9 +1,19 @@
+export function formatDepartmentName(dept = '') {
+  if (!dept) return ''
+  const trimmed = String(dept).trim()
+  const COURT_TRIBUNALS = ['刑一', '刑二', '审监', '少年', '执裁', '民一', '民二', '民三', '民四', '民五', '破产', '行政', '速裁']
+  if (COURT_TRIBUNALS.includes(trimmed)) {
+    return trimmed + '庭'
+  }
+  if (trimmed === '审管') return '审管办'
+  return trimmed
+}
+
 export const MODULES = [
   { key: 'assets', label: '设备资产', icon: 'Monitor' },
   { key: 'people', label: '组织架构', icon: 'Users' },
   { key: 'ip', label: 'IPAM/IP', icon: 'Network' },
   { key: 'operations', label: '工单与统计', icon: 'ChartNoAxesCombined' },
-  { key: 'config', label: '配置中心', icon: 'Settings2' },
 ]
 
 const SEARCH_TARGETS = {
@@ -112,11 +122,12 @@ function canonicalInfrastructureType(value = '') {
 export function infrastructureTypeFilterOptions(categories = [], deviceTypes = []) {
   const options = []
   const coveredTypes = new Set()
+  const actualTypes = new Set(deviceTypes.map((value) => canonicalInfrastructureType(value).toLocaleLowerCase()))
   categories.forEach((category) => {
     const type = canonicalInfrastructureType(category.name)
     if (!type) return
     coveredTypes.add(type.toLocaleLowerCase())
-    options.push({ value: `category:${category.id}|type:${encodeURIComponent(type)}`, label: category.name })
+    options.push({ value: actualTypes.has(type.toLocaleLowerCase()) ? `type:${encodeURIComponent(type)}` : `category:${category.id}`, label: category.name })
   })
   deviceTypes.forEach((rawType) => {
     const type = canonicalInfrastructureType(rawType)
@@ -125,17 +136,22 @@ export function infrastructureTypeFilterOptions(categories = [], deviceTypes = [
     coveredTypes.add(key)
     options.push({ value: `type:${encodeURIComponent(type)}`, label: INFRASTRUCTURE_TYPE_LABELS[type] || rawType })
   })
+  options.push({ value: 'category:-1', label: '未分类' })
   return options
 }
 
 export function infrastructureListFilterParams(filters = {}) {
   const { type_filter: typeFilter = '', ...params } = filters
+  let selectedCategory = false
   String(typeFilter).split('|').forEach((part) => {
     if (part.startsWith('category:')) {
       const categoryID = Number(part.slice('category:'.length))
-      if (categoryID > 0) params.category_id = categoryID
+      if (Number.isInteger(categoryID) && categoryID !== 0) {
+        params.category_id = categoryID
+        selectedCategory = true
+      }
     }
-    if (part.startsWith('type:')) {
+    if (!selectedCategory && part.startsWith('type:')) {
       const deviceType = decodeURIComponent(part.slice('type:'.length))
       if (deviceType) params.device_type = deviceType
     }

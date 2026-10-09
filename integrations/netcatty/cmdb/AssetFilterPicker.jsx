@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ListFilter } from 'lucide-react'
+import { ChevronDown, ChevronUp, ListFilter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { vaultHeaderIconButtonClass } from '@/components/vault/VaultPageHeader'
@@ -21,8 +21,11 @@ export function useAssetFilterSelection(page, items, defaults, setFilters, onRem
   return { visible, toggle }
 }
 
-export default function AssetFilterPicker({ items, visible, onToggle }) {
-  return <Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className={vaultHeaderIconButtonClass} aria-label="选择筛选项" title={`筛选项（已显示 ${visible.length}/${items.length}）`}><ListFilter size={16} /></Button></PopoverTrigger>
-    <PopoverContent align="end" className="w-44 p-1.5"><div className="max-h-72 overflow-y-auto">{items.map((item) => <label key={item.key} className="flex min-h-8 cursor-pointer items-center gap-2 rounded px-2 text-xs hover:bg-muted"><input type="checkbox" checked={visible.includes(item.key)} onChange={() => onToggle(item.key)} />{item.label}</label>)}</div></PopoverContent>
-  </Popover>
+export default function AssetFilterPicker({ items, visible, onToggle, expanded = true, onExpandedChange }) {
+  return <>
+    <Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className={vaultHeaderIconButtonClass} aria-label="选择筛选项" title={`筛选项（已显示 ${visible.length}/${items.length}）`}><ListFilter size={16} /></Button></PopoverTrigger>
+      <PopoverContent align="end" className="w-44 p-1.5"><div className="max-h-72 overflow-y-auto">{items.map((item) => <label key={item.key} className="flex min-h-8 cursor-pointer items-center gap-2 rounded px-2 text-xs hover:bg-muted"><input type="checkbox" checked={visible.includes(item.key)} onChange={() => { onToggle(item.key); onExpandedChange?.(true) }} />{item.label}</label>)}</div></PopoverContent>
+    </Popover>
+    {onExpandedChange ? <Button type="button" variant="ghost" size="icon" className={vaultHeaderIconButtonClass} aria-label={expanded ? '收起筛选栏' : '展开筛选栏'} title={expanded ? '收起筛选栏（保留条件）' : '展开筛选栏'} aria-expanded={expanded} onClick={() => onExpandedChange(!expanded)}>{expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button> : null}
+  </>
 }

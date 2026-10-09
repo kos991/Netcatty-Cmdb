@@ -1,26 +1,45 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Cloud, DatabaseBackup, Download, FolderOpen, FolderTree, RefreshCw, Save, ShieldCheck } from 'lucide-react'
+import { Cloud, DatabaseBackup, Download, FolderOpen, HardDrive, ListChecks, Network, RefreshCw, Save, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { VaultPageHeader } from '@/components/vault/VaultPageHeader'
 import {
-  CMDB_CLOUD_SYNC_REQUEST_EVENT,
+  CMDB_CLOUD_SYNC_STORAGE_KEY,
   CMDB_CLOUD_SYNC_SETTINGS_EVENT,
   readCmdbCloudSyncSettings,
+  requestCmdbCloudSync,
   writeCmdbCloudSyncSettings,
 } from '../../application/CmdbCloudSync'
 import { api } from './api'
-import { allPages, directoryChanged, useAction, useQuery } from './hooks'
+import { allPages, directoryChanged, useAction, useDirectory, useQuery } from './hooks'
 import { ErrorBanner, Field, SelectControl } from './ui'
 import Catalog from './Catalog'
 import Taxonomy from './Taxonomy'
 
-const GROUPS = [['taxonomy', '分类与分组'], ['models', '型号库'], ['network', '网络类型'], ['work', '工单配置'], ['templates', '导入模板'], ['project', '项目设置']]
 const WORK_TABS = [['rule', '编号规则'], ['work-order-categories', '工单类别'], ['work-order-types', '运维类型'], ['work-order-priorities', '优先级']]
 const BASIC = [{ key: 'name', label: '名称', required: true }, { key: 'remark', label: '说明', type: 'textarea' }, { key: 'sort_order', label: '排序', type: 'number', min: 0 }]
 const RULE_DEFAULTS = { name: 'GD', vendor: '-', version: 'YYYYMMDD', remark: '每日', sort_order: 4 }
+const loadNetworkTypes = async () => (await api.config('network-types')).list || []
+const loadModels = () => allPages(api.models)
+const loadWorkOrderRule = () => api.config('work-order-rule')
+
+function SettingsRow({ title, summary, onEdit, section }) {
+  return <section data-section={section} className="flex min-h-14 min-w-0 items-center gap-4 border-b border-border/70 px-5 py-2.5">
+    <span className="w-40 shrink-0 text-xs font-medium max-[650px]:w-28">{title}</span>
+    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={summary}>{summary}</span>
+    <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-xs" onClick={onEdit}>编辑</Button>
+  </section>
+}
+
+function entrySummary(entries, renderItem) {
+  if (!entries?.length) return '暂无配置'
+  const names = entries.slice(0, 3).map(renderItem).join('、')
+  return entries.length > 3 ? `${names} 等 ${entries.length} 项` : names
+}
 
 const specifications = Object.fromEntries(WORK_TABS.filter(([key]) => key !== 'rule').map(([kind, title]) => [kind, {
   title,
@@ -28,10 +47,6 @@ const specifications = Object.fromEntries(WORK_TABS.filter(([key]) => key !== 'r
   save: async (values, original) => original.id ? api.updateConfig(kind, original.id, values) : api.createConfig(kind, values),
   remove: (row) => api.deleteConfig(kind, row.id),
 }]))
-
-function TabButton({ active, onClick, children }) {
-  return <button type="button" onClick={onClick} className={`h-full shrink-0 whitespace-nowrap border-b-2 px-4 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${active ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{children}</button>
-}
 
 function ConfigCatalog({ kind }) {
   const spec = specifications[kind]
@@ -48,14 +63,13 @@ function TaxonomySettings() {
   const [open, setOpen] = useState(false)
   const [selectedKind, setSelectedKind] = useState('terminal-categories')
   const load = React.useCallback(async () => {
-    const kinds = [['terminal-categories', '终端资产'], ['infrastructure-categories', '基础设施'], ['application-categories', '业务系统'], ['groups', '资产分组']]
-    return Promise.all(kinds.map(async ([kind, label]) => ({ kind, label, count: (await api.taxonomy(kind)).list?.length || 0 })))
+    const kinds = [['terminal-categories', '终端设备类型'], ['infrastructure-categories', '基础设施设备类型'], ['application-categories', '业务系统类型']]
+    return Promise.all(kinds.map(async ([kind, label]) => ({ kind, label, entries: (await api.taxonomy(kind)).list || [] })))
   }, [])
-  const query = useQuery(load)
-  return <div className="min-h-0 flex-1 overflow-auto">
-    <section className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-5 py-4"><div><h2 className="text-sm font-semibold">分类与分组</h2><p className="mt-1 text-xs text-muted-foreground">终端、基础设施、业务系统和资产分组共用原有目录</p></div><Button size="sm" onClick={() => setOpen(true)}><FolderTree size={14} className="mr-1.5" />管理目录</Button></section>
+  const query = useDirectory(load)
+  return <div>
     {query.error && <ErrorBanner message={query.error} onRetry={query.reload} />}
-    <div className="max-w-4xl divide-y divide-border/70">{(query.data || []).map((item) => <button key={item.kind} type="button" className="flex h-12 w-full items-center justify-between px-5 text-left text-xs hover:bg-accent/50" onClick={() => { setSelectedKind(item.kind); setOpen(true) }}><span>{item.label}</span><span className="text-muted-foreground">{item.count} 项</span></button>)}</div>
+    <div data-section="cmdb-settings-catalog">{(query.data || []).map((item) => <SettingsRow key={item.kind} title={item.label} summary={entrySummary(item.entries, (entry) => entry.name)} onEdit={() => { setSelectedKind(item.kind); setOpen(true) }} />)}</div>
     <Taxonomy key={selectedKind} initialKind={selectedKind} open={open} onOpenChange={setOpen} onChanged={() => { query.reload(); directoryChanged() }} />
   </div>
 }
@@ -70,6 +84,21 @@ function NetworkSettings() {
   return <Catalog title="网络类型" load={load} defaults={{ sort_order: 0 }} save={(values, original) => original.id ? api.updateConfig('network-types', original.id, values) : api.createConfig('network-types', values)} remove={(row) => api.deleteConfig('network-types', row.id)} fields={BASIC} columns={[{ key: 'name', label: '名称' }, { key: 'remark', label: '说明' }, { key: 'sort_order', label: '排序' }]} />
 }
 
+function SettingsCatalogSection({ title, icon: Icon, load, renderItem, children, section }) {
+  const [open, setOpen] = useState(false)
+  const query = useDirectory(load)
+  return <section data-section={section}>
+    {query.error ? <ErrorBanner message={query.error} onRetry={query.reload} /> : null}
+    <SettingsRow title={title} summary={entrySummary(query.data, renderItem)} onEdit={() => setOpen(true)} />
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="flex h-[min(680px,calc(100vh-40px))] w-[min(880px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+        <DialogHeader className="border-b border-border px-5 py-4"><DialogTitle className="flex items-center gap-2 text-sm"><Icon size={15} />编辑{title}</DialogTitle></DialogHeader>
+        {open ? children : null}
+      </DialogContent>
+    </Dialog>
+  </section>
+}
+
 function TemplateSettings() {
   const action = useAction()
   const templates = [['终端资产', api.downloadAssetTemplate], ['基础设施', api.downloadInfrastructureTemplate], ['IPAM/IP', api.downloadIPTemplate]]
@@ -77,8 +106,9 @@ function TemplateSettings() {
 }
 
 function NumberRule() {
-  const query = useQuery(() => api.config('work-order-rule'), [])
+  const query = useQuery(loadWorkOrderRule)
   const [values, setValues] = useState(RULE_DEFAULTS)
+  const [open, setOpen] = useState(false)
   const action = useAction()
   const record = query.data?.list?.[0]
   useEffect(() => { if (record) setValues({ ...RULE_DEFAULTS, ...record }) }, [record])
@@ -86,28 +116,31 @@ function NumberRule() {
   const dateValue = values.version === 'YYYY' ? String(date.getFullYear()) : values.version === 'YYYYMM' ? `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}` : values.version === 'YYYYMMDD' ? `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}` : ''
   const preview = [values.name || 'GD', dateValue, '1'.padStart(Number(values.sort_order) || 4, '0')].filter(Boolean).join(values.vendor ?? '-')
   const change = (key, value) => setValues((old) => ({ ...old, [key]: value }))
-  const save = () => action.run(async () => {
+  const save = async () => {
+    const succeeded = await action.run(async () => {
     if (!/^[A-Z0-9]{1,12}$/.test(values.name || '')) throw new Error('固定前缀只能使用 1-12 位大写字母或数字')
     if (record?.id) await api.updateConfig('work-order-rule', record.id, values)
     else await api.createConfig('work-order-rule', values)
     query.reload()
-  }, '编号规则已保存')
-  return <div className="min-h-0 flex-1 overflow-auto">
+    }, '编号规则已保存')
+    if (succeeded) setOpen(false)
+  }
+  return <div>
     {query.error && <ErrorBanner message={query.error} onRetry={query.reload} />}
-    <section className="border-b border-border/70 px-5 py-4">
-      <div className="flex items-start justify-between gap-4"><div><h2 className="text-sm font-semibold">工单编号规则</h2><p className="mt-1 text-xs text-muted-foreground">工单创建时由系统生成，表单不允许手工填写</p></div><Button size="sm" onClick={save} disabled={action.busy}><Save size={14} className="mr-1.5" />保存规则</Button></div>
-      <div className="mt-4 grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="固定前缀" required><Input className="h-9 font-mono" value={values.name} onChange={(event) => change('name', event.target.value.toUpperCase())} /></Field>
-        <Field label="分隔符"><SelectControl className="w-full" value={values.vendor} onChange={(value) => change('vendor', value)} options={[{ value: '-', label: '短横线 -' }, { value: '_', label: '下划线 _' }, { value: '', label: '无分隔符' }]} /></Field>
-        <Field label="日期段"><SelectControl className="w-full" value={values.version} onChange={(value) => change('version', value)} options={[{ value: 'YYYYMMDD', label: '年月日 YYYYMMDD' }, { value: 'YYYYMM', label: '年月 YYYYMM' }, { value: 'YYYY', label: '年 YYYY' }, { value: 'NONE', label: '无日期段' }]} /></Field>
-        <Field label="流水号位数"><SelectControl className="w-full" value={String(values.sort_order)} onChange={(value) => change('sort_order', Number(value))} options={[3, 4, 5, 6, 7, 8].map((value) => ({ value: String(value), label: String(value) }))} /></Field>
-        <Field label="重置周期"><SelectControl className="w-full" value={values.remark} onChange={(value) => change('remark', value)} options={['每日', '每月', '每年', '不重置'].map((value) => ({ value, label: value }))} /></Field>
-      </div>
-    </section>
-    <div className="grid max-w-5xl grid-cols-2 border-b border-border/70 lg:grid-cols-4">
-      {[['下一张工单编号', preview], ['当前流水', '0'.repeat(Number(values.sort_order) || 4)], ['规则状态', record ? '已启用' : '使用默认规则'], ['重置周期', values.remark]].map(([label, value]) => <div key={label} className="border-r border-border/70 px-5 py-4 last:border-r-0"><span className="text-[11px] text-muted-foreground">{label}</span><strong className="mt-1 block font-mono text-base tabular-nums">{value}</strong></div>)}
-    </div>
-    <section className="px-5 py-5"><h3 className="text-sm font-medium">规则说明</h3><p className="mt-2 max-w-3xl text-xs leading-5 text-muted-foreground">修改规则只影响保存后的新工单，历史工单编号保持不变。编号由当前项目、日期段和流水号共同生成。</p></section>
+    <SettingsRow title="编号规则" summary={`${record ? '已启用' : '默认规则'} · ${preview} · ${values.remark}`} onEdit={() => setOpen(true)} />
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="w-[min(600px,calc(100vw-32px))] max-w-none p-0 sm:max-w-none">
+        <DialogHeader className="border-b border-border px-5 py-4"><DialogTitle className="text-sm">编辑工单编号规则</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
+          <Field label="固定前缀" required><Input className="h-9 font-mono" value={values.name} onChange={(event) => change('name', event.target.value.toUpperCase())} /></Field>
+          <Field label="分隔符"><SelectControl className="w-full" value={values.vendor} onChange={(value) => change('vendor', value)} options={[{ value: '-', label: '短横线 -' }, { value: '_', label: '下划线 _' }, { value: '', label: '无分隔符' }]} /></Field>
+          <Field label="日期段"><SelectControl className="w-full" value={values.version} onChange={(value) => change('version', value)} options={[{ value: 'YYYYMMDD', label: '年月日 YYYYMMDD' }, { value: 'YYYYMM', label: '年月 YYYYMM' }, { value: 'YYYY', label: '年 YYYY' }, { value: 'NONE', label: '无日期段' }]} /></Field>
+          <Field label="流水号位数"><SelectControl className="w-full" value={String(values.sort_order)} onChange={(value) => change('sort_order', Number(value))} options={[3, 4, 5, 6, 7, 8].map((value) => ({ value: String(value), label: String(value) }))} /></Field>
+          <Field label="重置周期"><SelectControl className="w-full" value={values.remark} onChange={(value) => change('remark', value)} options={['每日', '每月', '每年', '不重置'].map((value) => ({ value, label: value }))} /></Field>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3"><span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={preview}>格式示例：{preview}</span><Button size="sm" onClick={save} disabled={action.busy}><Save size={14} className="mr-1.5" />保存规则</Button></div>
+      </DialogContent>
+    </Dialog>
   </div>
 }
 
@@ -124,7 +157,9 @@ function ProjectSettings() {
   useEffect(() => {
     const refresh = () => setSyncSettings(readCmdbCloudSyncSettings())
     window.addEventListener(CMDB_CLOUD_SYNC_SETTINGS_EVENT, refresh)
-    return () => window.removeEventListener(CMDB_CLOUD_SYNC_SETTINGS_EVENT, refresh)
+    const refreshStorage = (event) => { if (event.key === CMDB_CLOUD_SYNC_STORAGE_KEY) refresh() }
+    window.addEventListener('storage', refreshStorage)
+    return () => { window.removeEventListener(CMDB_CLOUD_SYNC_SETTINGS_EVENT, refresh); window.removeEventListener('storage', refreshStorage) }
   }, [])
   const attachmentPath = project ? `cmdb/attachments/project-${project.id}` : ''
   const updateSync = (changes) => setSyncSettings(writeCmdbCloudSyncSettings(changes))
@@ -150,7 +185,7 @@ function ProjectSettings() {
       </div>
       <div className="mt-4 flex max-w-4xl items-center justify-between gap-4">
         <div className={`flex min-w-0 items-center gap-2 text-xs ${syncSettings.lastStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}><ShieldCheck className="h-4 w-4 shrink-0" /><span className="truncate">{syncStatus}</span></div>
-        <Button type="button" size="sm" variant="outline" disabled={!syncSettings.enabled} onClick={() => window.dispatchEvent(new CustomEvent(CMDB_CLOUD_SYNC_REQUEST_EVENT))}><RefreshCw className="mr-1.5 h-3.5 w-3.5" />立即同步</Button>
+        <Button type="button" size="sm" variant="outline" disabled={!syncSettings.enabled} onClick={requestCmdbCloudSync}><RefreshCw className="mr-1.5 h-3.5 w-3.5" />立即同步</Button>
       </div>
     </section>
     <section className="border-t border-border/70 px-5 py-5" data-section="cmdb-data-maintenance">
@@ -166,20 +201,28 @@ function ProjectSettings() {
 }
 
 export default function ConfigCenter() {
-  const [group, setGroup] = useState('taxonomy')
-  const [workTab, setWorkTab] = useState('rule')
   const project = useQuery(api.projects)
   const projectLabel = useMemo(() => project.data?.list?.[0]?.name || '当前项目', [project.data])
-  let content
-  if (group === 'taxonomy') content = <TaxonomySettings />
-  else if (group === 'models') content = <ModelSettings />
-  else if (group === 'network') content = <NetworkSettings />
-  else if (group === 'templates') content = <TemplateSettings />
-  else if (group === 'project') content = <ProjectSettings />
-  else content = <div className="flex min-h-0 flex-1 flex-col"><nav className="flex h-9 shrink-0 items-stretch gap-1 overflow-x-auto border-b border-border/70 px-4" aria-label="工单配置项">{WORK_TABS.map(([key, label]) => <TabButton key={key} active={workTab === key} onClick={() => setWorkTab(key)}>{label}</TabButton>)}</nav>{workTab === 'rule' ? <NumberRule /> : <ConfigCatalog kind={workTab} />}</div>
+  const [section, setSection] = useState('assets')
   return <div className="flex h-full min-h-0 flex-col">
-    <VaultPageHeader dataSection="cmdb-config-header"><strong className="text-sm">配置中心</strong><span className="ml-1 text-[11px] text-muted-foreground">当前项目：{projectLabel}</span></VaultPageHeader>
-    <nav className="flex h-10 shrink-0 items-stretch overflow-x-auto border-b border-border/70 px-3" aria-label="配置分类">{GROUPS.map(([key, label]) => <TabButton key={key} active={group === key} onClick={() => setGroup(key)}>{label}</TabButton>)}</nav>
-    {content}
+    <VaultPageHeader dataSection="cmdb-config-header"><strong className="text-sm">Cmdb</strong><span className="ml-1 text-[11px] text-muted-foreground">当前项目：{projectLabel}</span></VaultPageHeader>
+    <Tabs value={section} onValueChange={setSection} className="shrink-0 border-b border-border/70 px-5 py-2">
+      <TabsList className="h-8 bg-muted/60">
+        <TabsTrigger value="assets" className="h-7 px-4 text-xs">资产配置</TabsTrigger>
+        <TabsTrigger value="work" className="h-7 px-4 text-xs">工单配置</TabsTrigger>
+        <TabsTrigger value="project" className="h-7 px-4 text-xs">项目与数据</TabsTrigger>
+      </TabsList>
+    </Tabs>
+    <div className="min-h-0 flex-1 overflow-y-auto" data-section="cmdb-settings-content">
+      {section === 'assets' && <div data-section="cmdb-settings-assets">
+        <TaxonomySettings />
+        <SettingsCatalogSection title="网络类型" icon={Network} section="cmdb-settings-network" load={loadNetworkTypes} renderItem={(item) => item.name}><NetworkSettings /></SettingsCatalogSection>
+        <SettingsCatalogSection title="型号库" icon={HardDrive} section="cmdb-settings-models" load={loadModels} renderItem={(item) => `${item.vendor} · ${item.model}`}><ModelSettings /></SettingsCatalogSection>
+      </div>}
+      {section === 'work' && <div data-section="cmdb-settings-work-orders"><NumberRule />
+        {WORK_TABS.filter(([kind]) => kind !== 'rule').map(([kind, label]) => <SettingsCatalogSection key={kind} title={label} icon={ListChecks} section={`cmdb-settings-${kind}`} load={specifications[kind].load} renderItem={(item) => item.name}><ConfigCatalog kind={kind} /></SettingsCatalogSection>)}
+      </div>}
+      {section === 'project' && <div data-section="cmdb-settings-project"><ProjectSettings /><TemplateSettings /></div>}
+    </div>
   </div>
 }

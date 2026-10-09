@@ -61,6 +61,9 @@ func (s *Store) CmdbAssetFilterOptionsForProject(scope ProjectScope) (map[string
 		"os_type":    "os_type",
 		"os_version": "os_version",
 		"vendor":     "vendor",
+		"model":      "model",
+		"owner":      "owner",
+		"department": "department",
 	} {
 		vals, err := query(col)
 		if err != nil {
@@ -68,6 +71,61 @@ func (s *Store) CmdbAssetFilterOptionsForProject(scope ProjectScope) (map[string
 		}
 		out[key] = vals
 	}
+	zoneRows, err := s.db.Query(`SELECT DISTINCT zone FROM (
+		SELECT IFNULL(a.net_type,'') AS zone FROM cmdb_assets a WHERE a.project_id=?
+		UNION
+		SELECT COALESCE(NULLIF(i.network_zone,''),IFNULL(i.net_zone,'')) AS zone
+		FROM cmdb_asset_interfaces i JOIN cmdb_assets a ON a.id=i.asset_id WHERE a.project_id=?
+	) WHERE TRIM(zone) <> '' ORDER BY zone`, scope.ProjectID, scope.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	networkTypes := []string{}
+	for zoneRows.Next() {
+		var value string
+		if err := zoneRows.Scan(&value); err != nil {
+			zoneRows.Close()
+			return nil, err
+		}
+		networkTypes = append(networkTypes, value)
+	}
+	if err := zoneRows.Err(); err != nil {
+		zoneRows.Close()
+		return nil, err
+	}
+	if err := zoneRows.Close(); err != nil {
+		return nil, err
+	}
+	out["net_type"] = networkTypes
+	locationRows, err := s.db.Query(`SELECT DISTINCT TRIM(location) FROM (
+		SELECT room AS location FROM cmdb_assets WHERE project_id=?
+		UNION SELECT data_center FROM cmdb_assets WHERE project_id=?
+		UNION SELECT floor FROM cmdb_assets WHERE project_id=?
+		UNION SELECT cabinet_name FROM cmdb_assets WHERE project_id=?
+		UNION SELECT area FROM cmdb_assets WHERE project_id=?
+		UNION SELECT cabinet_pos FROM cmdb_assets WHERE project_id=?
+	) WHERE TRIM(IFNULL(location,'')) <> '' ORDER BY TRIM(location)`,
+		scope.ProjectID, scope.ProjectID, scope.ProjectID, scope.ProjectID, scope.ProjectID, scope.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	locations := []string{}
+	for locationRows.Next() {
+		var value string
+		if err := locationRows.Scan(&value); err != nil {
+			locationRows.Close()
+			return nil, err
+		}
+		locations = append(locations, value)
+	}
+	if err := locationRows.Err(); err != nil {
+		locationRows.Close()
+		return nil, err
+	}
+	if err := locationRows.Close(); err != nil {
+		return nil, err
+	}
+	out["location"] = locations
 	where, args := s.buildCmdbWhereForProject(scope, CmdbAssetQuery{ResourceScope: "infrastructure"})
 	rows, err := s.db.Query(`SELECT DISTINCT IFNULL(a.device_type,'') FROM cmdb_assets a`+where+`
 		AND IFNULL(a.device_type,'') <> '' ORDER BY a.device_type`, args...)
