@@ -64,13 +64,22 @@ func (s *Store) BuildAttachmentLocalPath(contentHash string) (string, error) {
 }
 
 func (s *Store) stageWorkOrderAttachmentDirectory(scope ProjectScope, workOrderID int64) (string, string, error) {
-	root, err := s.AttachmentRoot()
+	root, err := s.AttachmentRootForProject(scope)
 	if err != nil {
 		return "", "", err
 	}
-	original := filepath.Join(root, fmt.Sprintf("project-%d", scope.ProjectID), fmt.Sprintf("work-order-%d", workOrderID))
+	original := attachmentWorkOrderDirectory(root, workOrderID)
 	if _, err := os.Stat(original); os.IsNotExist(err) {
-		return "", "", nil
+		legacyRoot, rootErr := s.AttachmentRoot()
+		if rootErr != nil {
+			return "", "", rootErr
+		}
+		original = filepath.Join(legacyRoot, fmt.Sprintf("project-%d", scope.ProjectID), fmt.Sprintf("work-order-%d", workOrderID))
+		if _, legacyErr := os.Stat(original); os.IsNotExist(legacyErr) {
+			return "", "", nil
+		} else if legacyErr != nil {
+			return "", "", legacyErr
+		}
 	} else if err != nil {
 		return "", "", err
 	}
@@ -103,12 +112,12 @@ func (s *Store) SaveWorkOrderAttachmentForProject(scope ProjectScope, workOrderI
 	if fileName == "" || fileName == "." {
 		return nil, errors.New("附件名称不能为空")
 	}
-	root, err := s.AttachmentRoot()
+	root, err := s.AttachmentRootForProject(scope)
 	if err != nil {
 		return nil, err
 	}
 
-	dir := filepath.Join(root, fmt.Sprintf("project-%d", scope.ProjectID), fmt.Sprintf("work-order-%d", workOrderID))
+	dir := attachmentWorkOrderDirectory(root, workOrderID)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
@@ -137,7 +146,7 @@ func (s *Store) SaveWorkOrderAttachmentForProject(scope ProjectScope, workOrderI
 	s3Key := BuildAttachmentS3Key(contentHash)
 
 	// 2. 将数据同步镜像/硬链接到全局 CAS 路径（秒传去重与 S3 映射）
-	casPath, err := s.BuildAttachmentLocalPath(contentHash)
+	casPath, err := s.BuildAttachmentLocalPathForProject(scope, contentHash)
 	if err == nil {
 		if err := os.MkdirAll(filepath.Dir(casPath), 0o700); err == nil {
 			if _, statErr := os.Stat(casPath); statErr != nil {
@@ -199,26 +208,39 @@ func copyFileAtomic(src, dst string) error {
 }
 
 func (s *Store) resolveAttachmentPath(item *WorkOrderAttachment) (string, error) {
-	root, err := s.AttachmentRoot()
+	scope := ProjectScope{ProjectID: item.ProjectID}
+	root, err := s.AttachmentRootForProject(scope)
 	if err != nil {
 		return "", err
 	}
-	// 优先工单私有路径
-	legacyPath := filepath.Join(root, fmt.Sprintf("project-%d", item.ProjectID), fmt.Sprintf("work-order-%d", item.WorkOrderID), item.StoredName)
-	if _, statErr := os.Stat(legacyPath); statErr == nil {
-		return legacyPath, nil
+	privatePath := filepath.Join(attachmentWorkOrderDirectory(root, item.WorkOrderID), item.StoredName)
+	if _, statErr := os.Stat(privatePath); statErr == nil {
+		return privatePath, nil
 	}
-	// 备选 CAS 路径
 	if item.ContentHash != "" {
-		p, err := s.BuildAttachmentLocalPath(item.ContentHash)
-		if err == nil {
-			if _, statErr := os.Stat(p); statErr == nil {
-				return p, nil
-			}
+		casPath := attachmentCASPath(root, item.ContentHash)
+		if _, statErr := os.Stat(casPath); statErr == nil {
+			return casPath, nil
 		}
-		return p, nil
 	}
-	return legacyPath, nil
+	legacyRoot, err := s.AttachmentRoot()
+	if err != nil {
+		return "", err
+	}
+	legacyPrivatePath := filepath.Join(legacyRoot, fmt.Sprintf("project-%d", item.ProjectID), fmt.Sprintf("work-order-%d", item.WorkOrderID), item.StoredName)
+	if _, statErr := os.Stat(legacyPrivatePath); statErr == nil {
+		return legacyPrivatePath, nil
+	}
+	if item.ContentHash != "" {
+		legacyCASPath, pathErr := s.BuildAttachmentLocalPath(item.ContentHash)
+		if pathErr == nil {
+			if _, statErr := os.Stat(legacyCASPath); statErr == nil {
+				return legacyCASPath, nil
+			}
+			return attachmentCASPath(root, item.ContentHash), nil
+		}
+	}
+	return privatePath, nil
 }
 
 func (s *Store) ListWorkOrderAttachmentsForProject(scope ProjectScope, workOrderID int64) ([]WorkOrderAttachment, error) {
@@ -232,7 +254,6 @@ func (s *Store) ListWorkOrderAttachmentsForProject(scope ProjectScope, workOrder
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	list := make([]WorkOrderAttachment, 0)
 	for rows.Next() {
@@ -242,12 +263,22 @@ func (s *Store) ListWorkOrderAttachmentsForProject(scope ProjectScope, workOrder
 			&item.ContentHash, &item.S3Key, &item.S3Status,
 			&item.SizeBytes, &item.ContentType, &item.CreatedAt,
 		); err != nil {
+			_ = rows.Close()
 			return nil, err
 		}
-		item.StoredPath, _ = s.resolveAttachmentPath(&item)
 		list = append(list, item)
 	}
-	return list, rows.Err()
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for index := range list {
+		list[index].StoredPath, _ = s.resolveAttachmentPath(&list[index])
+	}
+	return list, nil
 }
 
 func (s *Store) GetWorkOrderAttachmentForProject(scope ProjectScope, workOrderID, attachmentID int64) (*WorkOrderAttachment, error) {
@@ -332,10 +363,17 @@ func (s *Store) DeleteWorkOrderAttachmentForProject(scope ProjectScope, workOrde
 	// 清理全局 CAS 文件（若无其他工单引用）
 	if item.ContentHash != "" {
 		var remainingRefs int
-		_ = s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_work_order_attachments WHERE content_hash=?`, item.ContentHash).Scan(&remainingRefs)
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_work_order_attachments WHERE project_id=? AND content_hash=?`, scope.ProjectID, item.ContentHash).Scan(&remainingRefs)
 		if remainingRefs == 0 {
-			if casPath, err := s.BuildAttachmentLocalPath(item.ContentHash); err == nil {
+			if casPath, err := s.BuildAttachmentLocalPathForProject(scope, item.ContentHash); err == nil {
 				_ = os.Remove(casPath)
+			}
+		}
+		var legacyRefs int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM cmdb_work_order_attachments WHERE content_hash=?`, item.ContentHash).Scan(&legacyRefs)
+		if legacyRefs == 0 {
+			if legacyCASPath, err := s.BuildAttachmentLocalPath(item.ContentHash); err == nil {
+				_ = os.Remove(legacyCASPath)
 			}
 		}
 	}
