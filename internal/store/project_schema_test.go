@@ -168,6 +168,32 @@ func TestProjectMigrationAddsSyncColumnsToEveryBusinessTable(t *testing.T) {
 	}
 }
 
+func TestProjectMigrationAddsAttachmentStorageAndEncryptionColumns(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "attachment-columns.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	projectColumns, err := getTableColumns(s.db, "cmdb_projects")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !projectColumns["attachment_root"] {
+		t.Fatal("cmdb_projects 缺少 attachment_root")
+	}
+
+	attachmentColumns, err := getTableColumns(s.db, "cmdb_work_order_attachments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []string{"cloud_object_id", "encryption_version", "wrapped_key", "wrapped_key_iv", "data_iv"} {
+		if !attachmentColumns[column] {
+			t.Fatalf("cmdb_work_order_attachments 缺少 %s", column)
+		}
+	}
+}
+
 func TestProjectMigrationAssignsMetadataToNewRows(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "new-rows.db"))
 	if err != nil {

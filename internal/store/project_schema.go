@@ -15,14 +15,15 @@ const (
 )
 
 type CmdbProject struct {
-	ID        int64  `json:"id"`
-	SyncID    string `json:"sync_id"`
-	Code      string `json:"code"`
-	Name      string `json:"name"`
-	Revision  int64  `json:"revision"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-	DeletedAt string `json:"deleted_at"`
+	ID             int64  `json:"id"`
+	SyncID         string `json:"sync_id"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	AttachmentRoot string `json:"attachment_root"`
+	Revision       int64  `json:"revision"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+	DeletedAt      string `json:"deleted_at"`
 }
 
 var projectScopedTables = []string{
@@ -96,6 +97,11 @@ func MigrateProjectSchema(db *sql.DB) error {
 	if _, err := tx.Exec(projectSchema); err != nil {
 		return fmt.Errorf("create project schema: %w", err)
 	}
+	if err := addMissingColumns(tx, "cmdb_projects", map[string]string{
+		"attachment_root": "TEXT NOT NULL DEFAULT ''",
+	}); err != nil {
+		return fmt.Errorf("add attachment storage column to cmdb_projects: %w", err)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	var projectID int64
 	err = tx.QueryRow(`SELECT id FROM cmdb_projects WHERE code = ? AND deleted_at IS NULL`, DefaultProjectCode).Scan(&projectID)
@@ -151,9 +157,14 @@ func MigrateProjectSchema(db *sql.DB) error {
 		}
 	}
 	attachmentColumns := map[string]string{
-		"content_hash": "TEXT NOT NULL DEFAULT ''",
-		"s3_key":       "TEXT NOT NULL DEFAULT ''",
-		"s3_status":    "TEXT NOT NULL DEFAULT 'pending'",
+		"content_hash":       "TEXT NOT NULL DEFAULT ''",
+		"s3_key":             "TEXT NOT NULL DEFAULT ''",
+		"s3_status":          "TEXT NOT NULL DEFAULT 'pending'",
+		"cloud_object_id":    "TEXT NOT NULL DEFAULT ''",
+		"encryption_version": "INTEGER NOT NULL DEFAULT 0",
+		"wrapped_key":        "TEXT NOT NULL DEFAULT ''",
+		"wrapped_key_iv":     "TEXT NOT NULL DEFAULT ''",
+		"data_iv":            "TEXT NOT NULL DEFAULT ''",
 	}
 	if err := addMissingColumns(tx, "cmdb_work_order_attachments", attachmentColumns); err != nil {
 		return fmt.Errorf("add CAS columns to cmdb_work_order_attachments: %w", err)

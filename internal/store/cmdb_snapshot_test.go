@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -48,6 +49,9 @@ func TestCmdbSnapshotHashMatchesNetcattyGoldenValue(t *testing.T) {
 
 func TestCmdbSnapshotIsStableAndOmitsLocalIDsAndPrivateFields(t *testing.T) {
 	st, scope := openSnapshotTestStore(t)
+	if err := st.UpdateProjectAttachmentRoot(scope.ProjectID, `D:\local-only\attachments`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := st.db.Exec(`INSERT INTO assets(project_id,asset_code,device_type,user_name,ip,status) VALUES(?,?,?,?,?,?)`,
 		scope.ProjectID, "PC-001", "台式电脑", "张三", "10.20.30.8", "在用"); err != nil {
 		t.Fatal(err)
@@ -92,6 +96,12 @@ func TestCmdbSnapshotIsStableAndOmitsLocalIDsAndPrivateFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	collections := document["collections"].(map[string]any)
+	if _, exists := collections["cmdb_projects"]; exists {
+		t.Fatal("本机项目配置不得进入 Cmdb 同步集合")
+	}
+	if strings.Contains(string(encoded), "attachment_root") || strings.Contains(string(encoded), `D:\\local-only\\attachments`) {
+		t.Fatal("本机附件目录不得进入 Cmdb 同步快照")
+	}
 	assets := collections["assets"].([]any)
 	asset := assets[0].(map[string]any)
 	if _, exists := asset["id"]; exists {
