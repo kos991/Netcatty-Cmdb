@@ -48,6 +48,17 @@ export async function exportFile(path, suggestedName) {
   return bridge.cmdbExportFile({ path, suggestedName })
 }
 
+export async function selectAttachmentDirectory() {
+  const bridge = resolveBridge()
+  if (typeof bridge?.cmdbSelectAttachmentDirectory !== 'function') {
+    throw new Error('Cmdb 原生目录选择通道不可用')
+  }
+  const result = await bridge.cmdbSelectAttachmentDirectory()
+  if (result?.cancelled) return ''
+  if (!result?.directoryPath) throw new Error('未返回有效的附件目录')
+  return result.directoryPath
+}
+
 export async function uploadFile(path, file) {
   const bridge = resolveBridge()
   if (typeof bridge?.cmdbUploadFile !== 'function') {

@@ -17,6 +17,10 @@ export const api = {
   meta: () => req('/api/meta'),
   projects: () => req('/api/cmdb/projects'),
   updateProject: (id, body) => put(`/api/cmdb/projects/${id}`, body),
+  attachmentStorage: () => req('/api/cmdb/attachment-storage'),
+  preflightAttachmentStorage: (targetRoot = '') => post('/api/cmdb/attachment-storage/preflight', { target_root: targetRoot }),
+  migrateAttachmentStorage: (targetRoot = '') => post('/api/cmdb/attachment-storage/migrate', { target_root: targetRoot }),
+  restoreDefaultAttachmentStorage: () => post('/api/cmdb/attachment-storage/restore-default'),
   search: (q, limit = 50) => req(`/api/search?${toQuery({ q, limit })}`),
 
   assets: (params = {}) => req(`/api/assets?${toQuery(params)}`),

@@ -16,6 +16,8 @@ import {
 } from '../../application/CmdbCloudSync'
 import { api } from './api'
 import { allPages, directoryChanged, useAction, useDirectory, useQuery } from './hooks'
+import { selectAttachmentDirectory } from './transport'
+import { buildAttachmentMigrationSummary, buildAttachmentStorageSummary } from './attachmentStorageModel'
 import { ErrorBanner, Field, SelectControl } from './ui'
 import Catalog from './Catalog'
 import Taxonomy from './Taxonomy'
@@ -146,6 +148,7 @@ function NumberRule() {
 
 function ProjectSettings() {
   const query = useQuery(api.projects)
+  const attachmentQuery = useQuery(api.attachmentStorage)
   const action = useAction()
   const project = query.data?.list?.[0]
   const [values, setValues] = useState({ name: '', code: '' })
@@ -153,6 +156,7 @@ function ProjectSettings() {
   const [confirmEnable, setConfirmEnable] = useState(false)
   const [confirmLegacySync, setConfirmLegacySync] = useState(false)
   const [legacySyncResult, setLegacySyncResult] = useState(null)
+  const [migration, setMigration] = useState(null)
   useEffect(() => { if (project) setValues({ name: project.name || '', code: project.code || '' }) }, [project])
   useEffect(() => {
     const refresh = () => setSyncSettings(readCmdbCloudSyncSettings())
@@ -161,19 +165,42 @@ function ProjectSettings() {
     window.addEventListener('storage', refreshStorage)
     return () => { window.removeEventListener(CMDB_CLOUD_SYNC_SETTINGS_EVENT, refresh); window.removeEventListener('storage', refreshStorage) }
   }, [])
-  const attachmentPath = project ? `cmdb/attachments/project-${project.id}` : ''
+  const attachmentSummary = buildAttachmentStorageSummary(attachmentQuery.data)
   const updateSync = (changes) => setSyncSettings(writeCmdbCloudSyncSettings(changes))
   const syncStatus = syncSettings.lastStatus === 'error'
     ? `失败：${syncSettings.lastError || '未知错误'}`
     : syncSettings.lastSyncedAt
       ? `成功 · ${new Date(syncSettings.lastSyncedAt).toLocaleString()}`
       : '尚未同步'
+  const prepareMigration = async (targetRoot, restoreDefault = false) => {
+    const succeeded = await action.run(async () => {
+      const preview = await api.preflightAttachmentStorage(targetRoot)
+      setMigration({ preview, restoreDefault })
+    })
+    return succeeded
+  }
+  const chooseAttachmentDirectory = () => action.run(async () => {
+    const target = await selectAttachmentDirectory()
+    if (!target) return
+    const preview = await api.preflightAttachmentStorage(target)
+    setMigration({ preview, restoreDefault: false })
+  })
+  const confirmMigration = async () => {
+    const succeeded = await action.run(async () => {
+      if (migration?.restoreDefault) await api.restoreDefaultAttachmentStorage()
+      else await api.migrateAttachmentStorage(migration?.preview?.target_root || '')
+      await attachmentQuery.reload()
+      setMigration(null)
+    }, '附件目录已更新')
+    if (!succeeded) return
+  }
   return <div className="min-h-0 flex-1 overflow-auto">
     {query.error && <ErrorBanner message={query.error} onRetry={query.reload} />}
+    {attachmentQuery.error && <ErrorBanner message={attachmentQuery.error} onRetry={attachmentQuery.reload} />}
     <section className="px-5 py-4"><div className="flex items-start justify-between gap-4"><div><h2 className="text-sm font-semibold">项目设置</h2><p className="mt-1 text-xs text-muted-foreground">维护当前项目资料和附件存储位置</p></div><Button size="sm" disabled={!project || action.busy} onClick={() => action.run(async () => { await api.updateProject(project.id, values); query.reload() }, '项目设置已保存')}><Save size={14} className="mr-1.5" />保存设置</Button></div>
       <div className="mt-5 grid max-w-4xl grid-cols-2 gap-4"><Field label="项目名称" required><Input className="h-9" value={values.name} onChange={(event) => setValues((old) => ({ ...old, name: event.target.value }))} /></Field><Field label="项目编码" required><Input className="h-9 font-mono" value={values.code} onChange={(event) => setValues((old) => ({ ...old, code: event.target.value }))} /></Field></div>
     </section>
-    <section className="border-t border-border/70 px-5 py-5"><div className="flex items-center gap-2"><FolderOpen size={16} /><h3 className="text-sm font-medium">附件存储</h3></div><p className="mt-1 text-xs text-muted-foreground">工单附件按项目独立保存</p><div className="mt-4 max-w-4xl"><Field label="附件管理路径"><Input className="h-9 font-mono" value={attachmentPath} readOnly /></Field><p className="mt-2 text-[11px] text-muted-foreground">相对于当前数据库所在目录；工单文件位于下级 work-order-ID 目录。附件文件不参与云同步。</p></div></section>
+    <section className="border-t border-border/70 px-5 py-5" data-section="cmdb-attachment-storage"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2"><FolderOpen size={16} /><h3 className="text-sm font-medium">附件存储</h3></div><p className="mt-1 text-xs text-muted-foreground">工单附件按当前项目独立保存；目录切换前会先校验文件数量与大小</p></div><div className="flex shrink-0 items-center gap-2"><Button type="button" size="sm" variant="outline" disabled={!project || action.busy || attachmentQuery.loading} onClick={chooseAttachmentDirectory}>选择目录</Button><Button type="button" size="sm" variant="ghost" disabled={!project || action.busy || attachmentQuery.loading || attachmentQuery.data?.uses_default} onClick={() => prepareMigration('', true)}>恢复默认</Button></div></div><div className="mt-4 max-w-4xl"><Field label="附件管理路径"><Input className="h-9 font-mono" value={attachmentSummary.path} readOnly /></Field><div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground"><span>{attachmentSummary.modeLabel}</span><span className={attachmentQuery.data?.writable === false ? 'text-destructive' : ''}>{attachmentSummary.writableLabel}</span><span>{attachmentSummary.countLabel}</span><span>{attachmentSummary.sizeLabel}</span></div><p className="mt-2 text-[11px] text-muted-foreground">本地目录保存明文附件；启用 Netcatty 云同步且已解锁时，附件会加密后补传，未连接云端时仍可本地使用。</p></div></section>
     <section className="border-t border-border/70 px-5 py-5" data-section="cmdb-cloud-sync-settings">
       <div className="flex max-w-4xl items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3"><Cloud className="mt-0.5 h-4 w-4 shrink-0" /><div><h3 className="text-sm font-medium">Netcatty 云同步</h3><p className="mt-1 text-xs text-muted-foreground">Cmdb 规范快照随现有加密同步载荷传输</p></div></div>
@@ -195,7 +222,8 @@ function ProjectSettings() {
       </div>
       {legacySyncResult ? <p className="mt-4 max-w-4xl border-y border-border/60 py-3 text-xs text-muted-foreground">上次执行结果：新增组织 {legacySyncResult.org_inserted || 0}，新增终端资产 {legacySyncResult.asset_inserted || 0}，新增基础设施 {legacySyncResult.server_inserted || 0}，跳过已有记录 {legacySyncResult.skipped || 0}。</p> : null}
     </section>
-    <ConfirmDialog open={confirmEnable} onOpenChange={setConfirmEnable} title="启用 Cmdb 云同步" message="Cmdb 业务数据将进入 Netcatty 现有的端到端加密同步载荷。附件文件、邮箱、密码和密钥不会上传。" confirmLabel="启用" onConfirm={() => { updateSync({ enabled: true }); setConfirmEnable(false) }} />
+    <ConfirmDialog open={confirmEnable} onOpenChange={setConfirmEnable} title="启用 Cmdb 云同步" message="Cmdb 业务数据进入 Netcatty 现有的端到端加密同步载荷；工单附件仅在 Netcatty 已解锁且 S3 可用时加密上传，密码和密钥不会写入 Cmdb。" confirmLabel="启用" onConfirm={() => { updateSync({ enabled: true }); setConfirmEnable(false) }} />
+    <ConfirmDialog open={!!migration} onOpenChange={(open) => { if (!open && !action.busy) setMigration(null) }} title={migration?.restoreDefault ? '恢复默认附件目录' : '迁移附件目录'} message={migration ? (() => { const summary = buildAttachmentMigrationSummary(migration.preview); return `源目录：${summary.source}\n目标目录：${summary.target}\n将处理 ${summary.countLabel}，共 ${summary.sizeLabel}。迁移失败时会保留原目录。` })() : ''} confirmLabel="确认迁移" busy={action.busy} onConfirm={confirmMigration} />
     <ConfirmDialog open={confirmLegacySync} onOpenChange={setConfirmLegacySync} title="同步历史台账" message="确认把当前项目的旧终端资产与基础设施台账写入 Cmdb？该操作按来源记录幂等执行，已同步记录会跳过。" confirmLabel="开始同步" busy={action.busy} onConfirm={async () => { const succeeded = await action.run(async () => { const result = await api.syncInfrastructure(); setLegacySyncResult(result); directoryChanged() }, '历史台账同步完成'); if (succeeded) setConfirmLegacySync(false) }} />
   </div>
 }
