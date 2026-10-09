@@ -109,6 +109,46 @@ func TestProjectScopeProjectCRUDAndValidation(t *testing.T) {
 	}
 }
 
+func TestDefaultProjectUsesOnlyActiveProjectAfterCodeChange(t *testing.T) {
+	s := newCmdbTestStore(t)
+	project, err := s.DefaultProject()
+	if err != nil {
+		t.Fatalf("读取初始默认项目: %v", err)
+	}
+	project.Code = "CN2026-ZJFY"
+	project.Name = "法院"
+	if err := s.UpdateCmdbProject(project); err != nil {
+		t.Fatalf("更新项目资料: %v", err)
+	}
+
+	resolved, err := s.DefaultProject()
+	if err != nil {
+		t.Fatalf("唯一项目修改编码后仍应作为默认项目: %v", err)
+	}
+	if resolved.ID != project.ID || resolved.Code != "CN2026-ZJFY" || resolved.Name != "法院" {
+		t.Fatalf("默认项目解析错误: %+v", resolved)
+	}
+}
+
+func TestDefaultProjectDoesNotGuessWhenMultipleActiveProjectsExist(t *testing.T) {
+	s := newCmdbTestStore(t)
+	project, err := s.DefaultProject()
+	if err != nil {
+		t.Fatalf("读取初始默认项目: %v", err)
+	}
+	project.Code = "CN2026-ZJFY"
+	if err := s.UpdateCmdbProject(project); err != nil {
+		t.Fatalf("更新项目编码: %v", err)
+	}
+	if _, err := s.CreateCmdbProject(&CmdbProject{Code: "SECOND", Name: "第二项目"}); err != nil {
+		t.Fatalf("创建第二项目: %v", err)
+	}
+
+	if _, err := s.DefaultProject(); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("多项目且无默认编码时不得猜测项目，err=%v", err)
+	}
+}
+
 // 此测试会在旧资产操作写穿其他项目同 source_id 的 CMDB 记录时失败。
 func TestProjectScopeLegacyWriteThroughDoesNotCrossProject(t *testing.T) {
 	tests := []struct {

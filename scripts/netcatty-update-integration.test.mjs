@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  patchSettingsApplicationTab,
   patchSettingsSystemTab,
   patchStartupUpdateAction,
   patchUpdateRepositoryConfig,
@@ -23,6 +24,18 @@ publish: [{ provider: 'github', owner: 'binaricat', repo: 'Netcatty' }]
 test("装配脚本使用更新源补丁", () => {
   const prepare = readFileSync(new URL("./prepare-netcatty.mjs", import.meta.url), "utf8");
   assert.match(prepare, /patchUpdateRepositoryConfig/);
+});
+
+test("应用页显示锁定的 Netcatty 版本而不是 Cmdb 集成包版本", () => {
+  const source = `
+const REPO_URL = "https://github.com/binaricat/Netcatty";
+<span>{appInfo.version ? appInfo.version : " "}</span>
+`;
+
+  const result = patchSettingsApplicationTab(source, "1.1.83");
+
+  assert.match(result, /appInfo\.version \? "1\.1\.83" : " "/);
+  assert.doesNotMatch(result, /appInfo\.version \? appInfo\.version : " "/);
 });
 
 test("更新页面包含版本、发布日期、说明和升级按钮", () => {

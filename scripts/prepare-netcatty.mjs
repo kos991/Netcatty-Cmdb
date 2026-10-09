@@ -14,6 +14,7 @@ import {
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const integrationRoot = join(repositoryRoot, "integrations", "netcatty");
 const upstream = JSON.parse(readFileSync(join(integrationRoot, "upstream.json"), "utf8"));
+const netcattyVersion = String(upstream.release || "").replace(/^v/, "");
 const targetFlag = process.argv.indexOf("--target");
 const target = resolve(targetFlag >= 0 ? process.argv[targetFlag + 1] : "");
 
@@ -347,7 +348,7 @@ update("electron-builder.config.cjs", (source) => {
 
 update("infrastructure/services/updateService.ts", patchUpdateRepositoryConfig);
 update("electron-builder.config.cjs", patchUpdateRepositoryConfig);
-update("components/SettingsApplicationTab.tsx", patchSettingsApplicationTab);
+update("components/SettingsApplicationTab.tsx", (source) => patchSettingsApplicationTab(source, netcattyVersion));
 update("components/SettingsPage.tsx", patchSettingsPageWithCmdb);
 update("components/settings/tabs/SettingsSystemTab.tsx", patchSettingsSystemTab);
 update("application/app/useAppStartupEffects.ts", patchStartupUpdateAction);

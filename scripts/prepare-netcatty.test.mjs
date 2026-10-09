@@ -44,6 +44,7 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   let workOrders
   let configCenter
   let settingsPage
+  let settingsApplication
   let netcattyConnectionFields
   let deviceWorkspace
   let deviceImages
@@ -89,6 +90,7 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
     workOrders = readFileSync(join(fixture, 'components', 'cmdb', 'WorkOrders.jsx'), 'utf8')
     configCenter = readFileSync(join(fixture, 'components', 'cmdb', 'ConfigCenter.jsx'), 'utf8')
     settingsPage = readFileSync(join(fixture, 'components', 'SettingsPage.tsx'), 'utf8')
+    settingsApplication = readFileSync(join(fixture, 'components', 'SettingsApplicationTab.tsx'), 'utf8')
     netcattyConnectionFields = readFileSync(join(fixture, 'components', 'cmdb', 'NetcattyConnectionFields.jsx'), 'utf8')
     const deviceWorkspacePath = join(fixture, 'components', 'cmdb', 'DeviceWorkspace.jsx')
     const deviceOwnershipBarPath = join(fixture, 'components', 'cmdb', 'DeviceOwnershipBar.jsx')
@@ -253,6 +255,8 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   assert.match(infrastructure, /label: '品牌 \/ 型号'/)
   assert.match(infrastructure, /label: '操作系统'/)
   assert.match(infrastructure, /data-infrastructure-technical-cell/)
+  assert.match(infrastructure, /presentation\.secondary/)
+  assert.match(settingsApplication, /appInfo\.version \? "1\.1\.83" : " "/)
   assert.match(infrastructure, /VendorBrandValue[\s\S]{0,180}min-w-0/)
   assert.doesNotMatch(infrastructure, /VendorBrandValue[\s\S]{0,180}className="[^"]*flex-1[^"]*"/)
   assert.doesNotMatch(configCenter, /import Credentials|import Labels|kind === 'software'/)

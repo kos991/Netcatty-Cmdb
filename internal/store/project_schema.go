@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -523,11 +524,12 @@ func createProjectChangeTriggers(tx *sql.Tx, table string) error {
 func (s *Store) DefaultProject() (*CmdbProject, error) {
 	var project CmdbProject
 	var deletedAt sql.NullString
-	err := s.db.QueryRow(`
+	query := `
 		SELECT id, sync_id, code, name, revision, created_at, updated_at, deleted_at
 		FROM cmdb_projects
 		WHERE code = ? AND deleted_at IS NULL
-	`, DefaultProjectCode).Scan(
+	`
+	err := s.db.QueryRow(query, DefaultProjectCode).Scan(
 		&project.ID,
 		&project.SyncID,
 		&project.Code,
@@ -537,6 +539,23 @@ func (s *Store) DefaultProject() (*CmdbProject, error) {
 		&project.UpdatedAt,
 		&deletedAt,
 	)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = s.db.QueryRow(`
+			SELECT id, sync_id, code, name, revision, created_at, updated_at, deleted_at
+			FROM cmdb_projects
+			WHERE deleted_at IS NULL
+			  AND (SELECT COUNT(*) FROM cmdb_projects WHERE deleted_at IS NULL) = 1
+		`).Scan(
+			&project.ID,
+			&project.SyncID,
+			&project.Code,
+			&project.Name,
+			&project.Revision,
+			&project.CreatedAt,
+			&project.UpdatedAt,
+			&deletedAt,
+		)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("读取默认项目: %w", err)
 	}

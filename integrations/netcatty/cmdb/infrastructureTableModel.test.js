@@ -7,14 +7,18 @@ import {
   infrastructureNetworkZoneOptions,
 } from './infrastructureTableModel.js'
 
-test('基础设施身份展示只突出资产名称，不把资产编码当作主标识', () => {
-  assert.deepEqual(infrastructureNamePresentation({ name: '核心服务器', asset_code: 'INFRA-001' }), {
+test('基础设施身份展示以名称为主并在摘要中显示资产编码和 SN', () => {
+  assert.deepEqual(infrastructureNamePresentation({ name: '核心服务器', asset_code: 'INFRA-001', sn: 'SN-001' }), {
     name: '核心服务器',
-    secondary: '',
+    secondary: 'INFRA-001 · SN：SN-001',
+  })
+  assert.deepEqual(infrastructureNamePresentation({ name: '备用服务器', asset_code: 'INFRA-002' }), {
+    name: '备用服务器',
+    secondary: 'INFRA-002 · 未配置 SN',
   })
   assert.deepEqual(infrastructureNamePresentation({ name: '核心交换机', asset_code: '' }), {
     name: '核心交换机',
-    secondary: '',
+    secondary: '未配置编码 / SN',
   })
 })
 

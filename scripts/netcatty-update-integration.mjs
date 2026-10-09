@@ -52,10 +52,14 @@ export function patchStartupUpdateAction(source) {
   );
 }
 
-export function patchSettingsApplicationTab(source) {
+export function patchSettingsApplicationTab(source, netcattyVersion) {
   const old = `const REPO_URL = "https://github.com/binaricat/Netcatty";`;
   if (!source.includes(old)) throw new Error("应用设置仓库地址锚点不存在");
-  return source.replace(old, `const REPO_URL = "https://github.com/kos991/Netcatty-Cmdb";`);
+  const versionDisplay = `{appInfo.version ? appInfo.version : " "}`;
+  if (!source.includes(versionDisplay)) throw new Error("应用设置版本号锚点不存在");
+  return source
+    .replace(old, `const REPO_URL = "https://github.com/kos991/Netcatty-Cmdb";`)
+    .replace(versionDisplay, `{appInfo.version ? "${netcattyVersion}" : " "}`);
 }
 
 export function patchSettingsPageWithCmdb(source) {

@@ -44,7 +44,7 @@ function InfrastructureNameCell({ record }) {
   const presentation = infrastructureNamePresentation(record)
   return <div className="min-w-0">
     <Button variant="link" className="h-auto max-w-full truncate p-0 text-left text-xs font-semibold" onClick={() => record.onOpen?.()}>{presentation.name}</Button>
-    <p className="truncate font-mono text-[11px] text-muted-foreground">{record.asset_code || '未配置编码'}</p>
+    <p title={presentation.secondary} className="truncate font-mono text-[11px] text-muted-foreground">{presentation.secondary}</p>
   </div>
 }
 

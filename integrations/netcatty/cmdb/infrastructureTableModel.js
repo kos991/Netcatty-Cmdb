@@ -8,7 +8,15 @@ export function infrastructureNetworkZoneOptions(values = []) {
 }
 
 export function infrastructureNamePresentation(record = {}) {
-  return { name: clean(record.name) || `基础设施 #${record.id || ''}`.trim(), secondary: '' }
+  const assetCode = clean(record.asset_code)
+  const serialNumber = clean(record.sn || record.serial_number || record.box_sn)
+  const identity = assetCode || serialNumber
+    ? [assetCode || '未配置编码', serialNumber ? `SN：${serialNumber}` : '未配置 SN'].join(' · ')
+    : '未配置编码 / SN'
+  return {
+    name: clean(record.name) || `基础设施 #${record.id || ''}`.trim(),
+    secondary: identity,
+  }
 }
 
 function appendUnique(parts, value) {
