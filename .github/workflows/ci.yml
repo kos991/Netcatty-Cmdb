@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, ci/native-settings-test-20261009]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -25,6 +25,10 @@ jobs:
         run: node --test scripts/check-release-data.test.mjs
       - name: Test native UI data contracts
         run: node --test integrations/netcatty/cmdb/*.test.js
+      - name: Test attachment sync and encryption
+        run: |
+          node --experimental-strip-types --test integrations/netcatty/CmdbAttachmentCloudSync.test.ts
+          node --test integrations/netcatty/electron/cmdbAttachmentCloud.test.cjs
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

@@ -63,6 +63,7 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   let hasCmdbCloudSyncModule
   let hasCmdbSnapshotModule
   let hasCmdbAttachmentCloudBridge
+  let hasCmdbAttachmentCloudSyncModule
   let preloadApi
   let globalTypes
   let registerBridges
@@ -120,6 +121,7 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
     hasCmdbCloudSyncModule = existsSync(join(fixture, 'application', 'CmdbCloudSync.ts'))
     hasCmdbSnapshotModule = existsSync(join(fixture, 'domain', 'CmdbSyncSnapshot.ts'))
     hasCmdbAttachmentCloudBridge = existsSync(join(fixture, 'electron', 'bridges', 'cmdbAttachmentCloud.cjs'))
+    hasCmdbAttachmentCloudSyncModule = existsSync(join(fixture, 'application', 'CmdbAttachmentCloudSync.ts'))
     preloadApi = readFileSync(join(fixture, 'electron', 'preload', 'api.cjs'), 'utf8')
     globalTypes = readFileSync(join(fixture, 'global.d.ts'), 'utf8')
     registerBridges = readFileSync(join(fixture, 'electron', 'main', 'registerBridges.cjs'), 'utf8')
@@ -155,6 +157,7 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   assert.equal(hasCmdbCloudSyncModule, true)
   assert.equal(hasCmdbSnapshotModule, true)
   assert.equal(hasCmdbAttachmentCloudBridge, true)
+  assert.equal(hasCmdbAttachmentCloudSyncModule, true)
   assert.match(preloadApi, /cmdbSelectAttachmentDirectory/)
   assert.match(preloadApi, /cmdbSyncAttachments/)
   assert.match(preloadApi, /cmdbDownloadAttachment/)
@@ -163,6 +166,13 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   assert.match(globalTypes, /cmdbDownloadAttachment/)
   assert.match(registerBridges, /registerCmdbAttachmentCloud/)
   assert.match(registerBridges, /buildS3Client: cloudSyncBridge\.buildS3Client/)
+  assert.match(appSideEffects, /registerCmdbAttachmentCloudSyncHook/)
+  assert.match(appSideEffects, /netcatty:cmdb-cloud-sync-request/)
+  assert.match(appSideEffects, /createCmdbAttachmentCloudSync/)
+  assert.match(appSideEffects, /managerModule\.getCloudSyncManager\(\)/)
+  assert.match(appSideEffects, /getState: \(\) => manager\.getState\(\)/)
+  assert.match(appSideEffects, /cmdbSyncAttachments/)
+  assert.match(appSideEffects, /unregisterAttachmentCloudSync\?\.\(\)/)
   assert.doesNotMatch(appView, /import CmdbWorkspace/)
   assert.match(surface, /from 'lucide-react'/)
   assert.match(surface, /from '\.\.\/ui\/tooltip'/)

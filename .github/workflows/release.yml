@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [ci/native-settings-test-20261009]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -86,7 +87,7 @@ jobs:
           node scripts/fetch-et-binaries.cjs --host
           Pop-Location
       - name: Build Netcatty CMDB test overlay
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/ci/native-settings-test-20261009'
         shell: pwsh
         working-directory: build/netcatty
         env:
@@ -109,7 +110,7 @@ jobs:
         shell: pwsh
         run: node scripts/check-release-data.mjs build/netcatty/release
       - name: Upload test overlay
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/ci/native-settings-test-20261009'
         uses: actions/upload-artifact@v4
         with:
           name: netcatty-cmdb-windows-test-overlay

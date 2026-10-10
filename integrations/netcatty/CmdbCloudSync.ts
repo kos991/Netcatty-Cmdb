@@ -17,12 +17,35 @@ export interface CmdbCloudSyncSettings {
 export interface CmdbNativeRequest {
   path: string;
   method?: string;
+  headers?: Record<string, string>;
   body?: string;
+  suppressCloudSync?: boolean;
 }
 
 export type CmdbNativeRequester = (
   request: CmdbNativeRequest,
 ) => Promise<unknown>;
+
+export type CmdbAttachmentCloudSyncHook = () => Promise<unknown> | unknown;
+
+let attachmentCloudSyncHook: CmdbAttachmentCloudSyncHook | undefined;
+
+/**
+ * 注册附件补传钩子。钩子复用现有 Cmdb 云同步请求事件，不创建第二套定时器。
+ * 返回值用于卸载，避免设置页或测试重复注册。
+ */
+export function registerCmdbAttachmentCloudSyncHook(
+  hook: CmdbAttachmentCloudSyncHook,
+): () => void {
+  attachmentCloudSyncHook = hook;
+  return () => {
+    if (attachmentCloudSyncHook === hook) attachmentCloudSyncHook = undefined;
+  };
+}
+
+export async function runCmdbAttachmentCloudSyncHook(): Promise<unknown> {
+  return attachmentCloudSyncHook ? attachmentCloudSyncHook() : undefined;
+}
 
 const defaults: CmdbCloudSyncSettings = {
   enabled: false,
@@ -91,6 +114,24 @@ async function nativeRequest(request: CmdbNativeRequest): Promise<unknown> {
     throw new Error('Cmdb 原生请求通道不可用');
   }
   return bridge.cmdbRequest(request);
+}
+
+export async function downloadCmdbAttachmentFromCloud(attachment: Record<string, unknown>): Promise<unknown> {
+  const bridge = globalThis.window?.netcatty;
+  if (typeof bridge?.cmdbDownloadAttachment !== 'function') {
+    throw new Error('Netcatty 附件下载通道不可用');
+  }
+  const [{ getCloudSyncManager }, { downloadCmdbAttachment }] = await Promise.all([
+    import('../infrastructure/services/CloudSyncManager'),
+    import('./CmdbAttachmentCloudSync'),
+  ]);
+  const manager = getCloudSyncManager();
+  return downloadCmdbAttachment({
+    getState: () => manager.getState(),
+    request: nativeRequest,
+    bridge,
+    attachment: attachment as never,
+  });
 }
 
 export async function collectCmdbCloudSnapshot(

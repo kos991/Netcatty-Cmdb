@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { BarChart3, CheckCircle2, ChevronDown, Download, FileDown, Filter, Link2, Paperclip, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { BarChart3, CheckCircle2, ChevronDown, Cloud, CloudDownload, Download, FileDown, Filter, Link2, Paperclip, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { toast } from '@/components/ui/toast'
 import { VaultHeaderSearch, VaultPageHeader, vaultHeaderIconButtonClass, vaultHeaderSecondaryButtonClass } from '@/components/vault/VaultPageHeader'
 import { api } from './api'
+import { downloadCmdbAttachmentFromCloud } from '../../application/CmdbCloudSync'
 import { allPages, useAction, useQuery } from './hooks'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { formatLocalDateTimeInput, normalizeWorkOrderFilters } from './state'
@@ -30,7 +31,7 @@ const loadAssets = async () => {
   ])
   return [
     ...terminals.map((asset) => ({ key: `terminal:${asset.id}`, asset_type: 'terminal', asset_id: asset.id, asset_name: asset.asset_code || asset.device_type || `终端 #${asset.id}`, meta: [asset.device_type, asset.ip || asset.terminal_ip].filter(Boolean).join(' · ') })),
-    ...infrastructure.map((asset) => ({ key: `infrastructure:${asset.id}`, asset_type: 'infrastructure', asset_id: asset.id, asset_name: asset.name || asset.asset_code || `基础设施 #${asset.id}`, meta: [asset.device_type, asset.mgmt_ip].filter(Boolean).join(' · ') })),
+    ...infrastructure.map((asset) => ({ key: `infrastructure:${asset.id}`, asset_type: 'infrastructure', asset_id: asset.id, asset_name: asset.asset_code || '未配置编码', meta: [asset.name, asset.device_type, asset.mgmt_ip].filter(Boolean).join(' · ') })),
     ...applications.map((asset) => ({ key: `application:${asset.id}`, asset_type: 'application', asset_id: asset.id, asset_name: asset.app_name || `业务系统 #${asset.id}`, meta: [asset.app_type, asset.server_biz_ip].filter(Boolean).join(' · ') })),
   ]
 }
@@ -84,10 +85,17 @@ function AttachmentPanel({ workOrderId, stagedFiles = [], onAddFiles, onRemoveSt
   }, [workOrderId, refreshKey])
   const query = useQuery(loader)
   const action = useAction()
+  const downloadAttachment = (item) => action.run(async () => {
+    if (item.local_exists === false && item.s3_status === 'synced') {
+      await downloadCmdbAttachmentFromCloud(item)
+    }
+    await api.downloadWorkOrderAttachment(workOrderId, item)
+    query.reload()
+  }, '附件已下载')
   if (!workOrderId && !onAddFiles) return <div className="sm:col-span-2 rounded-md border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">保存工单后可上传附件</div>
   return <Field label="附件" className={className || 'sm:col-span-2'}><div className="rounded-md border border-border">
     <div className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-2"><span className="text-xs text-muted-foreground">{stagedFiles.length ? `待上传 ${stagedFiles.length} 个` : `${query.data?.total || 0} 个附件`} · 单个不超过 50 MiB</span>{onAddFiles ? <><input ref={fileInput} data-work-order-attachments type="file" multiple className="sr-only" onChange={(event) => { onAddFiles(Array.from(event.target.files || [])); event.target.value = '' }} /><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip size={14} className="mr-1" />选择附件</Button></> : <Button type="button" variant="outline" size="sm" disabled={action.busy} onClick={() => action.run(async () => { const result = await api.uploadWorkOrderAttachment(workOrderId); if (!result?.cancelled) query.reload() })}><Upload size={14} className="mr-1" />上传附件</Button>}</div>
-    <div className="divide-y divide-border/50">{stagedFiles.map((file) => <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center gap-2 px-3 py-2 text-xs"><Paperclip size={14} className="shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="text-[11px] text-muted-foreground">待上传</span><ActionIcon label={`移除附件 ${file.name}`} disabled={busy} onClick={() => onRemoveStagedFile(file)}><Trash2 size={14} /></ActionIcon></div>)}{(query.data?.list || []).map((item) => <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-xs"><Paperclip size={14} className="shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{item.file_name}</span><span className="text-[11px] text-muted-foreground">{Math.max(1, Math.ceil(item.size_bytes / 1024))} KiB</span><ActionIcon label="下载附件" onClick={() => api.downloadWorkOrderAttachment(workOrderId, item)}><FileDown size={14} /></ActionIcon><ActionIcon label="删除附件" danger onClick={() => action.run(async () => { await api.deleteWorkOrderAttachment(workOrderId, item.id); query.reload() }, '附件已删除')}><Trash2 size={14} /></ActionIcon></div>)}</div>
+    <div className="divide-y divide-border/50">{stagedFiles.map((file) => <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center gap-2 px-3 py-2 text-xs"><Paperclip size={14} className="shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="text-[11px] text-muted-foreground">待上传</span><ActionIcon label={`移除附件 ${file.name}`} disabled={busy} onClick={() => onRemoveStagedFile(file)}><Trash2 size={14} /></ActionIcon></div>)}{(query.data?.list || []).map((item) => { const cloudOnly = item.local_exists === false && item.s3_status === 'synced'; const statusLabel = cloudOnly ? '仅云端' : item.s3_status === 'synced' ? '已同步' : item.s3_status === 'failed' ? '同步失败' : item.s3_status === 'pending' ? '等待上传' : '本地'; return <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-xs"><Paperclip size={14} className="shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{item.file_name}</span><span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">{cloudOnly ? <CloudDownload size={12} /> : item.s3_status === 'synced' ? <Cloud size={12} /> : null}{statusLabel} · {Math.max(1, Math.ceil(item.size_bytes / 1024))} KiB</span><ActionIcon label={cloudOnly ? '从云端下载附件' : '下载附件'} disabled={action.busy || (item.local_exists === false && !cloudOnly)} onClick={() => downloadAttachment(item)}><FileDown size={14} /></ActionIcon><ActionIcon label="删除附件" danger onClick={() => action.run(async () => { await api.deleteWorkOrderAttachment(workOrderId, item.id); query.reload() }, '附件已删除')}><Trash2 size={14} /></ActionIcon></div> })}</div>
     {query.error ? <ErrorBanner message={query.error} onRetry={query.reload} /> : null}
   </div></Field>
 }

@@ -23,8 +23,8 @@ export async function requestJson(path, options = {}) {
   const bridge = resolveBridge()
   const method = options.method || 'GET'
   if (typeof bridge?.cmdbRequest === 'function') {
-    const result = await bridge.cmdbRequest({ path, method, body: options.body })
-    if (method !== 'GET' && !path.startsWith('/api/cmdb/sync/')) scheduleCmdbCloudSync()
+    const result = await bridge.cmdbRequest({ path, method, headers: options.headers, body: options.body })
+    if (method !== 'GET' && !options.suppressCloudSync && !path.startsWith('/api/cmdb/sync/')) scheduleCmdbCloudSync()
     return result
   }
   throw new Error('Cmdb 原生请求通道不可用')

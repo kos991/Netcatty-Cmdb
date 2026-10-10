@@ -77,6 +77,8 @@ cpSync(join(integrationRoot, "CmdbSyncSnapshot.test.ts"), join(target, "domain",
 cpSync(join(integrationRoot, "CmdbSyncSnapshot.ts"), join(target, "application", "CmdbSyncSnapshot.ts"));
 cpSync(join(integrationRoot, "CmdbCloudSync.ts"), join(target, "application", "CmdbCloudSync.ts"));
 cpSync(join(integrationRoot, "CmdbCloudSync.test.ts"), join(target, "application", "cmdbCloudSync.test.ts"));
+cpSync(join(integrationRoot, "CmdbAttachmentCloudSync.ts"), join(target, "application", "CmdbAttachmentCloudSync.ts"));
+cpSync(join(integrationRoot, "CmdbAttachmentCloudSync.test.ts"), join(target, "application", "cmdbAttachmentCloudSync.test.ts"));
 cpSync(join(integrationRoot, "CmdbSyncPayloadIntegration.test.ts"), join(target, "application", "cmdbSyncPayloadIntegration.test.ts"));
 cpSync(join(integrationRoot, "electron", "cmdbService.cjs"), join(target, "electron", "cmdbService.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbService.test.cjs"), join(target, "electron", "cmdbService.test.cjs"));
@@ -796,8 +798,57 @@ update("application/app/AppSideEffects.tsx", (source) => replaceOnce(
     return handleSyncNow({ trigger: 'manual' });
   }, [handleSyncNow]);
 
+  const attachmentCloudSyncRunnerRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
+
   useEffect(() => {
-    const handleCmdbSyncRequest = () => { void handleSyncNowManual(); };
+    let disposed = false;
+    let unregisterAttachmentCloudSync;
+    void Promise.all([
+      import('../CmdbCloudSync'),
+      import('../CmdbAttachmentCloudSync'),
+      import('../../infrastructure/services/CloudSyncManager'),
+    ]).then(([cloudSync, attachmentSync, managerModule]) => {
+      if (disposed) return;
+      const bridge = window.netcatty;
+      if (
+        typeof bridge?.cmdbRequest !== 'function'
+        || typeof bridge?.cmdbSyncAttachments !== 'function'
+      ) {
+        console.warn('Cmdb 附件补传不可用：Netcatty 桥接通道缺失');
+        return;
+      }
+      const manager = managerModule.getCloudSyncManager();
+      const sync = attachmentSync.createCmdbAttachmentCloudSync({
+        getState: () => manager.getState(),
+        request: (request) => bridge.cmdbRequest(request),
+        bridge: {
+          cmdbSyncAttachments: (payload) => bridge.cmdbSyncAttachments(payload),
+        },
+      });
+      unregisterAttachmentCloudSync = cloudSync.registerCmdbAttachmentCloudSyncHook(sync.syncPending);
+      attachmentCloudSyncRunnerRef.current = () => cloudSync.runCmdbAttachmentCloudSyncHook();
+    }).catch((error) => {
+      console.warn('Cmdb 附件补传初始化失败:', error);
+    });
+    return () => {
+      disposed = true;
+      unregisterAttachmentCloudSync?.();
+      attachmentCloudSyncRunnerRef.current = () => Promise.resolve();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleCmdbSyncRequest = () => {
+      // 附件状态必须先写回本地 Cmdb，再生成云同步快照，避免快照遗漏刚补传的状态。
+      void attachmentCloudSyncRunnerRef.current().then((result) => {
+        const syncResult = result as { failed?: number; failures?: unknown } | undefined;
+        if (Number(syncResult?.failed) > 0) console.warn('Cmdb 附件补传存在失败项:', syncResult?.failures);
+        return handleSyncNowManual();
+      }).catch((error) => {
+        console.warn('Cmdb 附件补传失败:', error);
+        return handleSyncNowManual();
+      });
+    };
     window.addEventListener('netcatty:cmdb-cloud-sync-request', handleCmdbSyncRequest);
     const unsubscribe = netcattyBridge.get()?.onSettingsChanged?.((payload) => {
       if (payload?.key === 'netcatty.cmdb.cloudSync.request') handleCmdbSyncRequest();
