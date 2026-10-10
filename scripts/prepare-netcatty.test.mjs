@@ -173,6 +173,8 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   assert.match(appSideEffects, /getState: \(\) => manager\.getState\(\)/)
   assert.match(appSideEffects, /cmdbSyncAttachments/)
   assert.match(appSideEffects, /unregisterAttachmentCloudSync\?\.\(\)/)
+  assert.match(appSideEffects, /const bridge = netcattyBridge\.get\(\);/)
+  assert.doesNotMatch(appSideEffects, /window\.netcatty/)
   assert.doesNotMatch(appView, /import CmdbWorkspace/)
   assert.match(surface, /from 'lucide-react'/)
   assert.match(surface, /from '\.\.\/ui\/tooltip'/)

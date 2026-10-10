@@ -809,7 +809,7 @@ update("application/app/AppSideEffects.tsx", (source) => replaceOnce(
       import('../../infrastructure/services/CloudSyncManager'),
     ]).then(([cloudSync, attachmentSync, managerModule]) => {
       if (disposed) return;
-      const bridge = window.netcatty;
+      const bridge = netcattyBridge.get();
       if (
         typeof bridge?.cmdbRequest !== 'function'
         || typeof bridge?.cmdbSyncAttachments !== 'function'

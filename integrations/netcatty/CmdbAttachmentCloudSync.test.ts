@@ -109,7 +109,10 @@ describe('CmdbAttachmentCloudSync', () => {
   });
 
   it('marks an attachment with a missing local file as failed', async () => {
-    const statuses: any[] = [];
+    const statuses: Array<{
+      input: { path: string; headers?: Record<string, string>; suppressCloudSync?: boolean };
+      body: Record<string, unknown>;
+    }> = [];
     let bridgeCalls = 0;
     const sync = createCmdbAttachmentCloudSync({
       getState: connectedState,
@@ -135,7 +138,7 @@ describe('CmdbAttachmentCloudSync', () => {
 
   it('records bridge upload failures and exposes status update failures', async () => {
     let statusWrites = 0;
-    const failedStatusBodies: any[] = [];
+    const failedStatusBodies: Record<string, unknown>[] = [];
     const sync = createCmdbAttachmentCloudSync({
       getState: connectedState,
       request: async (input) => {

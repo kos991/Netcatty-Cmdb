@@ -40,6 +40,21 @@ type RequestInput = {
   suppressCloudSync?: boolean;
 };
 
+type CmdbNativeRequester = (input: RequestInput) => Promise<unknown>;
+
+type PendingAttachment = AttachmentMetadata & {
+  id: number;
+  work_order_id: number;
+  local_exists: boolean;
+  local_path?: string;
+};
+
+function responseList<T>(response: unknown): T[] {
+  if (!response || typeof response !== 'object') return [];
+  const list = (response as { list?: unknown }).list;
+  return Array.isArray(list) ? list as T[] : [];
+}
+
 export type AttachmentSyncFailure = {
   attachmentId?: number;
   code: string;
@@ -139,11 +154,11 @@ export async function unwrapAttachmentKey(derivedKey: CryptoKey, metadata: Attac
 }
 
 export async function resolveCmdbAttachmentProject(
-  request: (input: RequestInput) => Promise<any>,
+  request: CmdbNativeRequester,
   projectId?: number | string,
 ): Promise<CmdbProject> {
   const response = await request({ path: '/api/cmdb/projects' });
-  const projects = Array.isArray(response?.list) ? response.list : [];
+  const projects = responseList<CmdbProject>(response);
   const requestedID = Number(projectId);
   const activeProjects = projects.filter((item: CmdbProject) => (
     item
@@ -172,7 +187,7 @@ export function createCmdbAttachmentCloudSync({
   uuid = () => crypto.randomUUID(),
 }: {
   getState: () => CloudState;
-  request: (input: RequestInput) => Promise<any>;
+  request: CmdbNativeRequester;
   bridge: CmdbAttachmentCloudBridge;
   uuid?: () => string;
 }) {
@@ -192,7 +207,7 @@ export function createCmdbAttachmentCloudSync({
 
   async function writeFailureStatus(
     project: CmdbProject,
-    attachment: any,
+    attachment: PendingAttachment,
     state: Record<string, unknown>,
     failure: AttachmentSyncFailure,
   ): Promise<AttachmentSyncFailure> {
@@ -229,9 +244,12 @@ export function createCmdbAttachmentCloudSync({
           reason: 'project-unavailable',
         };
       }
-      let pending: any;
+      let pending: PendingAttachment[];
       try {
-        pending = await request({ path: '/api/cmdb/attachments/pending', ...projectRequest(project.id) });
+        pending = responseList<PendingAttachment>(await request({
+          path: '/api/cmdb/attachments/pending',
+          ...projectRequest(project.id),
+        }));
       } catch (error) {
         return {
           available: true,
@@ -244,7 +262,7 @@ export function createCmdbAttachmentCloudSync({
       let uploaded = 0;
       let failed = 0;
       const failures: AttachmentSyncFailure[] = [];
-      for (const attachment of pending?.list || []) {
+      for (const attachment of pending) {
         const attachmentID = Number(attachment?.id);
         const state: Record<string, unknown> = {
           s3_status: 'pending',
@@ -332,7 +350,7 @@ export async function downloadCmdbAttachment({
   attachment,
 }: {
   getState: () => CloudState;
-  request: (input: RequestInput) => Promise<any>;
+  request: CmdbNativeRequester;
   bridge: Pick<CmdbAttachmentCloudBridge, 'cmdbDownloadAttachment'>;
   attachment: AttachmentMetadata & {
     id: number;
