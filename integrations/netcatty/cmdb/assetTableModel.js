@@ -64,7 +64,7 @@ function validIPv4(value) {
   return parts.length === 4 && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)
 }
 
-export function terminalNetworkRows(asset = {}, ipamEntries = []) {
+export function terminalNetworkRows(asset = {}) {
   const primaryIP = clean(asset.ip)
   const terminalIP = clean(asset.terminal_ip)
   const rows = []
