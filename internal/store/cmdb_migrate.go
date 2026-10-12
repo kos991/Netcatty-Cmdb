@@ -88,8 +88,24 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	if err := addMissingColumns(db, "cmdb_work_orders", map[string]string{
 		"operation_type": "TEXT DEFAULT ''",
 		"work_minutes":   "INTEGER NOT NULL DEFAULT 0",
+		"started_at":     "TEXT DEFAULT ''",
+		"resolved_at":    "TEXT DEFAULT ''",
+		"closed_at":      "TEXT DEFAULT ''",
 	}); err != nil {
 		return fmt.Errorf("migrate cmdb_work_orders columns: %w", err)
+	}
+	workOrderColumns, err := getTableColumns(db, "cmdb_work_orders")
+	if err != nil {
+		return fmt.Errorf("inspect cmdb_work_orders columns: %w", err)
+	}
+	if len(workOrderColumns) > 0 {
+		// 历史 actual_time 表示解决/完成时间，只能据此回填解决时间；开始和关闭时间
+		// 没有可靠来源，必须保持为空，不能拿发生时间或更新时间伪造。
+		if _, err := db.Exec(`UPDATE cmdb_work_orders SET resolved_at=actual_time
+			WHERE TRIM(IFNULL(resolved_at,''))='' AND TRIM(IFNULL(actual_time,''))<>''
+			  AND status IN ('已解决','已关闭')`); err != nil {
+			return fmt.Errorf("backfill work order resolved time: %w", err)
+		}
 	}
 
 	// 3. 创建人员表 cmdb_persons

@@ -115,21 +115,32 @@ func (s *Server) handleUpdateCmdbWorkOrder(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleBatchUpdateCmdbWorkOrders(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
 	var body struct {
-		IDs    []int64 `json:"ids"`
-		Status string  `json:"status"`
+		IDs    []int64                      `json:"ids"`
+		Items  []store.CmdbWorkOrderClosure `json:"items"`
+		Status string                       `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体解析失败: "+err.Error())
 		return
 	}
-	if len(body.IDs) == 0 {
+	if len(body.IDs) == 0 && len(body.Items) == 0 {
 		writeErr(w, http.StatusBadRequest, "至少选择一张工单")
 		return
 	}
 	if body.Status == "" {
 		body.Status = "已关闭"
 	}
-	updated, err := s.Store.BatchUpdateCmdbWorkOrdersStatusForProject(scope, body.IDs, body.Status)
+	if body.Status != "已关闭" {
+		writeErr(w, http.StatusBadRequest, "批量操作只允许关闭已解决工单")
+		return
+	}
+	var updated int64
+	var err error
+	if len(body.Items) > 0 {
+		updated, err = s.Store.CloseCmdbWorkOrdersForProject(scope, body.Items)
+	} else {
+		updated, err = s.Store.BatchUpdateCmdbWorkOrdersStatusForProject(scope, body.IDs, body.Status)
+	}
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return

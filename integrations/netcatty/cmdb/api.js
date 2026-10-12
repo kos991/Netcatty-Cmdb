@@ -124,7 +124,7 @@ export const api = {
   workOrders: (params = {}) => req(`/api/cmdb/work-orders?${toQuery(params)}`),
   createWorkOrder: (body) => post('/api/cmdb/work-orders', body),
   updateWorkOrder: (id, body) => put(`/api/cmdb/work-orders/${id}`, body),
-  batchUpdateWorkOrders: (ids, status = '已关闭') => post('/api/cmdb/work-orders/batch', { ids, status }),
+  batchUpdateWorkOrders: (items, status = '已关闭') => post('/api/cmdb/work-orders/batch', { items, status }),
   deleteWorkOrder: (id) => del(`/api/cmdb/work-orders/${id}`),
   exportWorkOrders: (params = {}) => exportFile(`/api/cmdb/work-orders/export?${toQuery(params)}`, 'cmdb_work_orders.xlsx'),
   workOrderAttachments: (id) => req(`/api/cmdb/work-orders/${id}/attachments`),

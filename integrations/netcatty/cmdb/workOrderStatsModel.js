@@ -27,6 +27,18 @@ export function canBulkCloseWorkOrders(rows = [], ids = []) {
   return ids.every((id) => byId.get(id)?.status === '已解决')
 }
 
+export function buildWorkOrderClosures(rows = [], results = {}) {
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: Number(row?.id) || 0,
+    result: String(results?.[row?.id] || '').trim(),
+  })).filter((item) => item.id > 0)
+}
+
+export function missingWorkOrderClosureResults(rows = [], results = {}) {
+  return (Array.isArray(rows) ? rows : []).filter((row) => !String(results?.[row?.id] || '').trim())
+    .map((row) => row?.order_no || row?.subject || `#${row?.id || '?'}`)
+}
+
 export function summarizeWorkOrders(rows = [], now = new Date()) {
   const list = Array.isArray(rows) ? rows : []
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`

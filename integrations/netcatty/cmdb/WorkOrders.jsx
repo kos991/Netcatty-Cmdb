@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/toast'
 import { VaultHeaderSearch, VaultPageHeader, vaultHeaderIconButtonClass, vaultHeaderSecondaryButtonClass } from '@/components/vault/VaultPageHeader'
 import { api } from './api'
@@ -13,7 +14,7 @@ import { downloadCmdbAttachmentFromCloud } from '../../application/CmdbCloudSync
 import { allPages, useAction, useQuery } from './hooks'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { formatLocalDateTimeInput, normalizeWorkOrderFilters } from './state'
-import { canBulkCloseWorkOrders, getEditableWorkOrderStatuses, getNextWorkOrderStatus, summarizeWorkOrders } from './workOrderStatsModel'
+import { buildWorkOrderClosures, canBulkCloseWorkOrders, getEditableWorkOrderStatuses, getNextWorkOrderStatus, missingWorkOrderClosureResults, summarizeWorkOrders } from './workOrderStatsModel'
 import { chooseWorkOrderDefault, includeCurrentWorkOrderValue, resolveWorkOrderEditValues } from './workOrderFormModel'
 import { ActionIcon, DataTable, ErrorBanner, Field, Pagination, SearchBox, SelectControl, StatusPill, statusTone } from './ui'
 
@@ -126,6 +127,7 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
   const [attachmentRefresh, setAttachmentRefresh] = useState(0)
   const [deleting, setDeleting] = useState(null)
   const [completing, setCompleting] = useState([])
+  const [closureResults, setClosureResults] = useState({})
   const [selectedOrderIds, setSelectedOrderIds] = useState([])
   const action = useAction()
   const assets = useQuery(loadAssets, [])
@@ -254,11 +256,31 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
   const searchValue = keyword
   const completeWorkOrders = (ids) => {
     const validIds = ids.filter(Boolean)
-    if (!canBulkCloseWorkOrders(query.data?.list || [], validIds)) {
+    const rows = query.data?.list || []
+    if (!canBulkCloseWorkOrders(rows, validIds)) {
       toast.error('只能关闭“已解决”状态的工单，请先完成处理并标记解决')
       return
     }
-    setCompleting(validIds)
+    const selected = validIds.map((id) => rows.find((row) => row.id === id)).filter(Boolean)
+    setClosureResults(Object.fromEntries(selected.map((row) => [row.id, row.result || ''])))
+    setCompleting(selected)
+  }
+  const closeWorkOrders = () => {
+    const missing = missingWorkOrderClosureResults(completing, closureResults)
+    if (missing.length) {
+      toast.error(`请填写处理结果：${missing.join('、')}`)
+      return
+    }
+    action.run(async () => {
+      const items = buildWorkOrderClosures(completing, closureResults)
+      const result = await api.batchUpdateWorkOrders(items, '已关闭')
+      const updated = Number(result?.updated || 0)
+      if (updated !== items.length) throw new Error(`仅关闭 ${updated} 张工单，列表未发生完整更新，请刷新后重试`)
+      await Promise.all([query.reload(), statsQuery.reload()])
+      setCompleting([])
+      setClosureResults({})
+      setSelectedOrderIds([])
+    }, completing.length > 1 ? '工单已批量结单' : '工单已结单')
   }
   const advanceWorkOrder = (row) => {
     const nextStatus = getNextWorkOrderStatus(row.status)
@@ -293,9 +315,9 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
     { key: 'subject', label: '维护主题', width: 180, className: 'min-w-0', render: (value) => <span className="block truncate font-medium" title={value || ''}>{value || '-'}</span> },
     { key: 'maintenance_type', label: '维护类型', width: 142, className: 'min-w-0', render: (_, row) => <div className="min-w-0"><span className="block truncate" title={row.biz_type || ''}>{row.biz_type || '-'}</span><span className="block truncate text-[10px] text-muted-foreground" title={row.operation_type || ''}>{row.operation_type || '-'}</span></div> },
     { key: 'assets', label: '关联资产', width: 148, className: 'min-w-0', render: (value) => { const names = (value || []).map((item) => item.asset_name).filter(Boolean).join('、'); return <span className="block truncate" title={names}>{names || '-'}</span> } },
-    { key: 'processing_time', label: '处理时间', width: 132, className: 'whitespace-nowrap text-[11px]', render: (_, row) => { const value = row.actual_time || row.plan_time; return <div><span className="block" title={value ? `${row.actual_time ? '解决时间' : '发生时间'}：${value}` : ''}>{formatWorkOrderTime(value)}</span>{row.status === '已关闭' ? <span className="block text-[10px] text-muted-foreground">{row.work_minutes || 0} 分钟</span> : null}</div> } },
+    { key: 'processing_time', label: '处理时间', width: 132, className: 'whitespace-nowrap text-[11px]', render: (_, row) => { const value = row.closed_at || row.resolved_at || row.started_at || row.plan_time; const label = row.closed_at ? '关闭时间' : row.resolved_at ? '解决时间' : row.started_at ? '开始处理' : '发生时间'; return <div><span className="block" title={value ? `${label}：${value}` : ''}>{formatWorkOrderTime(value)}</span>{row.status === '已关闭' ? <span className="block text-[10px] text-muted-foreground">{row.started_at && row.resolved_at ? `${row.work_minutes || 0} 分钟` : '历史工时不可结算'}</span> : null}</div> } },
     { key: 'maintainer', label: '维护人员', width: 112, className: 'min-w-0', render: (value) => <span className="block truncate" title={value || ''}>{value || '-'}</span> },
-    { key: 'status', label: '维护状态', width: 128, className: 'whitespace-nowrap', render: (value, row) => { const next = getNextWorkOrderStatus(value); const label = next === '处理中' ? '开始处理' : next === '已解决' ? '标记解决' : next === '已关闭' ? '关闭工单' : ''; return <div className="flex flex-col items-start gap-0.5"><StatusPill tone={statusTone(value)}>{value || '-'}</StatusPill>{next ? <Button data-work-order-next-status={next} type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[10px]" disabled={action.busy} onClick={() => advanceWorkOrder(row)}>{label}<ChevronRight size={12} className="ml-0.5" /></Button> : null}</div> } },
+    { key: 'status', label: '维护状态', width: 128, className: 'whitespace-nowrap', render: (value, row) => { const next = getNextWorkOrderStatus(value); const label = next === '处理中' ? '开始处理' : next === '已解决' ? '标记解决' : next === '已关闭' ? '结单' : ''; return <div className="flex flex-col items-start gap-0.5"><StatusPill tone={statusTone(value)}>{value || '-'}</StatusPill>{next ? <Button data-work-order-next-status={next} type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[10px]" disabled={action.busy} onClick={() => advanceWorkOrder(row)}>{label}<ChevronRight size={12} className="ml-0.5" /></Button> : null}</div> } },
     { key: 'actions', label: '操作', width: 80, sticky: 'right', className: 'whitespace-nowrap', render: (_, row) => <div className="flex"><ActionIcon label="编辑工单" onClick={() => open(row)}><Pencil size={15} /></ActionIcon><ActionIcon label="删除工单" danger onClick={() => setDeleting(row)}><Trash2 size={15} /></ActionIcon></div> },
   ]
   return <div className="flex min-h-0 flex-1 flex-col">{header}
@@ -318,7 +340,7 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
         <span className="ml-auto shrink-0 border-l border-border/60 pl-3 text-[10px] text-muted-foreground">本月完成 <strong data-work-order-stat="completedThisMonth" className="ml-1 font-mono text-xs tabular-nums text-foreground">{statsQuery.loading || statsQuery.error ? '—' : statsQuery.data?.completedThisMonth || 0}</strong></span>
       </div>
     </section> : null}
-    {selectedOrderIds.length ? <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2 text-xs"><span className="flex items-center gap-3"><span>已选 {selectedOrderIds.length} 张工单</span><span className="text-muted-foreground">批量关闭仅适用于全部已解决的工单</span></span><Button data-work-order-bulk-close type="button" size="sm" onClick={() => completeWorkOrders(selectedOrderIds)} disabled={action.busy || !selectedCloseAllowed}><CheckCircle2 size={14} className="mr-1" />批量关闭</Button></div> : null}
+    {selectedOrderIds.length ? <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2 text-xs"><span className="flex items-center gap-3"><span>已选 {selectedOrderIds.length} 张工单</span><span className="text-muted-foreground">批量结单仅适用于全部已解决的工单</span></span><Button data-work-order-bulk-close type="button" size="sm" onClick={() => completeWorkOrders(selectedOrderIds)} disabled={action.busy || !selectedCloseAllowed}><CheckCircle2 size={14} className="mr-1" />批量结单</Button></div> : null}
     <DataTable compact pinSelection loading={query.loading} rows={currentRows} selected={selectedOrderIds} onSelectedChange={setSelectedOrderIds} columns={workOrderColumns} />
     <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(p, s) => { setPage(p); setPageSize(s); setSelectedOrderIds([]) }} />
     <Dialog open={createOpen} onOpenChange={(next) => { if (!action.busy) setCreateOpen(next) }}>
@@ -348,8 +370,9 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
             {[
               ['优先级', viewingOrder.priority], ['维护状态', viewingOrder.status], ['维护主题', viewingOrder.subject],
               ['工单类别', viewingOrder.biz_type], ['运维类型', viewingOrder.operation_type], ['维护人员', viewingOrder.maintainer],
-              ['负责人', viewingOrder.owner], ['发生时间', formatWorkOrderTime(viewingOrder.plan_time)], ['解决时间', formatWorkOrderTime(viewingOrder.actual_time)],
-              ['处理时长', viewingOrder.status === '已关闭' ? `${viewingOrder.work_minutes || 0} 分钟` : '待结束结算'], ['处理结果', viewingOrder.result],
+              ['负责人', viewingOrder.owner], ['发生时间', formatWorkOrderTime(viewingOrder.plan_time)], ['开始处理', formatWorkOrderTime(viewingOrder.started_at)],
+              ['解决时间', formatWorkOrderTime(viewingOrder.resolved_at || viewingOrder.actual_time)], ['关闭时间', formatWorkOrderTime(viewingOrder.closed_at)],
+              ['处理时长', viewingOrder.status === '已关闭' ? (viewingOrder.started_at && viewingOrder.resolved_at ? `${viewingOrder.work_minutes || 0} 分钟` : '历史时间不完整') : '结单时自动计算'], ['处理结果', viewingOrder.result],
             ].map(([label, value]) => <div key={label} className="min-w-0"><span className="block text-[10px] text-muted-foreground">{label}</span><span className="block break-words text-xs" title={String(value || '')}>{value || '—'}</span></div>)}
           </div>
           <section className="border-t border-border/60 pt-3"><h3 className="mb-2 text-xs font-semibold">关联资产</h3>{viewingOrder.assets?.length ? <div className="flex flex-wrap gap-1.5">{viewingOrder.assets.map((asset) => <span key={`${asset.asset_type}:${asset.asset_id}`} className="rounded border border-border px-2 py-1 text-[11px]">{asset.asset_name || '未命名资产'}</span>)}</div> : <p className="text-xs text-muted-foreground">未关联资产</p>}</section>
@@ -369,13 +392,14 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
       </DialogContent>
     </Dialog>
     <ConfirmDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null) }} title="删除工单" message={`确认删除“${deleting?.subject || ''}”？`} confirmLabel="删除" destructive busy={action.busy} onConfirm={() => action.run(async () => { await api.deleteWorkOrder(deleting.id); setDeleting(null); await Promise.all([query.reload(), statsQuery.reload()]) }, '工单已删除')} />
-    <ConfirmDialog open={completing.length > 0} onOpenChange={(v) => { if (!v) setCompleting([]) }} title="关闭工单" message={`确认关闭 ${completing.length} 张已解决工单？`} confirmLabel="确认关闭" busy={action.busy} onConfirm={() => action.run(async () => {
-      const result = await api.batchUpdateWorkOrders(completing, '已关闭')
-      const updated = Number(result?.updated || 0)
-      if (updated !== completing.length) throw new Error(`仅完成 ${updated} 张工单，列表未发生完整更新，请刷新后重试`)
-      await Promise.all([query.reload(), statsQuery.reload()])
-      setCompleting([])
-      setSelectedOrderIds([])
-    }, '工单已完成')} />
+    <Dialog open={completing.length > 0} onOpenChange={(open) => { if (!open && !action.busy) { setCompleting([]); setClosureResults({}) } }}>
+      <DialogContent data-work-order-close-dialog className="flex max-h-[min(720px,calc(100vh-32px))] w-[min(620px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+        <DialogHeader className="shrink-0 border-b border-border px-5 py-4"><DialogTitle className="text-sm tracking-normal">{completing.length > 1 ? `批量结单 ${completing.length} 张工单` : '工单结单'}</DialogTitle><p className="text-xs text-muted-foreground">逐张填写处理结果，结单后按开始处理至解决时间自动结算工时。</p></DialogHeader>
+        <form onSubmit={(event) => { event.preventDefault(); closeWorkOrders() }} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">{completing.map((order) => <Field key={order.id} label={`${order.order_no || `#${order.id}`} · ${order.subject || '未填写主题'}`}><Textarea data-work-order-close-result={order.id} required rows={3} value={closureResults[order.id] || ''} placeholder="填写本张工单的处理过程与最终结果" onChange={(event) => setClosureResults((current) => ({ ...current, [order.id]: event.target.value }))} /></Field>)}</div>
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-3"><Button type="button" variant="outline" disabled={action.busy} onClick={() => { setCompleting([]); setClosureResults({}) }}>取消</Button><Button type="submit" disabled={action.busy}>{action.busy ? '结单中…' : '确认结单'}</Button></div>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 }

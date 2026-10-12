@@ -79,3 +79,18 @@ test('批量关闭只接受全部处于已解决阶段的工单', () => {
   assert.equal(workOrderModel.canBulkCloseWorkOrders(rows, [1, 99]), false)
   assert.equal(workOrderModel.canBulkCloseWorkOrders(rows, []), false)
 })
+
+test('结单请求为每张工单保留独立且去除首尾空白的处理结果', () => {
+  assert.equal(typeof workOrderModel.buildWorkOrderClosures, 'function')
+  assert.deepEqual(workOrderModel.buildWorkOrderClosures([
+    { id: 1, order_no: 'GD-001' },
+    { id: 2, order_no: 'GD-002' },
+  ], { 1: '  已恢复网络  ', 2: '更换硬盘' }), [
+    { id: 1, result: '已恢复网络' },
+    { id: 2, result: '更换硬盘' },
+  ])
+  assert.deepEqual(workOrderModel.missingWorkOrderClosureResults([
+    { id: 1, order_no: 'GD-001' },
+    { id: 2, order_no: 'GD-002' },
+  ], { 1: '已完成', 2: '   ' }), ['GD-002'])
+})

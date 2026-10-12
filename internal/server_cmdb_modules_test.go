@@ -58,7 +58,7 @@ func TestCmdbModuleEndpoints(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &createdWorkOrder); err != nil || createdWorkOrder.ID <= 0 {
 		t.Fatalf("新增工单应返回有效 ID: %s", rec.Body.String())
 	}
-	batchBody, _ := json.Marshal(map[string]interface{}{"ids": []int64{createdWorkOrder.ID}, "status": "已关闭"})
+	batchBody, _ := json.Marshal(map[string]interface{}{"items": []map[string]interface{}{{"id": createdWorkOrder.ID, "result": ""}}, "status": "已关闭"})
 	rec = doJSON(t, mux, http.MethodPost, "/api/cmdb/work-orders/batch", string(batchBody))
 	if rec.Code == http.StatusOK {
 		t.Fatalf("新建工单未解决前不能批量关闭: %s", rec.Body.String())
@@ -76,6 +76,11 @@ func TestCmdbModuleEndpoints(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("处理中工单标记已解决应成功，实际 %d %s", rec.Code, rec.Body.String())
 	}
+	rec = doJSON(t, mux, http.MethodPost, "/api/cmdb/work-orders/batch", string(batchBody))
+	if rec.Code == http.StatusOK {
+		t.Fatalf("关闭工单缺少处理结果必须返回错误: %s", rec.Body.String())
+	}
+	batchBody, _ = json.Marshal(map[string]interface{}{"items": []map[string]interface{}{{"id": createdWorkOrder.ID, "result": "更换硬盘并验证恢复"}}, "status": "已关闭"})
 	rec = doJSON(t, mux, http.MethodPost, "/api/cmdb/work-orders/batch", string(batchBody))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("已解决工单批量关闭应返回 200，实际 %d %s", rec.Code, rec.Body.String())
@@ -103,7 +108,7 @@ func TestCmdbModuleEndpoints(t *testing.T) {
 	if woList.List[0].OrderNo == "" {
 		t.Fatalf("工单号应自动生成")
 	}
-	if woList.List[0].Status != "已关闭" || woList.List[0].ActualTime == "" {
+	if woList.List[0].Status != "已关闭" || woList.List[0].ActualTime == "" || woList.List[0].StartedAt == "" || woList.List[0].ResolvedAt == "" || woList.List[0].ClosedAt == "" || woList.List[0].Result == "" {
 		t.Fatalf("工单接口未完整保留解决到关闭的状态与完成时间: %+v", woList.List[0])
 	}
 
