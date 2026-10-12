@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { BarChart3, CheckCircle2, ChevronDown, ChevronRight, Cloud, CloudDownload, Download, FileDown, Filter, Link2, Paperclip, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { BarChart3, CheckCircle2, ChevronDown, ChevronRight, Cloud, CloudDownload, Download, Eye, FileDown, Filter, Link2, Paperclip, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -15,7 +15,7 @@ import { choices, Fields, textFields, validateFields } from './Fields'
 import { formatLocalDateTimeInput, normalizeWorkOrderFilters } from './state'
 import { canBulkCloseWorkOrders, getEditableWorkOrderStatuses, getNextWorkOrderStatus, summarizeWorkOrders } from './workOrderStatsModel'
 import { chooseWorkOrderDefault, includeCurrentWorkOrderValue, resolveWorkOrderEditValues } from './workOrderFormModel'
-import { ActionIcon, DataTable, ErrorBanner, Field, ModalForm, Pagination, SearchBox, SelectControl, StatusPill, statusTone } from './ui'
+import { ActionIcon, DataTable, ErrorBanner, Field, Pagination, SearchBox, SelectControl, StatusPill, statusTone } from './ui'
 
 const BIZ_TYPES = ['故障处理', '日常维护', '变更操作', '资产调配']
 const OPERATION_TYPES = ['排障', '优化', '响应', '值守']
@@ -27,6 +27,7 @@ const HANDLER_KEY = 'netcatty_cmdb_work_order_handler'
 const emptyFilters = () => ({ biz_type: '', operation_type: '', priority: '', status: '', result: '', owner: '', maintainer: '', date_from: '', date_to: '', asset_keyword: '', keyword: '' })
 const orderBody = (values) => ({ ...values, asset_id: (values.assets || []).find((item) => item.asset_type === 'infrastructure')?.asset_id || 0, plan_time: String(values.plan_time || '').replace('T', ' '), actual_time: String(values.actual_time || '').replace('T', ' ') })
 const formatWorkOrderTime = (value) => String(value || '').replace('T', ' ').slice(0, 16) || '—'
+const imageMimeType = (item) => item.content_type?.startsWith('image/') ? item.content_type : ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' }[String(item.file_name || '').split('.').pop().toLowerCase()] || '')
 const loadAssets = async () => {
   const [terminals, infrastructure, applications] = await Promise.all([
     allPages(api.assets), allPages(api.infrastructure, { scope: 'infrastructure' }), allPages(api.apps),
@@ -54,7 +55,7 @@ const newOrderDefaults = (config = {}) => ({
   status: '新建',
   biz_type: chooseWorkOrderDefault(config.categories, '故障处理'),
   operation_type: chooseWorkOrderDefault(config.operationTypes, '排障'),
-  work_minutes: 10,
+  work_minutes: 0,
   plan_time: formatLocalDateTimeInput(),
   maintainer: typeof window === 'undefined' ? '' : window.localStorage.getItem(HANDLER_KEY) || '',
   asset_id: 0,
@@ -81,6 +82,7 @@ function AssetPicker({ options = [], value = [], onChange, floating = false }) {
 
 function AttachmentPanel({ workOrderId, stagedFiles = [], onAddFiles, onRemoveStagedFile, busy = false, refreshKey = 0, className }) {
   const fileInput = useRef(null)
+  const [previewImage, setPreviewImage] = useState(null)
   const loader = useCallback(() => {
     void refreshKey
     return workOrderId ? api.workOrderAttachments(workOrderId) : Promise.resolve({ list: [], total: 0 })
@@ -94,12 +96,18 @@ function AttachmentPanel({ workOrderId, stagedFiles = [], onAddFiles, onRemoveSt
     await api.downloadWorkOrderAttachment(workOrderId, item)
     query.reload()
   }, '附件已下载')
+  const previewAttachment = (item) => action.run(async () => {
+    if (item.local_exists === false && item.s3_status === 'synced') await downloadCmdbAttachmentFromCloud(item)
+    const result = await api.previewWorkOrderAttachment(workOrderId, { ...item, content_type: imageMimeType(item) })
+    setPreviewImage({ name: item.file_name, source: `data:${result.contentType};base64,${result.data}` })
+    query.reload()
+  })
   if (!workOrderId && !onAddFiles) return <div className="sm:col-span-2 rounded-md border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">保存工单后可上传附件</div>
   return <Field label="附件" className={className || 'sm:col-span-2'}><div className="rounded-md border border-border">
     <div className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-2"><span className="text-xs text-muted-foreground">{stagedFiles.length ? `待上传 ${stagedFiles.length} 个` : `${query.data?.total || 0} 个附件`} · 单个不超过 50 MiB</span>{onAddFiles ? <><input ref={fileInput} data-work-order-attachments type="file" multiple className="sr-only" onChange={(event) => { onAddFiles(Array.from(event.target.files || [])); event.target.value = '' }} /><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip size={14} className="mr-1" />选择附件</Button></> : <Button type="button" variant="outline" size="sm" disabled={action.busy} onClick={() => action.run(async () => { const result = await api.uploadWorkOrderAttachment(workOrderId); if (!result?.cancelled) query.reload() })}><Upload size={14} className="mr-1" />上传附件</Button>}</div>
-    <div className="divide-y divide-border/50">{stagedFiles.map((file) => <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center gap-2 px-3 py-2 text-xs"><Paperclip size={14} className="shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="text-[11px] text-muted-foreground">待上传</span><ActionIcon label={`移除附件 ${file.name}`} disabled={busy} onClick={() => onRemoveStagedFile(file)}><Trash2 size={14} /></ActionIcon></div>)}{(query.data?.list || []).map((item) => { const cloudOnly = item.local_exists === false && item.s3_status === 'synced'; const statusLabel = cloudOnly ? '仅云端' : item.s3_status === 'synced' ? '已同步' : item.s3_status === 'failed' ? '同步失败' : item.s3_status === 'pending' ? '等待上传' : '本地'; return <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-xs"><Paperclip size={14} className="shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{item.file_name}</span><span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">{cloudOnly ? <CloudDownload size={12} /> : item.s3_status === 'synced' ? <Cloud size={12} /> : null}{statusLabel} · {Math.max(1, Math.ceil(item.size_bytes / 1024))} KiB</span><ActionIcon label={cloudOnly ? '从云端下载附件' : '下载附件'} disabled={action.busy || (item.local_exists === false && !cloudOnly)} onClick={() => downloadAttachment(item)}><FileDown size={14} /></ActionIcon><ActionIcon label="删除附件" danger onClick={() => action.run(async () => { await api.deleteWorkOrderAttachment(workOrderId, item.id); query.reload() }, '附件已删除')}><Trash2 size={14} /></ActionIcon></div> })}</div>
+    <div className="divide-y divide-border/50">{stagedFiles.map((file) => <div key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center gap-2 px-3 py-2 text-xs"><Paperclip size={14} className="shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{file.name}</span><span className="text-[11px] text-muted-foreground">待上传</span>{imageMimeType({ file_name: file.name, content_type: file.type }) ? <ActionIcon label={`预览图片 ${file.name}`} onClick={() => setPreviewImage({ name: file.name, source: URL.createObjectURL(file) })}><Eye size={14} /></ActionIcon> : null}<ActionIcon label={`移除附件 ${file.name}`} disabled={busy} onClick={() => onRemoveStagedFile(file)}><Trash2 size={14} /></ActionIcon></div>)}{(query.data?.list || []).map((item) => { const cloudOnly = item.local_exists === false && item.s3_status === 'synced'; const statusLabel = cloudOnly ? '仅云端' : item.s3_status === 'synced' ? '已同步' : item.s3_status === 'failed' ? '同步失败' : item.s3_status === 'pending' ? '等待上传' : '本地'; return <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-xs"><Paperclip size={14} className="shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate">{item.file_name}</span><span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">{cloudOnly ? <CloudDownload size={12} /> : item.s3_status === 'synced' ? <Cloud size={12} /> : null}{statusLabel} · {Math.max(1, Math.ceil(item.size_bytes / 1024))} KiB</span>{imageMimeType(item) ? <ActionIcon label={`预览图片 ${item.file_name}`} disabled={action.busy || (item.local_exists === false && !cloudOnly)} onClick={() => previewAttachment(item)}><Eye size={14} /></ActionIcon> : null}<ActionIcon label={cloudOnly ? '从云端下载附件' : '下载附件'} disabled={action.busy || (item.local_exists === false && !cloudOnly)} onClick={() => downloadAttachment(item)}><FileDown size={14} /></ActionIcon><ActionIcon label="删除附件" danger onClick={() => action.run(async () => { await api.deleteWorkOrderAttachment(workOrderId, item.id); query.reload() }, '附件已删除')}><Trash2 size={14} /></ActionIcon></div> })}</div>
     {query.error ? <ErrorBanner message={query.error} onRetry={query.reload} /> : null}
-  </div></Field>
+  </div><Dialog open={!!previewImage} onOpenChange={(open) => { if (!open) { if (previewImage?.source.startsWith('blob:')) URL.revokeObjectURL(previewImage.source); setPreviewImage(null) } }}><DialogContent className="w-[min(880px,calc(100vw-32px))] max-w-none p-4 sm:max-w-none"><DialogHeader><DialogTitle className="truncate text-sm">{previewImage?.name}</DialogTitle></DialogHeader>{previewImage ? <img alt={previewImage.name} src={previewImage.source} className="max-h-[75vh] w-full object-contain" /> : null}</DialogContent></Dialog></Field>
 }
 
 export default function WorkOrders({ mode = 'stats', onModeChange }) {
@@ -187,10 +195,9 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
     { key: 'priority', label: '优先级', required: true, options: choices(configuredPriorities) },
     ...textFields([['plan_time', '发生时间', 'datetime-local']]),
     { key: 'operation_type', label: '运维类型', required: true, options: choices(configuredOperationTypes) },
-    ...textFields([['maintainer', '经办人'], ['work_minutes', '工时（分钟）', 'number']]),
+    ...textFields([['maintainer', '经办人']]),
     { key: 'subject', label: '工单主题', required: true, wide: true },
     { key: 'remark', label: '故障内容', type: 'textarea' },
-    { key: 'result', label: '处理结果', type: 'textarea' },
   ]
   const fields = [
     ...createFields.map((field) => field.key === 'biz_type'
@@ -201,7 +208,9 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
           ? { ...field, options: choices(includeCurrentWorkOrderValue(configuredPriorities, statsValues.priority)) }
           : field),
     { key: 'status', label: '维护状态', options: choices(getEditableWorkOrderStatuses(editor?.status || statsValues.status || '新建')) },
-    ...textFields([['actual_time', '完成时间', 'datetime-local']]),
+    ...(['已解决', '已关闭'].includes(statsValues.status) ? [{ key: 'result', label: '处理结果', type: 'textarea' }] : []),
+    ...(['已解决', '已关闭'].includes(statsValues.status) ? textFields([['actual_time', '完成时间', 'datetime-local']]) : []),
+    ...(['已关闭'].includes(statsValues.status) ? [{ key: 'work_minutes', label: '工时（分钟）', disabled: true }] : []),
   ]
   const saveDraft = () => action.run(async () => {
     validateFields(createFields, values)
@@ -284,7 +293,7 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
     { key: 'subject', label: '维护主题', width: 180, className: 'min-w-0', render: (value) => <span className="block truncate font-medium" title={value || ''}>{value || '-'}</span> },
     { key: 'maintenance_type', label: '维护类型', width: 142, className: 'min-w-0', render: (_, row) => <div className="min-w-0"><span className="block truncate" title={row.biz_type || ''}>{row.biz_type || '-'}</span><span className="block truncate text-[10px] text-muted-foreground" title={row.operation_type || ''}>{row.operation_type || '-'}</span></div> },
     { key: 'assets', label: '关联资产', width: 148, className: 'min-w-0', render: (value) => { const names = (value || []).map((item) => item.asset_name).filter(Boolean).join('、'); return <span className="block truncate" title={names}>{names || '-'}</span> } },
-    { key: 'processing_time', label: '处理时间', width: 132, className: 'whitespace-nowrap text-[11px]', render: (_, row) => { const value = row.actual_time || row.plan_time; return <div><span className="block" title={value ? `${row.actual_time ? '解决时间' : '发生时间'}：${value}` : ''}>{formatWorkOrderTime(value)}</span>{Number(row.work_minutes) > 0 ? <span className="block text-[10px] text-muted-foreground">{row.work_minutes} 分钟</span> : null}</div> } },
+    { key: 'processing_time', label: '处理时间', width: 132, className: 'whitespace-nowrap text-[11px]', render: (_, row) => { const value = row.actual_time || row.plan_time; return <div><span className="block" title={value ? `${row.actual_time ? '解决时间' : '发生时间'}：${value}` : ''}>{formatWorkOrderTime(value)}</span>{row.status === '已关闭' ? <span className="block text-[10px] text-muted-foreground">{row.work_minutes || 0} 分钟</span> : null}</div> } },
     { key: 'maintainer', label: '维护人员', width: 112, className: 'min-w-0', render: (value) => <span className="block truncate" title={value || ''}>{value || '-'}</span> },
     { key: 'status', label: '维护状态', width: 128, className: 'whitespace-nowrap', render: (value, row) => { const next = getNextWorkOrderStatus(value); const label = next === '处理中' ? '开始处理' : next === '已解决' ? '标记解决' : next === '已关闭' ? '关闭工单' : ''; return <div className="flex flex-col items-start gap-0.5"><StatusPill tone={statusTone(value)}>{value || '-'}</StatusPill>{next ? <Button data-work-order-next-status={next} type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[10px]" disabled={action.busy} onClick={() => advanceWorkOrder(row)}>{label}<ChevronRight size={12} className="ml-0.5" /></Button> : null}</div> } },
     { key: 'actions', label: '操作', width: 80, sticky: 'right', className: 'whitespace-nowrap', render: (_, row) => <div className="flex"><ActionIcon label="编辑工单" onClick={() => open(row)}><Pencil size={15} /></ActionIcon><ActionIcon label="删除工单" danger onClick={() => setDeleting(row)}><Trash2 size={15} /></ActionIcon></div> },
@@ -321,8 +330,8 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
           <div data-work-order-editor className="min-h-0 flex-1 overflow-y-auto px-5">
             <form id="cmdb-work-order-form" onSubmit={(event) => { event.preventDefault(); saveDraft() }}>
               <fieldset disabled={action.busy} className="min-w-0">
-                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">受理信息</h3><Fields fields={createFields.slice(2, 8)} value={values} onChange={setValues} className="gap-3" /></section>
-                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">处理内容</h3><Fields fields={createFields.slice(8)} value={values} onChange={setValues} className="gap-3" /></section>
+                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">受理信息</h3><Fields fields={createFields.slice(2, 7)} value={values} onChange={setValues} className="gap-3" /></section>
+                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">处理内容</h3><Fields fields={createFields.slice(7)} value={values} onChange={setValues} className="gap-3" /></section>
                 <section className="py-4"><h3 className="mb-3 text-sm font-semibold">资源与附件</h3><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><Field label="关联资源"><div className="flex min-w-0 items-center gap-2"><AssetPicker floating options={assets.data || []} value={values.assets || []} onChange={(next) => setValues({ ...values, assets: next })} /><span className="min-w-0 truncate text-xs text-muted-foreground">{values.assets?.length ? `已关联 ${values.assets.length} 项 · ${values.assets.map((item) => item.asset_name).join('、')}` : '未关联资源'}</span></div></Field><AttachmentPanel workOrderId={values.id} refreshKey={attachmentRefresh} stagedFiles={stagedFiles} onAddFiles={(files) => { const accepted = files.filter((file) => file.size <= 50 * 1024 * 1024); if (accepted.length !== files.length) toast.error('超过 50 MiB 的附件未加入'); setStagedFiles((current) => [...current, ...accepted]) }} onRemoveStagedFile={(file) => setStagedFiles((current) => current.filter((item) => item !== file))} busy={action.busy} className="min-w-0 sm:col-span-1" /></div></section>
               </fieldset>
             </form>
@@ -340,7 +349,7 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
               ['优先级', viewingOrder.priority], ['维护状态', viewingOrder.status], ['维护主题', viewingOrder.subject],
               ['工单类别', viewingOrder.biz_type], ['运维类型', viewingOrder.operation_type], ['维护人员', viewingOrder.maintainer],
               ['负责人', viewingOrder.owner], ['发生时间', formatWorkOrderTime(viewingOrder.plan_time)], ['解决时间', formatWorkOrderTime(viewingOrder.actual_time)],
-              ['处理时长', Number(viewingOrder.work_minutes) > 0 ? `${viewingOrder.work_minutes} 分钟` : '—'], ['处理结果', viewingOrder.result],
+              ['处理时长', viewingOrder.status === '已关闭' ? `${viewingOrder.work_minutes || 0} 分钟` : '待结束结算'], ['处理结果', viewingOrder.result],
             ].map(([label, value]) => <div key={label} className="min-w-0"><span className="block text-[10px] text-muted-foreground">{label}</span><span className="block break-words text-xs" title={String(value || '')}>{value || '—'}</span></div>)}
           </div>
           <section className="border-t border-border/60 pt-3"><h3 className="mb-2 text-xs font-semibold">关联资产</h3>{viewingOrder.assets?.length ? <div className="flex flex-wrap gap-1.5">{viewingOrder.assets.map((asset) => <span key={`${asset.asset_type}:${asset.asset_id}`} className="rounded border border-border px-2 py-1 text-[11px]">{asset.asset_name || '未命名资产'}</span>)}</div> : <p className="text-xs text-muted-foreground">未关联资产</p>}</section>
@@ -350,7 +359,15 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
         <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-3"><Button type="button" variant="outline" onClick={() => setViewingOrder(null)}>关闭</Button>{viewingOrder ? <Button type="button" onClick={() => { const current = viewingOrder; setViewingOrder(null); open(current) }}><Pencil size={14} className="mr-1" />编辑工单</Button> : null}</div>
       </DialogContent>
     </Dialog>
-    <ModalForm open={!!editor} onOpenChange={(v) => { if (!v) setEditor(null) }} title={editor?.id ? '编辑工单' : '新增工单'} onSubmit={saveExisting} busy={action.busy} wide><Fields fields={fields} value={statsValues} onChange={setStatsValues} /><AssetPicker options={assets.data || []} value={statsValues.assets || []} onChange={(next) => setStatsValues({ ...statsValues, assets: next })} /><AttachmentPanel workOrderId={editor?.id || statsValues.id} /></ModalForm>
+    <Dialog open={!!editor} onOpenChange={(next) => { if (!next && !action.busy) setEditor(null) }}>
+      <DialogContent data-work-order-edit-dialog className="flex max-h-[min(720px,calc(100vh-32px))] w-[min(760px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+        <DialogHeader className="shrink-0 border-b border-border px-5 py-4"><DialogTitle className="text-sm tracking-normal">编辑工单</DialogTitle></DialogHeader>
+        {editor ? <form onSubmit={(event) => { event.preventDefault(); saveExisting() }} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4"><Fields fields={fields} value={statsValues} onChange={setStatsValues} className="gap-3" /><AssetPicker options={assets.data || []} value={statsValues.assets || []} onChange={(next) => setStatsValues({ ...statsValues, assets: next })} /><AttachmentPanel workOrderId={editor.id} /></div>
+          <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-3"><Button type="button" variant="outline" disabled={action.busy} onClick={() => setEditor(null)}>取消</Button><Button type="submit" disabled={action.busy}>{action.busy ? '保存中…' : '保存工单'}</Button></div>
+        </form> : null}
+      </DialogContent>
+    </Dialog>
     <ConfirmDialog open={!!deleting} onOpenChange={(v) => { if (!v) setDeleting(null) }} title="删除工单" message={`确认删除“${deleting?.subject || ''}”？`} confirmLabel="删除" destructive busy={action.busy} onConfirm={() => action.run(async () => { await api.deleteWorkOrder(deleting.id); setDeleting(null); await Promise.all([query.reload(), statsQuery.reload()]) }, '工单已删除')} />
     <ConfirmDialog open={completing.length > 0} onOpenChange={(v) => { if (!v) setCompleting([]) }} title="关闭工单" message={`确认关闭 ${completing.length} 张已解决工单？`} confirmLabel="确认关闭" busy={action.busy} onConfirm={() => action.run(async () => {
       const result = await api.batchUpdateWorkOrders(completing, '已关闭')

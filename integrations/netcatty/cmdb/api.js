@@ -130,6 +130,11 @@ export const api = {
   workOrderAttachments: (id) => req(`/api/cmdb/work-orders/${id}/attachments`),
   uploadWorkOrderAttachment: (id, file) => uploadFile(`/api/cmdb/work-orders/${id}/attachments`, file),
   downloadWorkOrderAttachment: (workOrderId, attachment) => exportFile(`/api/cmdb/work-orders/${workOrderId}/attachments/${attachment.id}`, attachment.file_name),
+  previewWorkOrderAttachment: (workOrderId, attachment) => {
+    const preview = window.netcatty?.cmdbPreviewAttachment
+    if (typeof preview !== 'function') throw new Error('Netcatty 图片预览通道不可用')
+    return preview({ path: `/api/cmdb/work-orders/${workOrderId}/attachments/${attachment.id}`, contentType: attachment.content_type })
+  },
   deleteWorkOrderAttachment: (workOrderId, attachmentId) => del(`/api/cmdb/work-orders/${workOrderId}/attachments/${attachmentId}`),
 
   credentials: (params = {}) => req(`/api/cmdb/credentials?${toQuery(params)}`),

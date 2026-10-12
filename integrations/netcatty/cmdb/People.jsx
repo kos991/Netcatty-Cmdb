@@ -11,7 +11,7 @@ import { choices, Fields, textFields, validateFields } from './Fields'
 import { ActionIcon, DataTable, DefinitionList, DetailSheet, ErrorBanner, ModalForm, Pagination, SearchBox, SelectControl, StatusPill } from './ui'
 import Organizations from './Organizations'
 import { peopleCreateMenuItems } from './peopleToolbarModel'
-import { organizationPersonEditorPath, organizationSelectionForNode } from './organizationEditorModel'
+import { organizationPersonEditorPath } from './organizationEditorModel'
 
 const loadDirectory = async () => { const [tree, people] = await Promise.all([api.orgTree(), allPages(api.persons)]); return { tree: tree.list || [], people } }
 
@@ -57,7 +57,18 @@ export default function People({ focusTarget, onNavigate }) {
   const query = useQuery(loader)
   const action = useAction()
   const tree = useMemo(() => directory.data?.tree || [], [directory.data?.tree])
-  useEffect(() => { if (selectedOrgId) setSelection(organizationSelectionForNode(tree, selectedOrgId)) }, [tree, selectedOrgId])
+  const selectedOrgName = useMemo(() => {
+    const find = (nodes) => {
+      for (const node of nodes) {
+        if (Number(node.id) === Number(selectedOrgId)) return node.name
+        const childName = find(node.children || [])
+        if (childName) return childName
+      }
+      return ''
+    }
+    return selectedOrgId ? find(tree) : ''
+  }, [tree, selectedOrgId])
+  useEffect(() => { if (selectedOrgId && directory.data && !selectedOrgName) { setSelectedOrgId(0); setSelection({}) } }, [directory.data, selectedOrgId, selectedOrgName])
   const visibleTree = useMemo(() => {
     const keyword = orgKeyword.trim().toLowerCase()
     if (!keyword) return tree
@@ -83,13 +94,16 @@ export default function People({ focusTarget, onNavigate }) {
   const peopleByNode = useMemo(() => {
     const counts = new Map()
     ;(directory.data?.people || []).forEach((person) => {
+      const term = search.trim().toLowerCase()
+      if (status && person.status !== status) return
+      if (term && ![person.name, person.person_code, person.phone, person.email].some((value) => String(value || '').toLowerCase().includes(term))) return
       ;[person.org_id, person.department_id, person.group_id].filter(Boolean).forEach((id) => counts.set(Number(id), (counts.get(Number(id)) || 0) + 1))
     })
     return counts
-  }, [directory.data?.people])
+  }, [directory.data?.people, search, status])
   const nav = (nodes, path = []) => nodes.map((node) => {
     const branch = [...path, node]
-    const params = { org_name: branch[0].name, ...(branch[1] ? { department: branch[1].name } : {}), ...(branch[2] ? { group_name: branch[2].name } : {}) }
+    const params = { node_id: node.id, node_type: node.node_type }
     const selected = JSON.stringify(selection) === JSON.stringify(params)
     const collapsed = !orgKeyword && collapsedNodes.has(node.id)
     return <div key={node.id} onDragOver={(event) => event.preventDefault()} onDrop={async (event) => { event.preventDefault(); if (!dragPerson) return; await action.run(async () => { await api.updatePerson(dragPerson.id, { ...dragPerson, org_id: Number(branch[0]?.id) || 0, department_id: Number(branch[1]?.id) || 0, group_id: Number(branch[2]?.id) || 0, org_name: branch[0]?.name || '', department: branch[1]?.name || '', group_name: branch[2]?.name || '' }); setDragPerson(null); refresh() }, '已调整人员归属') }}><div className="flex items-center"><button type="button" aria-label={collapsed ? `展开${node.name}` : `收起${node.name}`} className="grid h-8 w-6 shrink-0 place-items-center text-muted-foreground" style={{ marginLeft: path.length * 16 }} onClick={() => setCollapsedNodes((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next })}><ChevronDown size={13} className={collapsed ? '-rotate-90' : ''} /></button><Button variant={selected ? 'secondary' : 'ghost'} className="h-[32px] min-w-0 flex-1 justify-start truncate px-1 text-[12px] font-normal" onClick={() => { setSelectedOrgId(node.id); setSelection(params); setPage(1) }}><Folder size={14} className="mr-2 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate text-left">{node.name}</span><span className="ml-2 text-[11px] tabular-nums text-muted-foreground">{peopleByNode.get(node.id) || 0}</span></Button></div>{collapsed ? null : nav(node.children || [], branch)}</div>
@@ -129,7 +143,7 @@ export default function People({ focusTarget, onNavigate }) {
     <div className="flex min-h-0 flex-1">
       <aside className="flex w-52 shrink-0 flex-col border-r border-border/60 bg-background lg:w-60"><div className="flex h-12 items-center px-3"><strong className="text-xs font-semibold">组织节点</strong></div><div className="border-y border-border/40 p-2.5"><SearchBox value={orgKeyword} onChange={setOrgKeyword} placeholder="搜索组织节点" className="min-w-0 max-w-none" /></div><div className="min-h-0 flex-1 overflow-auto p-2"><Button variant={Object.keys(selection).length ? 'ghost' : 'secondary'} className="h-[32px] w-full justify-start px-2 text-[12px] font-normal" onClick={() => { setSelectedOrgId(0); setSelection({}); setPage(1) }}>全部人员</Button>{nav(visibleTree)}</div><div className="flex h-10 items-center justify-between border-t border-border/40 px-2"><Button variant="ghost" size="sm" className="px-2 text-[11px]" onClick={() => setCollapsedNodes(new Set())}>全部展开</Button><Button variant="ghost" size="sm" className="px-2 text-[11px]" onClick={() => setCollapsedNodes(new Set((function flatten(nodes) { return nodes.flatMap((node) => [node.id, ...flatten(node.children || [])]) })(tree)))}>全部收起</Button></div></aside>
       <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex min-h-[48px] shrink-0 flex-wrap items-center gap-2 border-b border-border/40 px-4 py-2"><div className="mr-2 min-w-40"><strong className="text-sm">{selection.group_name || selection.department || selection.org_name || '全部人员'}</strong><p className="mt-0.5 text-[11px] text-muted-foreground">{query.data?.total || 0} 人</p></div><span className="flex-1" /><span className="text-[11px] text-muted-foreground">可在顶部筛选状态</span></div>
+      <div className="flex min-h-[48px] shrink-0 flex-wrap items-center gap-2 border-b border-border/40 px-4 py-2"><div className="mr-2 min-w-40"><strong className="text-sm">{selectedOrgName || '全部人员'}</strong><p className="mt-0.5 text-[11px] text-muted-foreground">{query.data?.total || 0} 人</p></div><span className="flex-1" /><span className="text-[11px] text-muted-foreground">可在顶部筛选状态</span></div>
       {(query.error || directory.error) && <ErrorBanner message={query.error || directory.error} onRetry={() => { query.reload(); directory.reload() }} />}
       <DataTable compact rows={query.error ? [] : query.data?.list || []} loading={query.loading} columns={[
         { key: 'name', label: '人员', render: (v, row) => <div draggable onDragStart={() => setDragPerson(row)} className="flex items-center gap-2"><GripVertical size={14} className="cursor-grab text-muted-foreground" /><span className="grid h-7 w-7 place-items-center rounded-full bg-secondary text-[11px] font-medium">{String(v || '?').slice(0, 1)}</span><Button variant="link" className="h-auto p-0 text-[12px]" onClick={() => setDetail(row)}>{v}</Button></div> }, { key: 'department', label: '主要归属', render: (v, row) => <span>{v || row.org_name || '-'}</span> }, { key: 'title', label: '职务/岗位', headerClassName: 'hidden xl:table-cell', className: 'hidden xl:table-cell' }, { key: 'phone', label: '联系电话', headerClassName: 'hidden xl:table-cell', className: 'hidden xl:table-cell' }, { key: 'asset_count', label: '资源数', className: 'font-mono tabular-nums', render: (v, row) => <Button variant="link" className="h-auto p-0 font-mono text-[12px] tabular-nums" onClick={() => setDetail(row)}>{v || 0}</Button> }, { key: 'status', label: '状态', render: (v) => <StatusPill tone={v === '在职' ? 'success' : 'neutral'}>{v}</StatusPill> },

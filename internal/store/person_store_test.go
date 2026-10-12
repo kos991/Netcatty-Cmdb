@@ -79,6 +79,40 @@ func TestPersonCRUD(t *testing.T) {
 	}
 }
 
+func TestPersonNodeFilterUsesSameIDsAsOrganizationCount(t *testing.T) {
+	s := newPersonTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.CreateOrgNode(scope, &OrgNode{Name: "机关", NodeType: OrgNodeOrganization})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.CreateOrgNode(scope, &OrgNode{Name: "办事处", NodeType: OrgNodeOrganization})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstDept, err := s.CreateOrgNode(scope, &OrgNode{Name: "技术部", NodeType: OrgNodeDepartment, ParentID: first})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDept, err := s.CreateOrgNode(scope, &OrgNode{Name: "技术部", NodeType: OrgNodeDepartment, ParentID: second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreatePersonForProject(scope, &Person{Name: "甲", OrgID: first, DepartmentID: firstDept, Status: "在职"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreatePersonForProject(scope, &Person{Name: "乙", OrgID: second, DepartmentID: secondDept, Status: "在职"}); err != nil {
+		t.Fatal(err)
+	}
+	list, total, err := s.ListPersonsForProject(scope, PersonQuery{NodeID: firstDept, NodeType: OrgNodeDepartment, Page: 1, PageSize: 10})
+	if err != nil || total != 1 || len(list) != 1 || list[0].Name != "甲" {
+		t.Fatalf("组织人数与列表不一致: total=%d list=%+v err=%v", total, list, err)
+	}
+}
+
 func TestGetPersonAssets(t *testing.T) {
 	s := newPersonTestStore(t)
 

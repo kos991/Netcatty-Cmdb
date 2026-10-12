@@ -315,7 +315,8 @@ update("electron/preload/api.cjs", (source) => replaceOnce(
   cmdbExportFile: (payload) => ipcRenderer.invoke("netcatty:cmdb:export-file", payload),
   cmdbSelectAttachmentDirectory: () => ipcRenderer.invoke("netcatty:cmdb:select-attachment-directory"),
   cmdbSyncAttachments: (payload) => ipcRenderer.invoke("netcatty:cmdb:sync-attachments", payload),
-  cmdbDownloadAttachment: (payload) => ipcRenderer.invoke("netcatty:cmdb:download-attachment", payload),`,
+  cmdbDownloadAttachment: (payload) => ipcRenderer.invoke("netcatty:cmdb:download-attachment", payload),
+  cmdbPreviewAttachment: (payload) => ipcRenderer.invoke("netcatty:cmdb:preview-attachment", payload),`,
   "electron/preload/api.cjs",
 ));
 
@@ -330,7 +331,8 @@ update("global.d.ts", (source) => replaceOnce(
     cmdbExportFile?(payload: { path: string; suggestedName?: string }): Promise<{ cancelled: boolean; filePath?: string }>;
     cmdbSelectAttachmentDirectory?(): Promise<{ cancelled: boolean; directoryPath?: string }>;
     cmdbSyncAttachments?(payload: unknown): Promise<unknown>;
-    cmdbDownloadAttachment?(payload: unknown): Promise<unknown>;`,
+    cmdbDownloadAttachment?(payload: unknown): Promise<unknown>;
+    cmdbPreviewAttachment?(payload: { path: string; contentType: string }): Promise<{ contentType: string; data: string }>;`,
   "global.d.ts",
 ));
 

@@ -297,6 +297,23 @@ test("selects an attachment directory with the native directory dialog", async (
   });
 });
 
+test("previews only image attachments from work orders", async () => {
+  let requested = "";
+  const handlers = registerTestBridge({ fetchImpl: async (url) => {
+    requested = url;
+    return new Response(Uint8Array.from([137, 80, 78, 71]), { status: 200 });
+  } });
+  const result = await handlers.get(CMDB_CHANNELS.previewAttachment)({}, {
+    path: "/api/cmdb/work-orders/12/attachments/7", contentType: "image/png",
+  });
+  assert.equal(requested, "http://127.0.0.1:18080/api/cmdb/work-orders/12/attachments/7");
+  assert.equal(result.contentType, "image/png");
+  assert.equal(result.data, Buffer.from([137, 80, 78, 71]).toString("base64"));
+  await assert.rejects(handlers.get(CMDB_CHANNELS.previewAttachment)({}, {
+    path: "/api/cmdb/work-orders/12/attachments/7", contentType: "text/plain",
+  }), /只能预览/);
+});
+
 test("uploads a selected file only to a work-order attachment endpoint", async () => {
   let requestedUrl = "";
   let requestedBody;

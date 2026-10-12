@@ -1,6 +1,41 @@
 package store
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestWorkOrderMinutesSetOnlyWhenClosed(t *testing.T) {
+	s := newCmdbTestStore(t)
+	start := time.Now().Add(-5 * time.Minute).Format("2006-01-02 15:04:05")
+	id, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "结算工时", PlanTime: start, WorkMinutes: 999, Result: "伪造结果", ActualTime: start})
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := s.GetCmdbWorkOrder(id)
+	if err != nil || order.WorkMinutes != 0 || order.Result != "" || order.ActualTime != "" {
+		t.Fatalf("新建工单提前结算: %+v err=%v", order, err)
+	}
+	for _, status := range []string{"处理中", "已解决"} {
+		order.Status = status
+		order.WorkMinutes = 999
+		if err := s.UpdateCmdbWorkOrder(order); err != nil {
+			t.Fatal(err)
+		}
+		order, err = s.GetCmdbWorkOrder(id)
+		if err != nil || order.WorkMinutes != 0 {
+			t.Fatalf("%s 工单提前结算: %+v err=%v", status, order, err)
+		}
+	}
+	order.Status = "已关闭"
+	if err := s.UpdateCmdbWorkOrder(order); err != nil {
+		t.Fatal(err)
+	}
+	order, err = s.GetCmdbWorkOrder(id)
+	if err != nil || order.WorkMinutes < 5 || order.WorkMinutes > 6 {
+		t.Fatalf("关闭工单未按发生到关闭时间结算: %+v err=%v", order, err)
+	}
+}
 
 func TestCmdbWorkOrderCRUDAndFilter(t *testing.T) {
 	s := newCmdbTestStore(t)
@@ -127,6 +162,9 @@ func TestCmdbWorkOrderBatchCompletion(t *testing.T) {
 		}
 		if order.Status != "已关闭" || order.ActualTime == "" {
 			t.Fatalf("工单应进入已关闭并记录完成时间: %+v", order)
+		}
+		if order.WorkMinutes != 0 {
+			t.Fatalf("未填写发生时间的工单不应凭空产生工时: %+v", order)
 		}
 	}
 	if _, err := s.BatchUpdateCmdbWorkOrdersStatusForProject(scope, []int64{first, 999999}, "已关闭"); err == nil {

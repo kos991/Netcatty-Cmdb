@@ -34,6 +34,8 @@ type Person struct {
 // PersonQuery 人员列表筛选参数。
 type PersonQuery struct {
 	Keyword    string
+	NodeID     int64
+	NodeType   string
 	Department string
 	OrgName    string
 	GroupName  string
@@ -78,6 +80,14 @@ func (s *Store) ListPersonsForProject(scope ProjectScope, q PersonQuery) ([]Pers
 		pat := "%" + kw + "%"
 		where = append(where, "(p.name LIKE ? OR IFNULL(p.person_code,'') LIKE ? OR IFNULL(p.phone,'') LIKE ? OR IFNULL(p.email,'') LIKE ?)")
 		args = append(args, pat, pat, pat, pat)
+	}
+	if q.NodeID > 0 {
+		column := map[string]string{"organization": "p.org_id", "department": "p.department_id", "group": "p.group_id"}[q.NodeType]
+		if column == "" {
+			return nil, 0, fmt.Errorf("无效的组织节点类型")
+		}
+		where = append(where, column+" = ?")
+		args = append(args, q.NodeID)
 	}
 	if dept := strings.TrimSpace(q.Department); dept != "" && dept != "全部" {
 		where = append(where, "COALESCE(NULLIF(d.name,''), p.department) = ?")

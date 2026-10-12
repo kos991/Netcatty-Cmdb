@@ -2,7 +2,7 @@
 
 const { randomUUID } = require("node:crypto");
 const { readFile, writeFile } = require("node:fs/promises");
-const { basename } = require("node:path");
+const { basename, extname } = require("node:path");
 
 const CMDB_REQUEST_TIMEOUT_MS = 30_000;
 const API_ORIGIN = "http://cmdb.invalid";
@@ -22,6 +22,7 @@ const CMDB_CHANNELS = Object.freeze({
   selectAttachmentDirectory: "netcatty:cmdb:select-attachment-directory",
   syncAttachments: "netcatty:cmdb:sync-attachments",
   downloadAttachment: "netcatty:cmdb:download-attachment",
+  previewAttachment: "netcatty:cmdb:preview-attachment",
 });
 
 function normalizeApiPath(path) {
@@ -129,7 +130,8 @@ function importUrl(path, commit) {
 
 function createImportForm(filePath, file) {
   const form = new FormData();
-  form.append("file", new Blob([file]), basename(filePath));
+  const imageTypes = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp" };
+  form.append("file", new Blob([file], { type: imageTypes[extname(filePath).toLowerCase()] || "application/octet-stream" }), basename(filePath));
   return form;
 }
 
@@ -248,6 +250,21 @@ function registerCmdbBridge({
     if (target.canceled || !target.filePath) return { cancelled: true };
     await writeFileImpl(target.filePath, binary);
     return { cancelled: false, filePath: target.filePath };
+  });
+
+  ipcMain.handle(CMDB_CHANNELS.previewAttachment, async (_event, payload = {}) => {
+    const path = normalizeApiPath(payload.path);
+    if (!/^\/api\/cmdb\/work-orders\/[1-9]\d*\/attachments\/[1-9]\d*$/.test(path) || !["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"].includes(payload.contentType)) {
+      throw new Error("只能预览工单图片附件");
+    }
+    const binary = await requestCmdb({
+      service: requireService(getService),
+      path,
+      responseType: "binary",
+      fetchImpl,
+    });
+    if (binary.length > 20 * 1024 * 1024) throw new Error("预览图片不能超过 20 MiB，请下载查看");
+    return { contentType: payload.contentType, data: Buffer.from(binary).toString("base64") };
   });
 
   ipcMain.handle(CMDB_CHANNELS.selectAttachmentDirectory, async () => {
