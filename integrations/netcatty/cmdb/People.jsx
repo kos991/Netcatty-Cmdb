@@ -97,7 +97,15 @@ export default function People({ focusTarget, onNavigate }) {
       const term = search.trim().toLowerCase()
       if (status && person.status !== status) return
       if (term && ![person.name, person.person_code, person.phone, person.email].some((value) => String(value || '').toLowerCase().includes(term))) return
-      ;[person.org_id, person.department_id, person.group_id].filter(Boolean).forEach((id) => counts.set(Number(id), (counts.get(Number(id)) || 0) + 1))
+      ;[
+        ['organization', person.org_id],
+        ['department', person.department_id],
+        ['group', person.group_id],
+      ].forEach(([nodeType, id]) => {
+        if (!id) return
+        const key = `${nodeType}:${Number(id)}`
+        counts.set(key, (counts.get(key) || 0) + 1)
+      })
     })
     return counts
   }, [directory.data?.people, search, status])
@@ -106,7 +114,8 @@ export default function People({ focusTarget, onNavigate }) {
     const params = { node_id: node.id, node_type: node.node_type }
     const selected = JSON.stringify(selection) === JSON.stringify(params)
     const collapsed = !orgKeyword && collapsedNodes.has(node.id)
-    return <div key={node.id} onDragOver={(event) => event.preventDefault()} onDrop={async (event) => { event.preventDefault(); if (!dragPerson) return; await action.run(async () => { await api.updatePerson(dragPerson.id, { ...dragPerson, org_id: Number(branch[0]?.id) || 0, department_id: Number(branch[1]?.id) || 0, group_id: Number(branch[2]?.id) || 0, org_name: branch[0]?.name || '', department: branch[1]?.name || '', group_name: branch[2]?.name || '' }); setDragPerson(null); refresh() }, '已调整人员归属') }}><div className="flex items-center"><button type="button" aria-label={collapsed ? `展开${node.name}` : `收起${node.name}`} className="grid h-8 w-6 shrink-0 place-items-center text-muted-foreground" style={{ marginLeft: path.length * 16 }} onClick={() => setCollapsedNodes((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next })}><ChevronDown size={13} className={collapsed ? '-rotate-90' : ''} /></button><Button variant={selected ? 'secondary' : 'ghost'} className="h-[32px] min-w-0 flex-1 justify-start truncate px-1 text-[12px] font-normal" onClick={() => { setSelectedOrgId(node.id); setSelection(params); setPage(1) }}><Folder size={14} className="mr-2 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate text-left">{node.name}</span><span className="ml-2 text-[11px] tabular-nums text-muted-foreground">{peopleByNode.get(node.id) || 0}</span></Button></div>{collapsed ? null : nav(node.children || [], branch)}</div>
+    const count = peopleByNode.get(`${node.node_type}:${Number(node.id)}`) || 0
+    return <div key={node.id} onDragOver={(event) => event.preventDefault()} onDrop={async (event) => { event.preventDefault(); if (!dragPerson) return; await action.run(async () => { await api.updatePerson(dragPerson.id, { ...dragPerson, org_id: Number(branch[0]?.id) || 0, department_id: Number(branch[1]?.id) || 0, group_id: Number(branch[2]?.id) || 0, org_name: branch[0]?.name || '', department: branch[1]?.name || '', group_name: branch[2]?.name || '' }); setDragPerson(null); refresh() }, '已调整人员归属') }}><div className="flex items-center"><button type="button" aria-label={collapsed ? `展开${node.name}` : `收起${node.name}`} className="grid h-8 w-6 shrink-0 place-items-center text-muted-foreground" style={{ marginLeft: path.length * 16 }} onClick={() => setCollapsedNodes((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next })}><ChevronDown size={13} className={collapsed ? '-rotate-90' : ''} /></button><Button variant={selected ? 'secondary' : 'ghost'} className="h-[32px] min-w-0 flex-1 justify-start truncate px-1 text-[12px] font-normal" onClick={() => { setSelectedOrgId(node.id); setSelection(params); setPage(1) }}><Folder size={14} className="mr-2 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate text-left">{node.name}</span><span className="ml-2 text-[11px] tabular-nums text-muted-foreground">{count}</span></Button></div>{collapsed ? null : nav(node.children || [], branch)}</div>
   })
   const exportPeople = () => {
     const rows = directory.data?.people || []
