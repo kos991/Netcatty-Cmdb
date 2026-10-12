@@ -13,6 +13,19 @@ test("Cmdb 设置内容使用 Radix TabContent，切换其他设置时不会常�
   assert.match(source, /<TabsContent value="cmdb"/);
 });
 
+test("Cmdb 设置页复用 Netcatty 原生设置面板并保留三个配置分区", () => {
+  const source = readFileSync(new URL("../integrations/netcatty/cmdb/ConfigCenter.jsx", import.meta.url), "utf8");
+
+  assert.match(source, /from '@\/components\/settings\/settings-ui'/);
+  for (const component of ['SettingsSection', 'SettingCard', 'SettingRow']) {
+    assert.match(source, new RegExp(`<${component}\\b`));
+  }
+  for (const tab of ['资产配置', '工单配置', '项目与数据']) {
+    assert.match(source, new RegExp(`>${tab}<`));
+  }
+  assert.doesNotMatch(source, /VaultPageHeader/);
+});
+
 test("将 Netcatty 更新源指向 Cmdb 仓库", () => {
   const source = `
 const GITHUB_API_URL = 'https://api.github.com/repos/binaricat/Netcatty/releases/latest';

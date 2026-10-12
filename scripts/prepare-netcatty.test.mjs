@@ -349,6 +349,14 @@ test('装配为原生 Cmdb 根标签、四个工作区入口与设置页配置',
   assert.match(configCenter, /section="cmdb-settings-network"/)
   assert.match(configCenter, /data-section="cmdb-settings-work-orders"/)
   assert.match(configCenter, /data-section="cmdb-settings-project"/)
+  assert.match(configCenter, /from '@\/components\/settings\/settings-ui'/)
+  for (const component of ['SettingsSection', 'SettingCard', 'SettingRow']) {
+    assert.match(configCenter, new RegExp(`<${component}\\b`))
+  }
+  assert.doesNotMatch(configCenter, /VaultPageHeader/)
+  for (const tab of ['资产配置', '工单配置', '项目与数据']) {
+    assert.match(configCenter, new RegExp(`>${tab}<`))
+  }
   assert.doesNotMatch(configCenter, /配置项目|const GROUPS =/)
   for (const key of ['search', 'infrastructure', 'systems']) {
     assert.doesNotMatch(workspaceState, new RegExp(`key: '${key}'`))
