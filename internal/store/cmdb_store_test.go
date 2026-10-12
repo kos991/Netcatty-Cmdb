@@ -66,6 +66,28 @@ func TestQueryCmdbAssetsFiltersAndPaginates(t *testing.T) {
 	}
 }
 
+func TestAttachCmdbAssetBusinessNetworkTypesUsesBusinessIPAMSubnet(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetID := insertCmdbAsset(t, s, CmdbAsset{Name: "业务服务器", AssetCode: "INFRA-001", BizIP: "138.64.7.20", MgmtIP: "10.0.0.20", NetType: "外网"})
+	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "政法专网", Category: "专网", CIDR: "138.64.7.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+	list, _, err := s.QueryCmdbAssetsForProject(scope, CmdbAssetQuery{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AttachCmdbAssetBusinessNetworkTypesForProject(scope, list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != assetID || list[0].BusinessNetworkType != "专网" {
+		t.Fatalf("业务 IP 网络归属错误: %+v", list)
+	}
+}
+
 func TestQueryCmdbAssetsSortWhitelistRejectsUnknownField(t *testing.T) {
 	s := newCmdbTestStore(t)
 	insertCmdbAsset(t, s, CmdbAsset{Name: "A", AssetCode: "ZC1", Status: "在线"})

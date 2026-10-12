@@ -8,17 +8,18 @@ import {
   applicationNetworkPresentation,
   normalizeGroupFilterValue,
   numericOrganizationPath,
+  terminalBusinessNetworkType,
   terminalNetworkRows,
   visibleAssetColumnKeys,
 } from './assetTableModel.js'
 
-test('三类资产将 IP 与网络分列且终端编码不再单占宽列', () => {
+test('三类资产将 IP 与网络分列且硬件资产以资产编码作为主标识', () => {
   assert.deepEqual(TERMINAL_COLUMN_KEYS, [
-    'asset_name', 'device_type', 'owner_department', 'room', 'ip',
+    'asset_code', 'device_type', 'owner_department', 'room', 'ip',
     'network_type', 'operating_system', 'status', 'actions',
   ])
   assert.deepEqual(INFRASTRUCTURE_COLUMN_KEYS, [
-    'name', 'device_type', 'vendor_model', 'operating_system',
+    'asset_code', 'device_type', 'vendor_model', 'operating_system',
     'owner_department', 'location', 'management_ip', 'network_type', 'status', 'actions',
   ])
   assert.deepEqual(SYSTEM_COLUMN_KEYS, [
@@ -29,10 +30,10 @@ test('三类资产将 IP 与网络分列且终端编码不再单占宽列', () =
 
 test('窄窗口优先保留 IP、网络、状态和操作，不让地址被横向滚动遮住', () => {
   assert.deepEqual(visibleAssetColumnKeys('terminal', 'medium'), [
-    'asset_name', 'device_type', 'ip', 'network_type', 'status', 'actions',
+    'asset_code', 'device_type', 'ip', 'network_type', 'status', 'actions',
   ])
   assert.deepEqual(visibleAssetColumnKeys('infrastructure', 'medium'), [
-    'name', 'device_type', 'location', 'management_ip', 'network_type', 'status', 'actions',
+    'asset_code', 'device_type', 'location', 'management_ip', 'network_type', 'status', 'actions',
   ])
   assert.deepEqual(visibleAssetColumnKeys('system', 'medium'), [
     'name_version', 'app_type', 'provider', 'service_ip', 'network_type', 'status', 'actions',
@@ -42,21 +43,28 @@ test('窄窗口优先保留 IP、网络、状态和操作，不让地址被横�
 
 test('普通终端只展示设备 IP 且空网络不推断为专网', () => {
   assert.deepEqual(terminalNetworkRows({ device_type: '台式电脑', ip: '10.20.30.8' }, []), [
-    { key: 'device', label: '设备 IP', ip: '10.20.30.8', networkType: '未配置' },
+    { key: 'device', label: '设备 IP', ip: '10.20.30.8' },
   ])
 })
 
-test('云桌面两个地址分别匹配 IPAM 网络且不复用主地址网络', () => {
+test('云桌面保留业务和终端地址但网络类型只认业务 IP 的 IPAM 归属', () => {
   assert.deepEqual(terminalNetworkRows({
     device_type: '云桌面终端',
     ip: '10.20.30.10',
     terminal_ip: '172.16.8.10',
     net_type: '业务网',
-  }, [
-    { ip: '172.16.8.10', network_type: '终端接入网' },
-  ]), [
-    { key: 'business', label: '业务/虚拟机 IP', ip: '10.20.30.10', networkType: '业务网' },
-    { key: 'terminal', label: '终端物理 IP', ip: '172.16.8.10', networkType: '终端接入网' },
+  }), [
+    { key: 'business', label: '业务/虚拟机 IP', ip: '10.20.30.10' },
+    { key: 'terminal', label: '终端物理 IP', ip: '172.16.8.10' },
+  ])
+  assert.equal(terminalBusinessNetworkType({ ip_network_type: '政法专网', net_type: '外网' }), '内网')
+  assert.equal(terminalBusinessNetworkType({ ip_network_type: '外网', net_type: '专网' }), '外网')
+  assert.equal(terminalBusinessNetworkType({ net_type: '外网' }), '未配置')
+})
+
+test('非法业务 IP 不作为地址展示', () => {
+  assert.deepEqual(terminalNetworkRows({ device_type: '云桌面终端', ip: '外网', terminal_ip: '180.161.30.63' }), [
+    { key: 'terminal', label: '终端物理 IP', ip: '180.161.30.63' },
   ])
 })
 
@@ -65,7 +73,7 @@ test('业务系统只展示自身业务 IP 的真实网络', () => {
     service_ip: '192.168.20.5',
     network_type: '专网',
     port: '8443',
-  }), { ip: '192.168.20.5', networkType: '专网', port: '8443' })
+  }), { ip: '192.168.20.5', networkType: '内网', port: '8443' })
   assert.deepEqual(applicationNetworkPresentation({ service_ip: '192.168.20.6' }), {
     ip: '192.168.20.6', networkType: '未配置', port: '',
   })

@@ -8,6 +8,11 @@ import {
   patchUpdateRepositoryConfig,
 } from "./netcatty-update-integration.mjs";
 
+test("Cmdb 设置内容使用 Radix TabContent，切换其他设置时不会常驻覆盖", () => {
+  const source = readFileSync(new URL("../integrations/netcatty/cmdb/ConfigCenter.jsx", import.meta.url), "utf8");
+  assert.match(source, /<TabsContent value="cmdb"/);
+});
+
 test("将 Netcatty 更新源指向 Cmdb 仓库", () => {
   const source = `
 const GITHUB_API_URL = 'https://api.github.com/repos/binaricat/Netcatty/releases/latest';

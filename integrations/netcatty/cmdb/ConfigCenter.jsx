@@ -3,7 +3,7 @@ import { Cloud, DatabaseBackup, Download, FolderOpen, HardDrive, ListChecks, Net
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { VaultPageHeader } from '@/components/vault/VaultPageHeader'
@@ -232,7 +232,7 @@ export default function ConfigCenter() {
   const project = useQuery(api.projects)
   const projectLabel = useMemo(() => project.data?.list?.[0]?.name || '当前项目', [project.data])
   const [section, setSection] = useState('assets')
-  return <div className="flex h-full min-h-0 flex-col">
+  return <TabsContent value="cmdb" className="m-0 h-full min-h-0 flex-1 overflow-hidden"><div className="flex h-full min-h-0 flex-col">
     <VaultPageHeader dataSection="cmdb-config-header"><strong className="text-sm">Cmdb</strong><span className="ml-1 text-[11px] text-muted-foreground">当前项目：{projectLabel}</span></VaultPageHeader>
     <Tabs value={section} onValueChange={setSection} className="shrink-0 border-b border-border/70 px-5 py-2">
       <TabsList className="h-8 bg-muted/60">
@@ -252,5 +252,5 @@ export default function ConfigCenter() {
       </div>}
       {section === 'project' && <div data-section="cmdb-settings-project"><ProjectSettings /><TemplateSettings /></div>}
     </div>
-  </div>
+  </div></TabsContent>
 }

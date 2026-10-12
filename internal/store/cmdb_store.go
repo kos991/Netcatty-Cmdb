@@ -85,41 +85,42 @@ type CmdbAsset struct {
 	UpdatedAt      string  `json:"updated_at"`
 
 	// 48+ 扩展字段与规范对齐字段
-	DeviceType       string                 `json:"device_type"`
-	ManageIP         string                 `json:"manage_ip"`
-	MACAddress       string                 `json:"mac_address"`
-	Organization     string                 `json:"organization"`
-	Area             string                 `json:"area"`
-	CabinetPos       string                 `json:"cabinet_pos"`
-	UHeight          int64                  `json:"u_height"`
-	UStart           int64                  `json:"u_start"`
-	PurchaseAt       string                 `json:"purchase_at"`
-	WarrantyAt       string                 `json:"warranty_at"`
-	Description      string                 `json:"description"`
-	Country          string                 `json:"country"`
-	GeoAddress       string                 `json:"geo_address"`
-	Provider         string                 `json:"provider"`
-	Region           string                 `json:"region"`
-	Zone             string                 `json:"zone"`
-	VCPU             int64                  `json:"vcpu"`
-	MemoryMB         int64                  `json:"memory_mb"`
-	InstanceType     string                 `json:"instance_type"`
-	PublicIP         string                 `json:"public_ip"`
-	BoxSN            string                 `json:"box_sn"`
-	DisplaySN        string                 `json:"display_sn"`
-	CPUInfo          string                 `json:"cpu_info"`
-	DiskInfo         string                 `json:"disk_info"`
-	MgmtURL          string                 `json:"mgmt_url"`
-	BizIP            string                 `json:"biz_ip"`
-	RackUnit         string                 `json:"rack_unit"`
-	SecuritySoftware string                 `json:"security_software"`
-	NetType          string                 `json:"net_type"`
-	AdminUser        string                 `json:"admin_user"`
-	Room             string                 `json:"room"`
-	OwnerID          int64                  `json:"owner_id"`
-	CustomFields     map[string]interface{} `json:"custom_fields,omitempty"`
-	CustomFieldsJSON string                 `json:"-"`
-	Interfaces       []CmdbAssetInterface   `json:"interfaces,omitempty"`
+	DeviceType          string                 `json:"device_type"`
+	ManageIP            string                 `json:"manage_ip"`
+	MACAddress          string                 `json:"mac_address"`
+	Organization        string                 `json:"organization"`
+	Area                string                 `json:"area"`
+	CabinetPos          string                 `json:"cabinet_pos"`
+	UHeight             int64                  `json:"u_height"`
+	UStart              int64                  `json:"u_start"`
+	PurchaseAt          string                 `json:"purchase_at"`
+	WarrantyAt          string                 `json:"warranty_at"`
+	Description         string                 `json:"description"`
+	Country             string                 `json:"country"`
+	GeoAddress          string                 `json:"geo_address"`
+	Provider            string                 `json:"provider"`
+	Region              string                 `json:"region"`
+	Zone                string                 `json:"zone"`
+	VCPU                int64                  `json:"vcpu"`
+	MemoryMB            int64                  `json:"memory_mb"`
+	InstanceType        string                 `json:"instance_type"`
+	PublicIP            string                 `json:"public_ip"`
+	BoxSN               string                 `json:"box_sn"`
+	DisplaySN           string                 `json:"display_sn"`
+	CPUInfo             string                 `json:"cpu_info"`
+	DiskInfo            string                 `json:"disk_info"`
+	MgmtURL             string                 `json:"mgmt_url"`
+	BizIP               string                 `json:"biz_ip"`
+	RackUnit            string                 `json:"rack_unit"`
+	SecuritySoftware    string                 `json:"security_software"`
+	NetType             string                 `json:"net_type"`
+	BusinessNetworkType string                 `json:"business_network_type"`
+	AdminUser           string                 `json:"admin_user"`
+	Room                string                 `json:"room"`
+	OwnerID             int64                  `json:"owner_id"`
+	CustomFields        map[string]interface{} `json:"custom_fields,omitempty"`
+	CustomFieldsJSON    string                 `json:"-"`
+	Interfaces          []CmdbAssetInterface   `json:"interfaces,omitempty"`
 }
 
 // CmdbAssetInterface 对应 cmdb_asset_interfaces 表。
@@ -649,6 +650,52 @@ func (s *Store) AttachCmdbAssetInterfacesForProject(scope ProjectScope, assets [
 		}
 	}
 	return nil
+}
+
+func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope, assets []CmdbAsset) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	if len(assets) == 0 {
+		return nil
+	}
+	assetIndexes := make(map[string][]int)
+	for index := range assets {
+		ip := strings.TrimSpace(assets[index].BizIP)
+		if ip == "" {
+			continue
+		}
+		assetIndexes[ip] = append(assetIndexes[ip], index)
+	}
+	if len(assetIndexes) == 0 {
+		return nil
+	}
+	placeholders := make([]string, 0, len(assetIndexes))
+	args := make([]interface{}, 0, len(assetIndexes)+1)
+	args = append(args, scope.ProjectID)
+	for ip := range assetIndexes {
+		placeholders = append(placeholders, "?")
+		args = append(args, ip)
+	}
+	rows, err := s.db.Query(`SELECT ip.ip, IFNULL(n.category,'') FROM ip_pool ip
+		JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet
+		WHERE ip.project_id=? AND ip.ip IN (`+strings.Join(placeholders, ",")+") ORDER BY ip.id", args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ip, category string
+		if err := rows.Scan(&ip, &category); err != nil {
+			return err
+		}
+		for _, index := range assetIndexes[ip] {
+			if assets[index].BusinessNetworkType == "" {
+				assets[index].BusinessNetworkType = category
+			}
+		}
+	}
+	return rows.Err()
 }
 
 // GetCmdbAsset 读取单个资产及其全部网络接口。

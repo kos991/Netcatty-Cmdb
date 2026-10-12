@@ -19,13 +19,6 @@ import SwitchWorkspace from './SwitchWorkspace'
 import { ActionIcon, DefinitionList, ErrorBanner, StatusPill, statusTone } from './ui'
 import { VendorBrandValue } from './VendorBrandIcon'
 
-const KIND_LABELS = {
-  switch: '交换机',
-  router: '路由器',
-  server: '服务器',
-  generic: '设备',
-}
-
 const KIND_ICONS = {
   switch: Network,
   router: Router,
@@ -37,12 +30,12 @@ const formatTime = deviceReadTime
 
 function DeviceWorkspaceHeader({ asset, kind, expanded, onExpandedChange, onClose, onEdit, onClone, onArchive }) {
   const KindIcon = KIND_ICONS[kind] || KIND_ICONS.generic
-  const subtitle = [asset.asset_code || `#${asset.id}`, deviceTypeLabel(asset), [asset.vendor, asset.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
+  const subtitle = [asset.name || '未命名设备', deviceTypeLabel(asset), [asset.vendor, asset.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
   return <header className="flex h-[60px] shrink-0 items-center gap-3 border-b border-border/70 px-4" data-section="device-workspace-header">
     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><KindIcon size={16} /></div>
     <div className="min-w-0 flex-1">
       <div className="flex min-w-0 items-center gap-2">
-        <h1 className="truncate text-[13px] font-semibold">{asset.name || `未命名${KIND_LABELS[kind]}`}</h1>
+        <h1 className="truncate font-mono text-[13px] font-semibold">{asset.asset_code || '未配置编码'}</h1>
         <StatusPill tone={statusTone(asset.status)}>{asset.status || '未知'}</StatusPill>
       </div>
       <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground" title={subtitle}>{subtitle}</p>

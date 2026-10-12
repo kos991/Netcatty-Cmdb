@@ -14,7 +14,7 @@ func TestCmdbWorkOrderCRUDAndFilter(t *testing.T) {
 	if _, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: " "}); err == nil {
 		t.Fatalf("空主题应当被拒绝")
 	}
-	if _, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "例行巡检", BizType: "日常巡检", Status: "已解决"}); err != nil {
+	if _, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "例行巡检", BizType: "日常巡检"}); err != nil {
 		t.Fatalf("新增第二条工单失败: %v", err)
 	}
 
@@ -42,9 +42,15 @@ func TestCmdbWorkOrderCRUDAndFilter(t *testing.T) {
 	if got.OrderNo == "" {
 		t.Fatalf("工单号应自动生成")
 	}
-	got.Status = "已分配"
+	originalOrderNo := got.OrderNo
+	got.Subject = "更换硬盘记录更新"
+	got.OrderNo = "客户端不得修改"
 	if err := s.UpdateCmdbWorkOrder(got); err != nil {
 		t.Fatalf("更新工单失败: %v", err)
+	}
+	updatedOrder, err := s.GetCmdbWorkOrder(id)
+	if err != nil || updatedOrder.OrderNo != originalOrderNo {
+		t.Fatalf("编辑工单必须保留系统生成的工单号: order=%+v err=%v", updatedOrder, err)
 	}
 	if err := s.DeleteCmdbWorkOrder(id); err != nil {
 		t.Fatalf("删除工单失败: %v", err)
@@ -56,21 +62,63 @@ func TestCmdbWorkOrderCRUDAndFilter(t *testing.T) {
 
 func TestCmdbWorkOrderBatchCompletion(t *testing.T) {
 	s := newCmdbTestStore(t)
-	first, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "批量结束一", Status: "处理中"})
+	first, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "批量结束一"})
 	if err != nil {
 		t.Fatalf("新增第一张工单失败: %v", err)
 	}
-	second, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "批量结束二", Status: "已解决"})
+	second, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "批量结束二"})
 	if err != nil {
 		t.Fatalf("新增第二张工单失败: %v", err)
+	}
+	for _, id := range []int64{first, second} {
+		order, getErr := s.GetCmdbWorkOrder(id)
+		if getErr != nil {
+			t.Fatalf("读取待处理工单失败: %v", getErr)
+		}
+		order.Status = "处理中"
+		if updateErr := s.UpdateCmdbWorkOrder(order); updateErr != nil {
+			t.Fatalf("工单进入处理中失败: %v", updateErr)
+		}
+	}
+	secondOrder, err := s.GetCmdbWorkOrder(second)
+	if err != nil {
+		t.Fatalf("读取待解决工单失败: %v", err)
+	}
+	secondOrder.Status = "已解决"
+	if err := s.UpdateCmdbWorkOrder(secondOrder); err != nil {
+		t.Fatalf("工单进入已解决失败: %v", err)
 	}
 	scope, err := s.DefaultProjectScope()
 	if err != nil {
 		t.Fatalf("读取项目范围失败: %v", err)
 	}
+	if _, err := s.BatchUpdateCmdbWorkOrdersStatusForProject(scope, []int64{first, second}, "已关闭"); err == nil {
+		t.Fatalf("包含处理中工单时不应允许批量关闭")
+	}
+	for _, id := range []int64{first, second} {
+		order, getErr := s.GetCmdbWorkOrder(id)
+		if getErr != nil {
+			t.Fatalf("读取批量关闭失败后的工单: %v", getErr)
+		}
+		want := "已解决"
+		if id == first {
+			want = "处理中"
+		}
+		if order.Status != want {
+			t.Fatalf("批量关闭失败后工单状态被部分修改: got=%q want=%q", order.Status, want)
+		}
+	}
+	firstOrder, err := s.GetCmdbWorkOrder(first)
+	if err != nil {
+		t.Fatalf("读取待解决工单失败: %v", err)
+	}
+	firstOrder.Status = "已解决"
+	if err := s.UpdateCmdbWorkOrder(firstOrder); err != nil {
+		t.Fatalf("将处理中工单标记为已解决失败: %v", err)
+	}
 	updated, err := s.BatchUpdateCmdbWorkOrdersStatusForProject(scope, []int64{first, second, first}, "已关闭")
 	if err != nil || updated != 2 {
-		t.Fatalf("批量结束应更新 2 张工单，updated=%d err=%v", updated, err)
+		t.Fatalf("批量关闭应更新 2 张工单，updated=%d err=%v", updated, err)
 	}
 	for _, id := range []int64{first, second} {
 		order, getErr := s.GetCmdbWorkOrder(id)
@@ -85,7 +133,82 @@ func TestCmdbWorkOrderBatchCompletion(t *testing.T) {
 		t.Fatalf("包含不存在工单时不应返回成功")
 	}
 	if _, err := s.BatchUpdateCmdbWorkOrdersStatusForProject(scope, []int64{first}, "处理中"); err == nil {
-		t.Fatalf("批量结束不应接受非已关闭状态")
+		t.Fatalf("批量关闭不应接受非已关闭目标状态")
+	}
+}
+
+func TestCmdbWorkOrderUpdateEnforcesSequentialTransitionsAndResolutionTime(t *testing.T) {
+	s := newCmdbTestStore(t)
+	if _, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "非法初始状态", Status: "已解决"}); err == nil {
+		t.Fatalf("新建工单不能直接指定已解决状态")
+	}
+	id, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "按流程处理工单"})
+	if err != nil {
+		t.Fatalf("新增工单失败: %v", err)
+	}
+	order, err := s.GetCmdbWorkOrder(id)
+	if err != nil {
+		t.Fatalf("读取新建工单失败: %v", err)
+	}
+	if order.Status != "新建" {
+		t.Fatalf("新建工单初始状态错误: %q", order.Status)
+	}
+
+	order.Status = "已解决"
+	if err := s.UpdateCmdbWorkOrder(order); err == nil {
+		t.Fatalf("新建工单不能跳过处理中直接标记已解决")
+	}
+	order, err = s.GetCmdbWorkOrder(id)
+	if err != nil || order.Status != "新建" {
+		t.Fatalf("非法状态跳转不得修改工单: order=%+v err=%v", order, err)
+	}
+
+	order.Status = "处理中"
+	if err := s.UpdateCmdbWorkOrder(order); err != nil {
+		t.Fatalf("新建工单进入处理中失败: %v", err)
+	}
+	order, err = s.GetCmdbWorkOrder(id)
+	if err != nil {
+		t.Fatalf("读取处理中工单失败: %v", err)
+	}
+	order.Status = "已解决"
+	if err := s.UpdateCmdbWorkOrder(order); err != nil {
+		t.Fatalf("处理中工单进入已解决失败: %v", err)
+	}
+	order, err = s.GetCmdbWorkOrder(id)
+	if err != nil {
+		t.Fatalf("读取已解决工单失败: %v", err)
+	}
+	if order.ActualTime == "" {
+		t.Fatalf("进入已解决时必须自动补齐完成时间")
+	}
+	resolvedAt := order.ActualTime
+	order.Status = "已关闭"
+	if err := s.UpdateCmdbWorkOrder(order); err != nil {
+		t.Fatalf("已解决工单进入已关闭失败: %v", err)
+	}
+	closed, err := s.GetCmdbWorkOrder(id)
+	if err != nil || closed.Status != "已关闭" || closed.ActualTime != resolvedAt {
+		t.Fatalf("关闭工单应保留解决时间: order=%+v err=%v", closed, err)
+	}
+}
+
+func TestCmdbLegacyAssignedWorkOrderCanContinueToProcessing(t *testing.T) {
+	s := newCmdbTestStore(t)
+	id, err := s.CreateCmdbWorkOrder(&CmdbWorkOrder{Subject: "兼容旧工单", Status: "新建"})
+	if err != nil {
+		t.Fatalf("新增测试工单失败: %v", err)
+	}
+	if _, err := s.db.Exec(`UPDATE cmdb_work_orders SET status='已分配' WHERE id=?`, id); err != nil {
+		t.Fatalf("设置旧版工单状态失败: %v", err)
+	}
+	order, err := s.GetCmdbWorkOrder(id)
+	if err != nil {
+		t.Fatalf("读取旧版工单失败: %v", err)
+	}
+	order.Status = "处理中"
+	if err := s.UpdateCmdbWorkOrder(order); err != nil {
+		t.Fatalf("旧版已分配工单应能进入处理中: %v", err)
 	}
 }
 

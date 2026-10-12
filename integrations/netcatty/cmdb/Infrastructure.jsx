@@ -57,12 +57,9 @@ function InfrastructureManagementIPCell({ record }) {
   </div>
 }
 
-function InfrastructureNetworkTypeCell({ record, onOpen }) {
+function InfrastructureNetworkTypeCell({ record }) {
   const presentation = infrastructureNetworkSummary(record)
-  return <div className="min-w-0 space-y-0.5 text-[11px] text-muted-foreground">
-    {presentation.management.zone === '未配置' && presentation.management.ip ? <button type="button" className="truncate text-amber-600 hover:underline" onClick={() => onOpen?.()}>补充网络类型</button> : <p className="truncate" title={presentation.management.zone}>{presentation.management.zone}</p>}
-    {presentation.secondary.slice(0, 2).map((item) => <p key={`${item.purpose}-${item.ip}`} title={`${item.purpose} IP：${item.ip}；网络：${item.zone}`} className="truncate">{item.zone}</p>)}
-  </div>
+  return <span className="block truncate text-xs text-muted-foreground" title={presentation.businessNetworkType}>{presentation.businessNetworkType}</span>
 }
 
 function InfrastructureLocationCell({ record }) {
@@ -151,14 +148,14 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
     setEditor(null); setPhotoDraft({}); setSelected([]); query.reload(); directory.reload(); setWorkspaceRefresh((value) => value + 1)
   }, '已保存完整资产档案')
   const columns = [
-    { key: 'name', label: '资产名称', width: 150, sticky: 'left', className: 'whitespace-nowrap', render: (_value, record) => <InfrastructureNameCell record={{ ...record, onOpen: () => showAsset(record) }} /> },
+    { key: 'asset_code', label: '资产编码', width: 155, sticky: 'left', className: 'whitespace-nowrap', render: (_value, record) => <InfrastructureNameCell record={{ ...record, onOpen: () => showAsset(record) }} /> },
     { key: 'device_type', label: '设备类型', width: 90, className: 'whitespace-nowrap text-xs', render: (_value, record) => deviceTypeLabel(record) },
     { key: 'vendor_model', label: '品牌 / 型号', width: 135, className: 'whitespace-nowrap', render: (_value, record) => <InfrastructureVendorModelCell record={record} /> },
     { key: 'operating_system', label: '操作系统', width: 125, className: 'whitespace-nowrap', render: (_value, record) => <OperatingSystemCell asset={record} compact /> },
     { key: 'owner_department', label: '负责人 / 部门', width: 115, render: (_value, record) => <div className="space-y-0.5 text-xs"><div>{record.owner || '未分配负责人'}</div><div className="text-[11px] text-muted-foreground">{record.department || '未配置部门'}</div></div> },
     { key: 'location', label: '位置', width: 135, render: (_value, record) => <InfrastructureLocationCell record={record} /> },
     { key: 'management_ip', label: '管理 IP', width: 165, render: (_value, record) => <InfrastructureManagementIPCell record={record} /> },
-    { key: 'network_type', label: '网络类型', width: 105, render: (_value, record) => <InfrastructureNetworkTypeCell record={record} onOpen={() => showAsset(record)} /> },
+    { key: 'network_type', label: '网络类型', width: 105, render: (_value, record) => <InfrastructureNetworkTypeCell record={record} /> },
     { key: 'status', label: '设备状态', width: 78, sticky: 'right', className: 'whitespace-nowrap', render: (value) => <StatusPill tone={statusTone(value)}>{value || '未配置'}</StatusPill> },
     { key: 'actions', label: '操作', width: 48, sticky: 'right', className: 'whitespace-nowrap', render: (_value, record) => <ActionIcon label="编辑资产" onClick={() => open(record)}><Pencil size={14} /></ActionIcon> },
   ]

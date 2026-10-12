@@ -116,6 +116,30 @@ func TestLegacyAssetUnsetFiltersAndIPAMNetworkTypes(t *testing.T) {
 	}
 }
 
+func TestLegacyCloudDesktopResolvesBusinessIPFromIPAMBoxRemark(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "外网", Category: "外网", CIDR: "191.162.17.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAssetForProject(scope, &Asset{AssetCode: "CLOUD-001", DeviceType: "云桌面终端", IP: "外网", TerminalIP: "180.161.30.63"}, "测试"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateIPEntryForProject(scope, &IPEntry{Subnet: "外网", IP: "191.162.17.63", Remark: "外网云桌面｜盒子 180.161.30.63"}); err != nil {
+		t.Fatal(err)
+	}
+	assets, err := s.AllAssetsForProject(scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 1 || assets[0].IP != "191.162.17.63" || assets[0].IPNetworkType != "外网" {
+		t.Fatalf("云桌面业务 IP 未从 IPAM 备注恢复: %+v", assets)
+	}
+}
+
 func TestImportAssetsForProjectRollsBackOnIPConflict(t *testing.T) {
 	s := newLegacyAssetTestStore(t)
 	scope, err := s.DefaultProjectScope()

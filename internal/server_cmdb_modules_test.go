@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"czfy-assets/internal/store"
@@ -59,8 +60,25 @@ func TestCmdbModuleEndpoints(t *testing.T) {
 	}
 	batchBody, _ := json.Marshal(map[string]interface{}{"ids": []int64{createdWorkOrder.ID}, "status": "已关闭"})
 	rec = doJSON(t, mux, http.MethodPost, "/api/cmdb/work-orders/batch", string(batchBody))
+	if rec.Code == http.StatusOK {
+		t.Fatalf("新建工单未解决前不能批量关闭: %s", rec.Body.String())
+	}
+	updateBody := `{"subject":"更换硬盘","status":"已解决"}`
+	rec = doJSON(t, mux, http.MethodPut, "/api/cmdb/work-orders/"+strconv.FormatInt(createdWorkOrder.ID, 10), updateBody)
+	if rec.Code == http.StatusOK {
+		t.Fatalf("新建工单不能跳过处理中直接标记已解决")
+	}
+	rec = doJSON(t, mux, http.MethodPut, "/api/cmdb/work-orders/"+strconv.FormatInt(createdWorkOrder.ID, 10), `{"subject":"更换硬盘","status":"处理中"}`)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("批量结束工单应返回 200，实际 %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("新建工单进入处理中应成功，实际 %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, mux, http.MethodPut, "/api/cmdb/work-orders/"+strconv.FormatInt(createdWorkOrder.ID, 10), updateBody)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("处理中工单标记已解决应成功，实际 %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, mux, http.MethodPost, "/api/cmdb/work-orders/batch", string(batchBody))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("已解决工单批量关闭应返回 200，实际 %d %s", rec.Code, rec.Body.String())
 	}
 	rec = doJSON(t, mux, http.MethodPost, "/api/cmdb/work-orders", `{"subject":""}`)
 	if rec.Code == http.StatusOK {
@@ -84,6 +102,9 @@ func TestCmdbModuleEndpoints(t *testing.T) {
 	}
 	if woList.List[0].OrderNo == "" {
 		t.Fatalf("工单号应自动生成")
+	}
+	if woList.List[0].Status != "已关闭" || woList.List[0].ActualTime == "" {
+		t.Fatalf("工单接口未完整保留解决到关闭的状态与完成时间: %+v", woList.List[0])
 	}
 
 	// --- 盘点 ---

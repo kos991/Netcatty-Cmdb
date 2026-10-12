@@ -80,8 +80,12 @@ func (s *Store) CreateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	if strings.TrimSpace(w.Subject) == "" {
 		return 0, fmt.Errorf("维护主题不能为空")
 	}
+	w.Status = strings.TrimSpace(w.Status)
 	if w.Status == "" {
 		w.Status = "新建"
+	}
+	if w.Status != "新建" {
+		return 0, fmt.Errorf("新建工单的初始状态只能是「新建」")
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -207,15 +211,42 @@ func (s *Store) UpdateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	if strings.TrimSpace(w.Subject) == "" {
 		return fmt.Errorf("维护主题不能为空")
 	}
-	if err := s.requireAssetInProject(s.db, scope.ProjectID, w.AssetID); err != nil {
-		return err
-	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := s.requireAssetInProject(tx, scope.ProjectID, w.AssetID); err != nil {
+		return err
+	}
+	var currentOrderNo, currentStatus, currentActualTime string
+	if err := tx.QueryRow(`SELECT IFNULL(order_no,''), IFNULL(status,''), IFNULL(actual_time,'') FROM cmdb_work_orders WHERE id=? AND project_id=?`, w.ID, scope.ProjectID).
+		Scan(&currentOrderNo, &currentStatus, &currentActualTime); errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("工单不属于当前项目: %w", ErrProjectScopedNotFound)
+	} else if err != nil {
+		return err
+	}
+	w.Status = strings.TrimSpace(w.Status)
+	if w.Status == "" {
+		w.Status = currentStatus
+	}
+	w.OrderNo = currentOrderNo
+	if err := validateWorkOrderStatusTransition(currentStatus, w.Status); err != nil {
+		return err
+	}
+	if strings.TrimSpace(w.ActualTime) == "" && currentActualTime != "" {
+		w.ActualTime = currentActualTime
+	}
+	if w.Status == "已解决" && strings.TrimSpace(w.ActualTime) == "" {
+		w.ActualTime = now
+	}
+	if w.Status == "已关闭" {
+		w.ActualTime = currentActualTime
+		if strings.TrimSpace(w.ActualTime) == "" {
+			w.ActualTime = now
+		}
+	}
 	res, err := tx.Exec(`UPDATE cmdb_work_orders SET order_no=?, priority=?, subject=?, biz_type=?, operation_type=?, work_minutes=?, status=?,
 		plan_time=?, actual_time=?, result=?, owner=?, maintainer=?, asset_id=?, remark=?, updated_at=?
 		WHERE id=? AND project_id=?`, w.OrderNo, w.Priority, w.Subject, w.BizType, w.OperationType, w.WorkMinutes, w.Status,
@@ -235,8 +266,29 @@ func (s *Store) UpdateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	return tx.Commit()
 }
 
-// BatchUpdateCmdbWorkOrdersStatusForProject 批量结束当前项目内的工单。
-// 工单结束统一使用「已关闭」，同时补齐完成时间，不跨项目修改记录。
+func validateWorkOrderStatusTransition(current, next string) error {
+	current = strings.TrimSpace(current)
+	next = strings.TrimSpace(next)
+	if next == current {
+		return nil
+	}
+	if next == "已取消" && current != "已关闭" && current != "已取消" {
+		return nil
+	}
+	nextStatus := map[string]string{
+		"新建":  "处理中",
+		"已分配": "处理中",
+		"处理中": "已解决",
+		"已解决": "已关闭",
+	}[current]
+	if nextStatus == next {
+		return nil
+	}
+	return fmt.Errorf("工单状态不能从「%s」直接变更为「%s」", current, next)
+}
+
+// BatchUpdateCmdbWorkOrdersStatusForProject 批量关闭当前项目内已解决的工单。
+// 更新与状态校验在同一事务中完成，不跨项目修改记录。
 func (s *Store) BatchUpdateCmdbWorkOrdersStatusForProject(scope ProjectScope, ids []int64, status string) (int64, error) {
 	if _, err := s.ResolveProject(scope); err != nil {
 		return 0, err
@@ -261,28 +313,48 @@ func (s *Store) BatchUpdateCmdbWorkOrdersStatusForProject(scope ProjectScope, id
 	}
 	placeholders := make([]string, len(unique))
 	idsArgs := []interface{}{scope.ProjectID}
-	args := []interface{}{"已关闭"}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	args = append(args, now, now, scope.ProjectID)
 	for i, id := range unique {
 		placeholders[i] = "?"
 		idsArgs = append(idsArgs, id)
-		args = append(args, id)
 	}
-	var owned int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM cmdb_work_orders WHERE project_id=? AND id IN ("+strings.Join(placeholders, ",")+")", idsArgs...).Scan(&owned); err != nil {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	var owned, unresolved int
+	if err := tx.QueryRow(`SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='已解决' THEN 0 ELSE 1 END),0)
+		FROM cmdb_work_orders WHERE project_id=? AND id IN (`+strings.Join(placeholders, ",")+")", idsArgs...).Scan(&owned, &unresolved); err != nil {
 		return 0, err
 	}
 	if owned != len(unique) {
 		return 0, fmt.Errorf("仅找到 %d/%d 张当前项目工单，未执行结束操作", owned, len(unique))
 	}
-	result, err := s.db.Exec(`UPDATE cmdb_work_orders SET status=?,
+	if unresolved != 0 {
+		return 0, fmt.Errorf("所选工单中有 %d 张尚未解决，未执行关闭操作", unresolved)
+	}
+	args := []interface{}{"已关闭", now, now, scope.ProjectID}
+	for _, id := range unique {
+		args = append(args, id)
+	}
+	result, err := tx.Exec(`UPDATE cmdb_work_orders SET status=?,
 		actual_time=CASE WHEN IFNULL(actual_time,'')='' THEN ? ELSE actual_time END,
-		updated_at=? WHERE project_id=? AND id IN (`+strings.Join(placeholders, ",")+")", args...)
+		updated_at=? WHERE project_id=? AND status='已解决' AND id IN (`+strings.Join(placeholders, ",")+")", args...)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if updated != int64(len(unique)) {
+		return 0, fmt.Errorf("仅关闭 %d/%d 张工单，事务已回滚", updated, len(unique))
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return updated, nil
 }
 
 func (s *Store) replaceWorkOrderAssetRefs(tx *sql.Tx, scope ProjectScope, workOrderID int64, refs []WorkOrderAssetRef) error {

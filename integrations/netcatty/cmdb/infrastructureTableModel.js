@@ -1,3 +1,5 @@
+import { canonicalNetworkType } from './assetTableModel.js'
+
 const clean = (value) => String(value || '').trim()
 
 export function infrastructureNetworkZoneOptions(values = []) {
@@ -10,12 +12,10 @@ export function infrastructureNetworkZoneOptions(values = []) {
 export function infrastructureNamePresentation(record = {}) {
   const assetCode = clean(record.asset_code)
   const serialNumber = clean(record.sn || record.serial_number || record.box_sn)
-  const identity = assetCode || serialNumber
-    ? [assetCode || '未配置编码', serialNumber ? `SN：${serialNumber}` : '未配置 SN'].join(' · ')
-    : '未配置编码 / SN'
+  const deviceName = clean(record.name || record.device_name) || '未命名设备'
   return {
-    name: clean(record.name) || `基础设施 #${record.id || ''}`.trim(),
-    secondary: identity,
+    name: assetCode || '未配置编码',
+    secondary: [deviceName, serialNumber ? `SN：${serialNumber}` : '未配置 SN'].join(' · '),
   }
 }
 
@@ -96,5 +96,10 @@ export function infrastructureNetworkSummary(record = {}) {
   }
 
   const zones = new Set([managementZone, ...secondary.map((item) => item.zone)].filter((zone) => zone && zone !== '未配置'))
-  return { management, secondary, hasMultipleNetworks: zones.size > 1 || secondary.length > 0 }
+  return {
+    management,
+    businessNetworkType: canonicalNetworkType(record.business_network_type),
+    secondary,
+    hasMultipleNetworks: zones.size > 1 || secondary.length > 0,
+  }
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 )
@@ -24,8 +25,13 @@ func (s *Store) AllAssetsForProject(scope ProjectScope) ([]Asset, error) {
 		return nil, err
 	}
 	rows, err := s.db.Query(`SELECT a.id,a.project_id,IFNULL(a.asset_name,''),IFNULL(a.asset_code,''),IFNULL(a.device_type,''),IFNULL(a.box_sn,''),IFNULL(a.display_sn,''),IFNULL(a.user_name,''),IFNULL(a.department,''),IFNULL(a.room,''),IFNULL(a.ip,''),IFNULL(a.terminal_ip,''),IFNULL(a.os_type,''),IFNULL(a.os_version,''),IFNULL(a.security_software,''),IFNULL(a.status,''),IFNULL(a.net_type,''),a.group_id,IFNULL(g.name,''),IFNULL(a.remark,''),IFNULL(a.created_at,''),IFNULL(a.updated_at,''),
-		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.ip ORDER BY ip.id LIMIT 1),''),
-		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.terminal_ip ORDER BY ip.id LIMIT 1),'')
+		COALESCE(
+			NULLIF((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.ip ORDER BY ip.id LIMIT 1),''),
+			(SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND a.terminal_ip<>'' AND ip.remark LIKE '%盒子 ' || a.terminal_ip || '%' ORDER BY ip.id LIMIT 1),
+			''
+		),
+		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.terminal_ip ORDER BY ip.id LIMIT 1),''),
+		IFNULL((SELECT ip.ip FROM ip_pool ip WHERE ip.project_id=a.project_id AND a.terminal_ip<>'' AND ip.remark LIKE '%盒子 ' || a.terminal_ip || '%' ORDER BY ip.id LIMIT 1),'')
 		FROM assets a LEFT JOIN cmdb_groups g ON g.id=a.group_id AND g.project_id=a.project_id
 		WHERE a.project_id=? ORDER BY a.id DESC`, scope.ProjectID)
 	if err != nil {
@@ -36,8 +42,12 @@ func (s *Store) AllAssetsForProject(scope ProjectScope) ([]Asset, error) {
 	var list []Asset
 	for rows.Next() {
 		var a Asset
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.AssetName, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.OSType, &a.OSVersion, &a.SecuritySoftware, &a.Status, &a.NetType, &a.GroupID, &a.GroupName, &a.Remark, &a.CreatedAt, &a.UpdatedAt, &a.IPNetworkType, &a.TerminalIPNetworkType); err != nil {
+		var resolvedBusinessIP string
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.AssetName, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.OSType, &a.OSVersion, &a.SecuritySoftware, &a.Status, &a.NetType, &a.GroupID, &a.GroupName, &a.Remark, &a.CreatedAt, &a.UpdatedAt, &a.IPNetworkType, &a.TerminalIPNetworkType, &resolvedBusinessIP); err != nil {
 			return nil, err
+		}
+		if net.ParseIP(strings.TrimSpace(a.IP)) == nil && resolvedBusinessIP != "" {
+			a.IP = resolvedBusinessIP
 		}
 		list = append(list, a)
 	}
@@ -259,18 +269,27 @@ func (s *Store) GetAssetForProject(scope ProjectScope, id int64) (*Asset, []Asse
 		return nil, nil, err
 	}
 	var a Asset
+	var resolvedBusinessIP string
 	err := s.db.QueryRow(`SELECT a.id,a.project_id,IFNULL(a.asset_name,''),IFNULL(a.asset_code,''),IFNULL(a.device_type,''),IFNULL(a.box_sn,''),IFNULL(a.display_sn,''),IFNULL(a.user_name,''),IFNULL(a.department,''),IFNULL(a.room,''),IFNULL(a.ip,''),IFNULL(a.terminal_ip,''),IFNULL(a.os_type,''),IFNULL(a.os_version,''),IFNULL(a.security_software,''),IFNULL(a.status,''),IFNULL(a.net_type,''),a.group_id,IFNULL(g.name,''),IFNULL(a.remark,''),IFNULL(a.created_at,''),IFNULL(a.updated_at,''),
-		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.ip ORDER BY ip.id LIMIT 1),''),
-		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.terminal_ip ORDER BY ip.id LIMIT 1),'')
+		COALESCE(
+			NULLIF((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.ip ORDER BY ip.id LIMIT 1),''),
+			(SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND a.terminal_ip<>'' AND ip.remark LIKE '%盒子 ' || a.terminal_ip || '%' ORDER BY ip.id LIMIT 1),
+			''
+		),
+		IFNULL((SELECT n.category FROM ip_pool ip JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet WHERE ip.project_id=a.project_id AND ip.ip=a.terminal_ip ORDER BY ip.id LIMIT 1),''),
+		IFNULL((SELECT ip.ip FROM ip_pool ip WHERE ip.project_id=a.project_id AND a.terminal_ip<>'' AND ip.remark LIKE '%盒子 ' || a.terminal_ip || '%' ORDER BY ip.id LIMIT 1),'')
 		FROM assets a LEFT JOIN cmdb_groups g ON g.id=a.group_id AND g.project_id=a.project_id
 		WHERE a.id=? AND a.project_id=?`, id, scope.ProjectID).Scan(
-		&a.ID, &a.ProjectID, &a.AssetName, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.OSType, &a.OSVersion, &a.SecuritySoftware, &a.Status, &a.NetType, &a.GroupID, &a.GroupName, &a.Remark, &a.CreatedAt, &a.UpdatedAt, &a.IPNetworkType, &a.TerminalIPNetworkType,
+		&a.ID, &a.ProjectID, &a.AssetName, &a.AssetCode, &a.DeviceType, &a.BoxSN, &a.DisplaySN, &a.UserName, &a.Department, &a.Room, &a.IP, &a.TerminalIP, &a.OSType, &a.OSVersion, &a.SecuritySoftware, &a.Status, &a.NetType, &a.GroupID, &a.GroupName, &a.Remark, &a.CreatedAt, &a.UpdatedAt, &a.IPNetworkType, &a.TerminalIPNetworkType, &resolvedBusinessIP,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil, errors.Join(ErrProjectScopedNotFound, sql.ErrNoRows)
 		}
 		return nil, nil, err
+	}
+	if net.ParseIP(strings.TrimSpace(a.IP)) == nil && resolvedBusinessIP != "" {
+		a.IP = resolvedBusinessIP
 	}
 	rows, err := s.db.Query(`SELECT id, project_id, asset_id, IFNULL(log_type,''), IFNULL(from_user,''), IFNULL(to_user,''),
 		IFNULL(from_location,''), IFNULL(to_location,''), IFNULL(old_sn,''), IFNULL(new_sn,''),

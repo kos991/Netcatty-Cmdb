@@ -23,7 +23,7 @@ const loadAssets = async () => {
   const [terminals, infrastructure, applications] = await Promise.all([allPages(api.assets), allPages(api.infrastructure, { scope: 'infrastructure' }), allPages(api.apps)])
   return [
     ...terminals.map((asset) => ({ ...asset, key: `terminal:${asset.id}`, owner_type: 'terminal', owner_name: asset.asset_code || asset.device_type || `终端 #${asset.id}` })),
-    ...infrastructure.map((asset) => ({ ...asset, key: `infrastructure:${asset.id}`, owner_type: 'infrastructure', owner_name: asset.name || asset.asset_code || `基础设施 #${asset.id}` })),
+    ...infrastructure.map((asset) => ({ ...asset, key: `infrastructure:${asset.id}`, owner_type: 'infrastructure', owner_name: asset.asset_code || '未配置编码' })),
     ...applications.map((asset) => ({ ...asset, key: `application:${asset.id}`, owner_type: 'application', owner_name: asset.app_name || `业务系统 #${asset.id}` })),
   ]
 }

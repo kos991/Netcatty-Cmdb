@@ -64,11 +64,15 @@ export async function uploadFile(path, file) {
   if (typeof bridge?.cmdbUploadFile !== 'function') {
     throw new Error('Cmdb 原生附件通道不可用')
   }
+  let result
   if (file) {
     if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name} 不能超过 50 MiB`)
-    return bridge.cmdbUploadFile({ path, fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })
+    result = await bridge.cmdbUploadFile({ path, fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })
+  } else {
+    result = await bridge.cmdbUploadFile({ path })
   }
-  return bridge.cmdbUploadFile({ path })
+  if (!result?.cancelled) scheduleCmdbCloudSync()
+  return result
 }
 
 export async function nativeStatus() {

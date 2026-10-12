@@ -41,7 +41,7 @@ import { buildLinkedHostByAssetID, operatingSystemTypeFromDetectedHost } from '.
 import { useNetcattyDirectory } from './NetcattyDirectory'
 
 import { syncFollowingNetcattyHosts } from './NetcattyConnection'
-import { terminalNetworkRows, visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
+import { terminalBusinessNetworkType, terminalNetworkRows, visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
 
 
 
@@ -105,7 +105,7 @@ function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged, onNavigate
   const cloud = isCloudDevice(asset.device_type)
   const roomText = asset.room ? (String(asset.room).endsWith('室') ? String(asset.room) : `${asset.room}室`) : '未登记'
 
-  return <AssetPanel open onClose={onClose} title={asset.asset_name || asset.asset_code || `终端资产 #${id}`} subtitle={asset.asset_code || asset.device_type} status={asset.status} icon={Monitor} onEdit={() => onEdit('edit', asset)}>
+  return <AssetPanel open onClose={onClose} title={asset.asset_code || '未配置编码'} subtitle={asset.device_type} status={asset.status} icon={Monitor} onEdit={() => onEdit('edit', asset)}>
     <AssetPanelSection title="使用与位置" icon={UserRound} action={<div className="flex gap-1"><ActionIcon label="调换使用人" onClick={() => onEdit('transfer', asset)}><ArrowLeftRight size={15} /></ActionIcon><ActionIcon label="维修换件" onClick={() => onEdit('maintenance', asset)}><Wrench size={15} /></ActionIcon></div>}>
       <AssetPanelFields items={[
         ["当前使用人", asset.user_name || '公用 / 闲置'],
@@ -116,13 +116,13 @@ function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged, onNavigate
 
     <AssetPanelSection title="设备与网络" icon={Network}>
       <AssetPanelFields items={[
-        ["资产名称", asset.asset_name || '未命名资产'],
         ["资产编码", asset.asset_code || '-'],
         ["设备类型", asset.device_type || '-'],
         [serial.primaryLabel, serial.primaryValue || '-'],
         ...(serial.secondaryValue ? [[serial.secondaryLabel, serial.secondaryValue]] : []),
         ["操作系统", <OperatingSystemCell asset={asset} host={host} />],
-        ...terminalNetworkRows(asset).flatMap(({ label, ip, networkType }) => [[label, ip], [`${label}网络类型`, networkType]]),
+        ...terminalNetworkRows(asset).map(({ label, ip }) => [label, ip]),
+        ["网络类型", terminalBusinessNetworkType(asset)],
         ...(asset.remark ? [["备注", asset.remark]] : []),
         ["建档时间", asset.created_at || '-']
       ]} />
@@ -482,8 +482,8 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   const columns = [
     {
-      key: 'asset_name', label: '资产名称', width: 170, sticky: 'left', className: 'whitespace-nowrap',
-      render: (value, row) => <div className="min-w-0"><Button variant="link" title={value || '未命名资产'} className="h-auto max-w-full justify-start truncate p-0 text-left text-xs font-semibold text-foreground hover:underline" onClick={() => setDetailId(row.id)}>{value || '未命名资产'}</Button><p title={`${row.asset_code || '未配置编码'} · ${terminalSerialProfile(row).primaryLabel}：${terminalSerialProfile(row).primaryValue || '未配置'}`} className="truncate font-mono text-[10px] text-muted-foreground">{row.asset_code || '未配置编码'} · {terminalSerialProfile(row).primaryValue || '未配置 SN'}</p></div>,
+      key: 'asset_code', label: '资产编码', width: 170, sticky: 'left', className: 'whitespace-nowrap',
+      render: (value, row) => <div className="min-w-0"><Button variant="link" title={value || '未配置编码'} className="h-auto max-w-full justify-start truncate p-0 text-left font-mono text-xs font-semibold text-foreground hover:underline" onClick={() => setDetailId(row.id)}>{value || '未配置编码'}</Button><p title={`${row.device_type || '未配置类型'} · ${terminalSerialProfile(row).primaryLabel}：${terminalSerialProfile(row).primaryValue || '未配置'}`} className="truncate text-[10px] text-muted-foreground">{row.device_type || '未配置类型'} · {terminalSerialProfile(row).primaryValue || '未配置 SN'}</p></div>,
     },
     {
       key: 'device_type', label: '设备类型', width: 100, className: 'whitespace-nowrap text-xs',
@@ -503,7 +503,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     },
     {
       key: 'network_type', label: '网络类型', width: 105, className: 'whitespace-nowrap',
-      render: (_, row) => { const addresses = terminalNetworkRows(row); return addresses.length ? <div className="space-y-0.5">{addresses.map((address) => <p key={address.key} title={`${address.label}：${address.networkType}`} className="truncate text-[11px] text-muted-foreground">{address.networkType}</p>)}</div> : <span className="text-xs text-muted-foreground">未配置</span> },
+      render: (_, row) => <span className="block truncate text-xs text-muted-foreground">{terminalBusinessNetworkType(row)}</span>,
     },
     { key: 'operating_system', label: '操作系统', width: 135, className: 'whitespace-nowrap', render: (_, row) => <OperatingSystemCell asset={row} host={linkedHostByAssetID.get(Number(row.id))} /> },
     { key: 'status', label: '设备状态', width: 92, sticky: 'right', className: 'whitespace-nowrap', render: (value) => <StatusPill tone={value === '闲置' ? 'warning' : statusTone(value)}>{value || '未配置'}</StatusPill> },

@@ -70,6 +70,10 @@ func (s *Server) handleListCmdbAssets(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
+	if err := s.Store.AttachCmdbAssetBusinessNetworkTypesForProject(scope, list); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
 	writeJSON(w, 200, map[string]interface{}{
 		"list":      list,
 		"total":     total,
@@ -98,6 +102,12 @@ func (s *Server) handleGetCmdbAsset(w http.ResponseWriter, r *http.Request) {
 	if ifaces == nil {
 		ifaces = []store.CmdbAssetInterface{}
 	}
+	assetList := []store.CmdbAsset{*asset}
+	if err := s.Store.AttachCmdbAssetBusinessNetworkTypesForProject(scope, assetList); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	asset = &assetList[0]
 	relations, err := s.Store.CmdbAssetRelationsForProject(scope, asset, ifaces)
 	if err != nil {
 		writeErr(w, 500, err.Error())
