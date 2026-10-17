@@ -9,36 +9,33 @@ import {
   normalizeGroupFilterValue,
   numericOrganizationPath,
   terminalBusinessNetworkType,
+  terminalHardwareFields,
+  validIPv4,
   terminalNetworkRows,
   visibleAssetColumnKeys,
 } from './assetTableModel.js'
 
-test('三类资产将 IP 与网络分列且硬件资产以资产编码作为主标识', () => {
+test('三类资产将 IP 与网络分列并保留原型必要字段', () => {
   assert.deepEqual(TERMINAL_COLUMN_KEYS, [
     'asset_code', 'device_type', 'owner_department', 'room', 'ip',
     'network_type', 'operating_system', 'status', 'actions',
   ])
   assert.deepEqual(INFRASTRUCTURE_COLUMN_KEYS, [
-    'asset_code', 'device_type', 'vendor_model', 'operating_system',
-    'owner_department', 'location', 'management_ip', 'network_type', 'status', 'actions',
+    'asset_code', 'device_type', 'vendor_model', 'management_ip', 'network_type',
+    'location', 'owner_department', 'status', 'actions',
   ])
   assert.deepEqual(SYSTEM_COLUMN_KEYS, [
-    'name_version', 'app_type', 'provider', 'owner', 'service_ip', 'network_type',
-    'host', 'status', 'actions',
+    'name_code', 'app_type', 'version', 'host', 'service_ip', 'network_type',
+    'owner', 'status', 'actions',
   ])
 })
 
-test('窄窗口优先保留 IP、网络、状态和操作，不让地址被横向滚动遮住', () => {
-  assert.deepEqual(visibleAssetColumnKeys('terminal', 'medium'), [
-    'asset_code', 'device_type', 'ip', 'network_type', 'status', 'actions',
-  ])
-  assert.deepEqual(visibleAssetColumnKeys('infrastructure', 'medium'), [
-    'asset_code', 'device_type', 'location', 'management_ip', 'network_type', 'status', 'actions',
-  ])
-  assert.deepEqual(visibleAssetColumnKeys('system', 'medium'), [
-    'name_version', 'app_type', 'provider', 'service_ip', 'network_type', 'status', 'actions',
-  ])
-  assert.deepEqual(visibleAssetColumnKeys('terminal', 'wide'), TERMINAL_COLUMN_KEYS)
+test('窄窗口保留完整资产列，通过表格滚动查看而不丢失原型字段', () => {
+  for (const density of ['wide', 'medium', 'compact']) {
+    assert.deepEqual(visibleAssetColumnKeys('terminal', density), TERMINAL_COLUMN_KEYS)
+    assert.deepEqual(visibleAssetColumnKeys('infrastructure', density), INFRASTRUCTURE_COLUMN_KEYS)
+    assert.deepEqual(visibleAssetColumnKeys('system', density), SYSTEM_COLUMN_KEYS)
+  }
 })
 
 test('普通终端只展示设备 IP 且空网络不推断为专网', () => {
@@ -57,7 +54,7 @@ test('云桌面保留业务和终端地址但网络类型只认业务 IP 的 IPA
     { key: 'business', label: '业务/虚拟机 IP', ip: '10.20.30.10' },
     { key: 'terminal', label: '终端物理 IP', ip: '172.16.8.10' },
   ])
-  assert.equal(terminalBusinessNetworkType({ ip_network_type: '政法专网', net_type: '外网' }), '内网')
+  assert.equal(terminalBusinessNetworkType({ ip_network_type: '政法专网', net_type: '外网' }), '专网')
   assert.equal(terminalBusinessNetworkType({ ip_network_type: '外网', net_type: '专网' }), '外网')
   assert.equal(terminalBusinessNetworkType({ net_type: '外网' }), '未配置')
 })
@@ -68,12 +65,26 @@ test('非法业务 IP 不作为地址展示', () => {
   ])
 })
 
+test('只有台式机和笔记本提供可保存的计算硬件字段', () => {
+  for (const type of ['台式机', '台式电脑', '笔记本', '笔记本电脑']) {
+    assert.deepEqual(terminalHardwareFields(type).map(({ key }) => key), ['vendor', 'model', 'cpu_info', 'memory_mb', 'disk_info'])
+    assert.equal(terminalHardwareFields(type).find(({ key }) => key === 'memory_mb').type, 'number')
+  }
+  for (const type of ['打印机', '网络打印机', '云桌面', '云盒', '']) assert.deepEqual(terminalHardwareFields(type), [])
+})
+
+test('终端连接入口只接受完整有效的已填写 IPv4 地址', () => {
+  for (const ip of ['10.0.0.1', ' 192.168.1.2 ', '255.255.255.255']) assert.equal(validIPv4(ip), true)
+  for (const ip of ['', '外网', '10.0.0', '10.0.0.256', 'https://10.0.0.1', '10.0.0.-1']) assert.equal(validIPv4(ip), false)
+  assert.deepEqual(terminalNetworkRows({ device_type: '云桌面', ip: '10.0.0.256', terminal_ip: '' }), [])
+})
+
 test('业务系统只展示自身业务 IP 的真实网络', () => {
   assert.deepEqual(applicationNetworkPresentation({
     service_ip: '192.168.20.5',
     network_type: '专网',
     port: '8443',
-  }), { ip: '192.168.20.5', networkType: '内网', port: '8443' })
+  }), { ip: '192.168.20.5', networkType: '专网', port: '8443' })
   assert.deepEqual(applicationNetworkPresentation({ service_ip: '192.168.20.6' }), {
     ip: '192.168.20.6', networkType: '未配置', port: '',
   })

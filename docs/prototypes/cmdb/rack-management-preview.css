@@ -1,0 +1,86 @@
+/* Offline rack interactions; all new styling is scoped to rack markup/dialogs. */
+#rack-toolbar .room .menu small, #rack-toolbar .cabinet .menu small { display: block; padding: 8px; color: var(--muted); }
+/* A cabinet keeps a compact width instead of stretching with the window. */
+#rack-content .rack-frame { width: 100%; max-width: 400px; margin: 0; box-sizing: border-box; }
+#rack-content { grid-template-columns: clamp(330px, 23vw, 380px) minmax(0, 1fr) clamp(340px, 24vw, 380px); }
+#rack-content .rack-panel { padding: 16px 14px 12px; }
+#rack-content .rack-scroll { padding-right: 3px; }
+#rack-content .editor-head, #rack-content .editor-body { padding-left: 24px; padding-right: 24px; }
+#rack-content .editor-head > *, #rack-content .editor-body > * { max-width: 840px; }
+#rack-content .editor-footer { justify-content: flex-end; padding-left: 24px; padding-right: 24px; }
+#rack-content .editor-footer .unmount { margin-right: auto; }
+#rack-content .rack-feedback { flex-shrink: 0; color: var(--muted); font-size: 11px; line-height: 1.6; margin: 0 0 9px; min-height: 18px; }
+#rack-content .rack-search-results { flex-shrink: 0; max-height: 140px; overflow: auto; padding: 8px; margin-bottom: 9px; border: 1px solid var(--border); border-radius: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+#rack-content .rack-search-results[hidden] { display: none; }
+#rack-content .rack-search-results button { height: 28px; font-size: 11px; }
+#rack-grid > button { border-radius: 0; min-width: 0; height: auto; margin: 0; }
+#rack-grid > .u-label { padding: 0; border-top: 0; border-left: 0; line-height: 24px; color: var(--muted); background: var(--muted-surface); border-color: var(--border); }
+#rack-grid > .slot { padding: 0; border-width: 0 0 1px; border-style: dashed; border-color: var(--accent); background: var(--bg); }
+#rack-grid > .slot:hover, #rack-grid > .u-label:hover { color: var(--accent); background: var(--accent-soft); }
+#rack-grid > .device { justify-content: flex-start; text-align: left; padding: 0 9px; border: 0; border-bottom: 1px solid var(--border); background: var(--success); color: var(--surface); }
+#rack-grid > .device .meta { color: inherit; opacity: .85; }
+#rack-grid > .device.selected { outline: 2px solid #78b9f1; outline-offset: -2px; box-shadow: inset 0 0 0 3px #224f7833; z-index: 2; }
+#rack-grid > .device.selected::after { content: ''; pointer-events: none; position: absolute; inset: 0; padding: 2px; background: linear-gradient(110deg, #6ca9df, #a4d7ff, #e2f3ff, #87c5f4, #6ca9df); background-size: 300% 100%; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: rack-selection-flow 5s linear infinite; }
+@keyframes rack-selection-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+#rack-grid > button:focus-visible { position: relative; outline: 2px solid var(--accent); outline-offset: -2px; z-index: 3; }
+#rack-content .rack-empty-grid { grid-column: 1 / -1; padding: 35px 18px; margin: 0; color: var(--muted); text-align: center; line-height: 1.8; background: var(--bg); }
+#rack-content .rack-empty-editor { padding: 18px; margin: 0 0 16px; border: 1px dashed var(--border); border-radius: 7px; background: var(--bg); color: var(--muted); line-height: 1.9; }
+#rack-content .rack-empty-editor[hidden] { display: none; }
+#rack-content .rack-editor-error, .rack-prototype-dialog .rack-editor-error { color: var(--warning); font-size: 12px; line-height: 1.7; }
+#rack-content .rack-invalid { color: var(--warning); }
+#rack-content .editor-footer { flex-wrap: wrap; }
+#rack-content .editor-footer button { padding: 0 9px; }
+#rack-content .fold .pill { height: auto; min-height: 30px; white-space: normal; text-align: left; }
+#rack-content button:disabled, .rack-prototype-dialog button:disabled { cursor: not-allowed; opacity: .5; }
+#rack-content .hardware-photos > .photo { overflow: hidden; }
+#rack-content .rack-photo-missing .hardware { visibility: hidden; }
+#rack-content .rack-photo-missing::after { content: '未设置示意图'; color: var(--muted); position: absolute; top: 48%; font-size: 11px; }
+#rack-content .rack-photo-missing.empty::after { content: none; }
+#rack-content .rack-photo-present.empty { color: var(--muted); background: var(--muted-surface); border-style: solid; }
+.rack-prototype-dialog { max-height: min(85vh, 760px); }
+#rack-manager { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--border); background: var(--surface); }
+#rack-manager .rack-manager-head { flex-shrink: 0; padding: 16px 14px 12px; border-bottom: 1px solid var(--border); }
+#rack-manager .rack-manager-head h2 { font-size: 14px; margin: 0 0 12px; }
+#rack-manager .rack-manager-body { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+#rack-manager .rack-directory { max-height: 190px; overflow: auto; background: var(--bg); padding: 10px 14px; border-bottom: 1px solid var(--border); scrollbar-width: thin; }
+#rack-manager .rack-directory section + section { margin-top: 8px; }
+#rack-manager .rack-directory button { width: 100%; height: auto; min-height: 28px; white-space: normal; text-align: left; justify-content: flex-start; margin-bottom: 4px; }
+#rack-manager .rack-directory-room { font-weight: 600; }
+#rack-manager .rack-directory-cabinet { padding-left: 20px; font-size: 11px; }
+#rack-manager .rack-directory button.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+#rack-manager .rack-directory small { color: var(--muted); padding: 6px 12px; display: block; }
+#rack-manager .rack-management-form { padding: 14px; min-width: 0; }
+#rack-manager .rack-management-form h3 { font-size: 13px; margin: 0 0 14px; }
+#rack-manager .rack-management-form > .field { margin-bottom: 12px; }
+#rack-manager .rack-management-form > .primary { margin-top: 14px; }
+#rack-manager .rack-management-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#rack-manager .rack-management-actions button { font-size: 11px; padding: 0 9px; }
+#rack-manager .rack-capacity-controls { display: flex; align-items: center; gap: 12px; }
+#rack-manager .rack-capacity-controls input[type='range'] { flex: 1; min-width: 0; accent-color: var(--accent); padding: 0; }
+#rack-manager .rack-capacity-controls input[type='number'] { width: 84px; flex: none; }
+#rack-manager .rack-editor-error { color: var(--warning); font-size: 12px; line-height: 1.7; }
+.rack-prototype-dialog .rack-unit-actions, .rack-prototype-dialog .rack-photo-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.rack-prototype-dialog .rack-mount-choice { display: block; margin-top: 16px; }
+#rack-unit-feedback { color: var(--muted); line-height: 1.7; }
+@media (prefers-reduced-motion: reduce) {
+  #rack-grid > .device.selected::after { animation: none; background: #a4d7ff; }
+  #rack-content .rack-scroll { scroll-behavior: auto; }
+}
+@media (min-width: 721px) and (max-width: 1240px) {
+  .app:has(#rack-content) { height: auto; min-height: 100vh; }
+  .surface:has(#rack-content) { overflow: visible; }
+  #rack-content { display: grid; grid-template-columns: minmax(300px, 36%) minmax(0, 1fr); grid-template-rows: 610px minmax(0, 520px); flex: none; }
+  #rack-content .rack-panel { border-right: 1px solid var(--border); border-bottom: 0; }
+  #rack-content .rack-scroll { flex: 1; height: auto; min-height: 0; }
+  #rack-content .editor-body { overflow: auto; }
+  #rack-content .editor-footer { position: static; }
+  #rack-manager { grid-column: 1 / -1; height: 520px; border-left: 0; border-top: 1px solid var(--border); }
+}
+@media (max-width: 720px) {
+  #rack-toolbar { flex-wrap: wrap; }
+  #rack-content { display: flex; flex-direction: column; }
+  #rack-content .rack-panel { width: 100%; }
+  #rack-content .rack-frame { margin-inline: auto; }
+  #rack-content .editor-head, #rack-content .editor-body { padding-left: 14px; padding-right: 14px; }
+  #rack-manager { height: 600px; flex: none; border-left: 0; border-top: 1px solid var(--border); }
+}

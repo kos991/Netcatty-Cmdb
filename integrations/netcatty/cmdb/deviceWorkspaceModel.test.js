@@ -264,41 +264,24 @@ test('终端资产按主关联找到 Netcatty 主机系统信息', () => {
   assert.equal(lookup.has(9), false)
 })
 
-test('网络与凭证中心使用独立页签且实体设备照片保持独立', () => {
-  assert.equal(typeof deviceModel.buildDeviceWorkspaceTabs, 'function')
+test('终端与基础设施共用详情分区，基础设施额外有机柜与设备运行页签', () => {
+  const keys = (kind, photos = true, options) => deviceModel.buildDeviceWorkspaceTabs(kind, photos, options).tabs.map((tab) => tab.key)
+  assert.deepEqual(keys('terminal'), ['hardware', 'network', 'usage', 'system', 'photos', 'records', 'relations'])
+  assert.deepEqual(keys('server'), ['hardware', 'operations', 'network', 'usage', 'cabinet', 'system', 'records', 'relations'])
+  assert.deepEqual(keys('switch'), ['hardware', 'operations', 'network', 'usage', 'cabinet', 'system', 'records', 'relations'])
+  assert.deepEqual(keys('generic'), ['hardware', 'network', 'usage', 'cabinet', 'system', 'photos', 'records', 'relations'])
+  assert.deepEqual(keys('server', false, { virtual: true }), ['hardware', 'operations', 'network', 'usage', 'system', 'records', 'relations'])
+  assert.equal(deviceModel.buildDeviceWorkspaceTabs('switch').defaultTab, 'operations')
+  assert.equal(deviceModel.buildDeviceWorkspaceTabs('server').defaultTab, 'hardware')
+})
 
-  assert.deepEqual(deviceModel.buildDeviceWorkspaceTabs('switch'), {
-    defaultTab: 'operations',
-    tabs: [
-      { key: 'overview', label: '概览' },
-      { key: 'operations', label: '端口与配置' },
-      { key: 'network', label: '网络' },
-      { key: 'relations', label: '凭证中心' },
-      { key: 'records', label: '履历档案' },
-      { key: 'photos', label: '设备照片' },
-    ],
-  })
-  assert.deepEqual(deviceModel.buildDeviceWorkspaceTabs('router'), {
-    defaultTab: 'operations',
-    tabs: [
-      { key: 'overview', label: '概览' },
-      { key: 'operations', label: '接口运行' },
-      { key: 'network', label: '网络' },
-      { key: 'relations', label: '凭证中心' },
-      { key: 'records', label: '履历档案' },
-      { key: 'photos', label: '设备照片' },
-    ],
-  })
-  assert.deepEqual(deviceModel.buildDeviceWorkspaceTabs('server'), {
-    defaultTab: 'overview',
-    tabs: [
-      { key: 'overview', label: '概览' },
-      { key: 'operations', label: '硬件与业务' },
-      { key: 'network', label: '网络' },
-      { key: 'relations', label: '凭证中心' },
-      { key: 'records', label: '履历档案' },
-      { key: 'photos', label: '设备照片' },
-    ],
-  })
-  assert.deepEqual(deviceModel.buildDeviceWorkspaceTabs('server', false).tabs.map((tab) => tab.key), ['overview', 'operations', 'network', 'relations', 'records'])
+test('列表短标签去掉通用词、重复品牌和括号说明，完整值仍由调用方放在提示里', () => {
+  assert.equal(deviceModel.shortOperatingSystemLabel('Kylin Linux Advanced Server', 'V10'), 'Kylin V10')
+  assert.equal(deviceModel.shortOperatingSystemLabel('Kylin Linux Advanced Server', 'V10 (Halberd)'), 'Kylin V10')
+  assert.equal(deviceModel.shortOperatingSystemLabel('Linux / Sangfor OS'), 'Sangfor OS')
+  assert.equal(deviceModel.shortOperatingSystemLabel('深信服 aSV / 桌面云虚拟化底座'), '深信服 aSV')
+  assert.equal(deviceModel.shortOperatingSystemLabel('Linux'), 'Linux')
+  assert.equal(deviceModel.shortModelLabel('浪潮', '浪潮 NF5280M6 (2U双路)'), 'NF5280M6')
+  assert.equal(deviceModel.shortModelLabel('深信服', '深信服 (Sangfor)'), '深信服')
+  assert.equal(deviceModel.shortModelLabel('华为', 'FusionServer 2288H V5'), 'FusionServer 2288H V5')
 })

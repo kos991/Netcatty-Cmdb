@@ -4,11 +4,6 @@ import * as state from './state.js'
 const { customFieldDefinitions, formatLocalDateTimeInput, infrastructureDeviceTypeOptions, infrastructureFieldProfile, infrastructureGroupFilterOptions, infrastructureListFilterParams, infrastructureTypeFilterOptions, ipAddressPresentation, isApplicationHostInfrastructure, isServerInfrastructure, netcattyDirectorySummaries, normalizeAsset, normalizeWorkOrderFilters, quickConnectControlPresentation, resolveSearchTarget, terminalSerialProfile } = state
 import { requestJson, importFile, exportFile, nativeStatus } from './transport.js'
 
-test('Cmdb 工作区入口不包含配置中心', () => {
-  const expected = ['设备资产', '组织架构', 'IPAM/IP', '工单与统计']
-  assert.deepEqual(state.MODULES.map((item) => item.label), expected)
-})
-
 test('普通设备清除物理终端 IP，云桌面保留双 IP 和网络类型', () => {
   const values = { device_type: '台式电脑', box_sn: 'PC-SN-1', display_sn: 'DISPLAY-OLD', ip: '192.0.2.1', terminal_ip: '192.0.2.2', net_type: '内网', remark: '保持原资料' }
   assert.deepEqual(normalizeAsset(values), { ...values, display_sn: '', terminal_ip: '' })

@@ -178,6 +178,15 @@ func (s *Store) InitConfigSchema() error {
 	}); err != nil {
 		return fmt.Errorf("add person organization columns: %w", err)
 	}
+	// 机柜作为位置目录项登记，rack_units 为机柜总 U 数；0 表示未设置，按默认 42U 展示。
+	if err := addMissingColumns(s.db, "cmdb_locations", map[string]string{
+		"rack_units":    "INTEGER NOT NULL DEFAULT 0",
+		"location_type": "TEXT NOT NULL DEFAULT ''",
+		"data_center":   "TEXT NOT NULL DEFAULT ''",
+		"cabinet_name":  "TEXT NOT NULL DEFAULT ''",
+	}); err != nil {
+		return fmt.Errorf("add location rack units column: %w", err)
+	}
 	return nil
 }
 

@@ -7,7 +7,7 @@ Netcatty-CMDB 将本项目的 Go + SQLite CMDB 服务作为内置服务集成到
 [Netcatty](https://github.com/binaricat/Netcatty) 桌面客户端。Netcatty 保留 SSH、SFTP、终端和主机管理能力，
 Cmdb 提供设备资产统一查询、终端资产、基础设施、业务系统、组织架构、IPAM/IP、统计与履历和配置中心，直接复用 Netcatty 原生组件。
 
-当前版本：`1.3.0`
+当前版本：`1.3.1`
 
 ## 集成结构
 
@@ -42,6 +42,12 @@ scripts/prepare-netcatty.mjs    可重复的 Netcatty 集成装配器
 .github/workflows/release.yml   服务端与集成版客户端发布
 ```
 
+## 交互设计原型
+
+当前评审原型、预览图片及资源说明见 [Cmdb 交互设计原型](docs/prototypes/cmdb/README.md)。
+本地可直接打开 [HTML 交互入口](docs/prototypes/cmdb/device-assets-preview.html#terminal)，无需构建或启动后端。
+原型仅用于设计评审，不是正式浏览器版产品；不连接真实数据，不能据此认定正式客户端已实现相同布局。
+
 ## 本地验证
 
 测试并构建内置服务：
@@ -75,7 +81,7 @@ npm.cmd run build
 - 固定 Netcatty 上游提交可成功装配；
 - CMDB 服务生命周期测试、原生 Bridge 测试、Netcatty lint 与完整前端构建。
 
-推送与 `VERSION` 一致的标签会触发 Release。`v1.3.0` 发布内容包括：
+推送与 `VERSION` 一致的标签会触发 Release。`v1.3.1` 发布内容包括：
 
 - Windows、Linux、macOS 的独立 `cmdb-server`；
 - Windows x64 集成版 Netcatty-CMDB Portable；

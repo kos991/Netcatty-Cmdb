@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS cmdb_device_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
 	asset_scope TEXT NOT NULL DEFAULT 'infrastructure',
+    short_code TEXT NOT NULL DEFAULT '',
     parent_id INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
@@ -266,6 +267,17 @@ CREATE TABLE IF NOT EXISTS cmdb_work_orders (
 );
 CREATE INDEX IF NOT EXISTS idx_cmdb_wo_status ON cmdb_work_orders(status);
 CREATE INDEX IF NOT EXISTS idx_cmdb_wo_asset ON cmdb_work_orders(asset_id);
+
+CREATE TABLE IF NOT EXISTS cmdb_work_order_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_order_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    operator TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(work_order_id) REFERENCES cmdb_work_orders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_cmdb_wo_logs_order ON cmdb_work_order_logs(work_order_id, id);
 
 CREATE TABLE IF NOT EXISTS cmdb_work_order_asset_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

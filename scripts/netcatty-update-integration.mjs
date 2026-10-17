@@ -63,6 +63,8 @@ export function patchSettingsApplicationTab(source, netcattyVersion) {
 }
 
 export function patchSettingsPageWithCmdb(source) {
+  const usesCRLF = source.includes('\r\n');
+  source = source.replace(/\r\n/g, '\n');
   const replace = (anchor, replacement) => {
     if (!source.includes(anchor) || source.indexOf(anchor) !== source.lastIndexOf(anchor)) {
       throw new Error('Netcatty 设置页锚点不存在或不唯一');
@@ -96,10 +98,16 @@ export function patchSettingsPageWithCmdb(source) {
                     {mountedTabs.has("appearance") && (`,
   );
   replace(
+    '        // Nested tabs (AI / Sync) read `request` to switch sub-tabs. Keep it until',
+    `        // Cmdb owns its nested destination and retains the request across lazy loading.
+        if (request.tab === "cmdb") return;
+        // Nested tabs (AI / Sync) read \`request\` to switch sub-tabs. Keep it until`,
+  );
+  replace(
     'className="flex-1 h-full flex flex-col min-h-0 bg-muted/10"',
     'className="flex-1 h-full flex min-w-0 flex-col min-h-0 bg-muted/10"',
   );
-  return source;
+  return usesCRLF ? source.replace(/\n/g, '\r\n') : source;
 }
 
 export function patchSettingsSystemTab(source) {

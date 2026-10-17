@@ -4,7 +4,7 @@ import {
   mergeCmdbSnapshots,
   withCmdbSnapshotHash,
   type CmdbSyncSnapshot,
-} from './CmdbSyncSnapshot';
+} from './CmdbSyncSnapshot.ts';
 
 function snapshot(
   records: Array<Record<string, unknown>>,

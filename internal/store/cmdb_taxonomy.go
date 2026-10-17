@@ -32,6 +32,7 @@ type CmdbTaxonomyNode struct {
 	SortOrder  int64  `json:"sort_order"`
 	AssetCount int    `json:"asset_count"` // 被资产引用数，删除前据此判断
 	ChildCount int    `json:"child_count"` // 子节点数
+	ShortCode  string `json:"short_code"`  // 设备简称，用于终端自动命名（如 VDI）
 }
 
 func cmdbTaxonomySpec(kind string) (cmdbTaxonomyTableSpec, error) {

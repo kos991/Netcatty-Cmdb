@@ -341,6 +341,10 @@ func TestLegacyAssetDeviceTypeMigrationBackfillsExistingRows(t *testing.T) {
 
 func TestLegacyAssetQueryAndSummaryUseSameArchiveAndFilterRules(t *testing.T) {
 	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
 	createLegacyAsset(t, s, Asset{AssetCode: "A-1", UserName: "张三", Department: "执行局", Room: "101", SecuritySoftware: "已安装", Status: "在用"})
 	secondID := createLegacyAsset(t, s, Asset{AssetCode: "A-2", UserName: "张三", Department: "执行局", Room: "102", SecuritySoftware: "已安装", Status: "闲置"})
 	createLegacyAsset(t, s, Asset{AssetCode: "A-3", UserName: "张三", Department: "执行局", SecuritySoftware: "已安装", Status: "已报废"})
@@ -353,6 +357,16 @@ func TestLegacyAssetQueryAndSummaryUseSameArchiveAndFilterRules(t *testing.T) {
 	}
 	if total != 2 || len(list) != 1 || list[0].ID != secondID {
 		t.Fatalf("默认应排除两种归档状态且保留分页倒序，total=%d list=%+v", total, list)
+	}
+
+	combined, combinedTotal, combinedSummary, err := s.QueryAssetsWithSummaryForProject(scope, AssetQuery{
+		Keyword: "张三", Department: "执行局", SecuritySoftware: "已安装", Page: 1, PageSize: 1,
+	})
+	if err != nil {
+		t.Fatalf("组合查询失败: %v", err)
+	}
+	if combinedTotal != 2 || len(combined) != 1 || combined[0].ID != secondID || combinedSummary["total"] != 2 || combinedSummary["在用"] != 1 || combinedSummary["闲置"] != 1 {
+		t.Fatalf("组合查询必须复用同一筛选结果生成分页和统计: total=%d list=%+v summary=%+v", combinedTotal, combined, combinedSummary)
 	}
 
 	for _, status := range []string{"已报废", "报废"} {

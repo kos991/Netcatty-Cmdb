@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工单与统计 · 动画设计原型</title>
+<link rel="stylesheet" href="cmdb-preview.css">
+<link rel="stylesheet" href="work-order-preview.css">
+<link rel="stylesheet" href="work-order-summary-preview.css">
+<link rel="stylesheet" href="cmdb-settings-preview.css">
+<link rel="stylesheet" href="cmdb-settings-catalog-preview.css">
+<link rel="stylesheet" href="cmdb-settings-operations-preview.css">
+</head>
+<body>
+<script src="vendor/netcatty-icons.js"></script>
+<script src="cmdb-settings-data-preview.js"></script>
+<script src="cmdb-settings-catalog-preview.js"></script>
+<script src="cmdb-settings-operations-preview.js"></script>
+<script src="cmdb-settings-preview.js"></script>
+<script src="cabinet-network-nav-preview.js" defer></script>
+<div class="app">
+  <div class="tabs" aria-label="工作区外观"><span class="tab">▧&nbsp; Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab">▱&nbsp; SFTP</span><span class="tab" aria-hidden="true">＋</span><div class="window-actions" aria-hidden="true"><svg><use href="#settings"/></svg><span>—</span><span>□</span><span>×</span></div></div>
+  <div class="shell">
+    <nav class="rail" aria-label="工作区"><div class="logo">N</div><a href="device-assets-preview.html#terminal" aria-label="设备资产" title="设备资产"><svg><use href="#monitor"/></svg></a><a href="organization-preview.html" aria-label="组织架构" title="组织架构"><svg><use href="#people"/></svg></a><a href="rack-layout-preview.html#rack" aria-label="机柜与网络" title="机柜与网络"><svg><use href="#network"/></svg></a><a class="selected" href="work-order-preview.html" aria-current="page" aria-label="工单与统计" title="工单与统计"><svg><use href="#work-order"/></svg></a></nav>
+    <main class="surface work-surface">
+      <header class="toolbar work-toolbar" aria-label="工单工具栏">
+        <details id="work-new-menu" class="new-menu"><summary aria-label="新增工单" title="新增工单"><svg><use href="#plus"/></svg>新增工单 <span class="chevron">⌄</span></summary><div class="menu"><button type="button" data-new-category="故障处理">故障处理</button><button type="button" data-new-category="日常维护">日常维护</button><button type="button" data-new-category="变更操作">变更操作</button><button type="button" data-new-category="资产调配">资产调配</button><small>创建本地演示工单，不写入业务系统</small></div></details>
+        <label class="search work-search"><svg><use href="#search"/></svg><input id="work-search" type="search" aria-label="搜索工单号、维护主题或关联资产" placeholder="搜索工单号、维护主题、关联资产" autocomplete="off"></label>
+        <div class="toolbar-actions">
+        <button id="work-filter-toggle" class="icon toolbar-icon" type="button" aria-expanded="false" aria-controls="work-filters" title="查询工单" aria-label="查询工单"><svg><use href="#filter"/></svg></button>
+        <details class="work-transfer toolbar-transfer"><summary class="icon toolbar-icon" aria-label="导入/导出工单" title="导入/导出工单"><svg aria-hidden="true"><use href="#transfer"/></svg></summary><div class="menu"><button id="work-import" type="button" disabled><svg><use href="#upload"/></svg>导入工单</button><button id="work-export" type="button" disabled><svg><use href="#download"/></svg>导出当前筛选</button><small>设计原型，不读写业务文件</small></div></details>
+        <button id="work-reset-demo" class="icon quiet" type="button" title="重置演示：清除本页操作并恢复虚构示例" aria-label="重置演示"><svg><use href="#refresh"/></svg></button>
+        </div>
+      </header>
+      <div class="work-main">
+        <section id="work-filters" class="work-filters" aria-label="工单筛选条件" hidden>
+          <div class="field"><label for="filter-category">维护类型</label><select id="filter-category"><option value="">全部类型</option><option value="故障处理">故障处理</option><option value="日常维护">日常维护</option><option value="变更操作">变更操作</option><option value="资产调配">资产调配</option></select></div>
+          <div class="field"><label for="filter-operation">运维类型</label><select id="filter-operation"><option value="">全部运维类型</option><option value="排障">排障</option><option value="优化">优化</option><option value="响应">响应</option><option value="值守">值守</option></select></div>
+          <div class="field"><label for="filter-priority">优先级</label><select id="filter-priority"><option value="">全部优先级</option><option value="P1（紧急）">P1（紧急）</option><option value="P2（较高）">P2（较高）</option><option value="P3（普通）">P3（普通）</option><option value="P4（较低）">P4（较低）</option></select></div>
+          <div class="field"><label for="filter-status">维护状态</label><select id="filter-status"><option value="">全部状态</option><option value="新建">新建</option><option value="处理中">处理中</option><option value="已解决">已解决</option><option value="已关闭">已关闭</option><option value="已分配">已分配</option><option value="已取消">已取消</option></select></div>
+          <div class="field"><label for="filter-result">处理结果</label><select id="filter-result"><option value="">全部处理结果</option><option value="处理成功">处理成功</option><option value="临时规避">临时规避</option><option value="未发现异常">未发现异常</option><option value="未解决">未解决</option><option value="已升级处理">已升级处理</option><option value="需二次维护">需二次维护</option></select></div>
+          <div class="field"><label for="filter-maintainer">维护人员</label><input id="filter-maintainer" placeholder="姓名" autocomplete="off"></div>
+          <div class="field"><label for="filter-owner">运维负责人</label><input id="filter-owner" placeholder="姓名" autocomplete="off"></div>
+          <div class="field"><label for="filter-asset">关联资产</label><input id="filter-asset" placeholder="资产名称或编号" autocomplete="off"></div>
+          <div class="field"><label for="filter-from">发生日期起</label><input id="filter-from" type="date"></div>
+          <div class="field"><label for="filter-to">发生日期止</label><input id="filter-to" type="date"></div>
+          <div class="filter-actions"><button id="work-reset-filters" class="quiet" type="button">重置查询条件</button><span>按发生时间筛选</span></div>
+        </section>
+        <section class="work-overview" aria-labelledby="work-overview-title">
+          <div class="work-overview-heading"><h2 id="work-overview-title">工单流转</h2></div>
+          <!-- 阶段按钮先于控制器挂载，阶段计数及筛选继续由原控制器维护。 -->
+          <div id="work-summary" class="work-stage-summary" role="group" aria-label="工单阶段概览"></div>
+        </section>
+        <section class="work-list" aria-label="演示工单列表">
+          <header class="work-list-heading"><div><h2>工单列表</h2><span id="work-selection" aria-live="polite">未选择工单</span></div><button id="work-bulk-close" type="button" disabled title="仅支持批量关闭全部为已解决状态的工单">批量关闭（演示）</button></header>
+          <div class="work-table-wrap" tabindex="0" role="region" aria-label="工单表格，可在表格内横向滚动；状态与操作固定在右侧">
+            <table class="work-table"><colgroup><col class="col-check"><col class="col-number"><col class="col-priority"><col class="col-subject"><col class="col-category"><col class="col-asset"><col class="col-time"><col class="col-maintainer"><col class="col-status"><col class="col-actions"></colgroup><thead><tr><th scope="col"><input id="work-select-all" type="checkbox" aria-label="选择本页全部工单"></th><th scope="col">工单号</th><th scope="col">优先级</th><th scope="col">维护主题</th><th scope="col">维护类型</th><th scope="col">关联资产</th><th scope="col">处理时间</th><th scope="col">维护人员</th><th scope="col">维护状态</th><th scope="col">操作</th></tr></thead><tbody id="work-table-body"></tbody></table>
+            <p id="work-empty" class="empty" hidden>没有符合条件的演示工单，请调整筛选条件或新建一条演示工单。</p>
+          </div>
+          <footer class="work-pagination"><span id="work-count" class="count" aria-live="polite">共 0 条工单</span><select id="work-page-size" aria-label="每页工单数"><option value="10">10 条 / 页</option><option value="5">5 条 / 页</option><option value="20">20 条 / 页</option></select><button id="work-prev" type="button">上一页</button><button id="work-next-page" type="button">下一页</button></footer>
+        </section>
+      </div>
+      <footer class="prototype-label work-disclaimer"><span>设计原型 · 不连接业务服务</span><a href="https://animejs.com/" target="_blank" rel="noopener noreferrer">Anime.js 4.5.0</a></footer>
+    </main>
+  </div>
+</div>
+
+<!-- 三种对话框独立居中；主体可滚动，操作栏不随主体滚动。 -->
+<dialog id="work-detail" class="work-dialog work-detail" aria-labelledby="detail-subject">
+  <header class="dialog-header"><div class="dialog-identity"><p class="detail-kicker"><span id="detail-number"></span><span id="detail-priority" class="work-priority"></span><span id="detail-status"></span></p><h2 id="detail-subject">工单详情</h2></div><button class="icon quiet" type="button" data-close="work-detail" aria-label="关闭工单详情"><svg><use href="#close"/></svg></button></header>
+  <div class="dialog-body detail-body">
+    <section class="detail-block"><h3>基本信息</h3><dl id="detail-info" class="work-definition"></dl><h4>维护描述</h4><p id="detail-description" class="work-description"></p></section>
+    <section class="detail-block"><h3>关联资源</h3><div id="detail-assets" class="detail-assets"></div><h4><svg><use href="#attachment"/></svg>附件</h4><div id="detail-attachments" class="detail-attachments"></div></section>
+    <details id="detail-records" class="detail-block detail-records">
+      <summary><svg aria-hidden="true"><use href="#history"/></svg><span id="detail-history-title">处理记录</span><span id="detail-history-count" class="record-count">0 条</span><span class="record-chevron" aria-hidden="true">⌄</span></summary>
+      <div class="detail-records-body">
+        <h4>处理结果</h4><div id="detail-result" class="detail-result"></div>
+        <h4>处理时间线</h4><ol id="detail-history" class="work-history"></ol>
+        <form id="detail-note-form" class="detail-note-form"><label for="detail-note">添加处理记录<span class="required">*</span></label><textarea id="detail-note" name="note" rows="3" required placeholder="填写本次跟进、排查情况或补充说明"></textarea><div class="note-submit"><span>仅保存在当前页面</span><button type="submit">添加记录</button></div></form>
+      </div>
+    </details>
+  </div>
+  <footer class="dialog-footer detail-footer"><button id="detail-action-cancel" class="cancel-work" type="button">取消工单</button><button id="detail-action-next" class="primary" type="button">开始处理</button></footer>
+</dialog>
+
+<dialog id="work-create" class="work-dialog work-create" aria-labelledby="work-create-heading">
+  <header class="dialog-header"><div class="dialog-identity"><h2 id="work-create-heading">新建工单</h2><p class="dialog-note">统一维护表单 · 提交后创建本地演示工单，刷新恢复</p></div><button class="icon quiet" type="button" data-close="work-create" aria-label="关闭新建工单表单"><svg><use href="#close"/></svg></button></header>
+  <form id="work-create-form" class="work-dialog-form">
+    <div class="dialog-body create-body">
+      <p class="form-notice">此处可完整体验新建与处理流程，不调用真实 API，不写入业务数据。<span class="required">*</span>为必填项。</p>
+      <section class="create-section"><h3>基本信息</h3><div class="fields">
+        <div class="field full"><label for="create-subject">维护主题<span class="required">*</span></label><input id="create-subject" name="subject" required autocomplete="off" placeholder="简要描述维护目标或故障现象"></div>
+        <div class="field"><label for="create-project">所属项目</label><input id="create-project" name="project" readonly value="示例项目"></div>
+        <div class="field"><label for="create-number">工单编号</label><input id="create-number" name="number" readonly placeholder="提交演示后生成"></div>
+        <div id="create-status-field" class="field full" hidden><label for="create-status">维护状态（从详情逐阶段推进）</label><input id="create-status" readonly></div>
+        <div class="field"><label for="create-category">维护类型</label><select id="create-category" name="category"><option value="故障处理">故障处理</option><option value="日常维护">日常维护</option><option value="变更操作">变更操作</option><option value="资产调配">资产调配</option></select></div>
+        <div class="field"><label for="create-operation">运维类型</label><select id="create-operation" name="operation"><option value="排障">排障</option><option value="优化">优化</option><option value="响应">响应</option><option value="值守">值守</option></select></div>
+        <div class="field"><label for="create-priority">优先级</label><select id="create-priority" name="priority"><option value="P1（紧急）">P1（紧急）</option><option value="P2（较高）">P2（较高）</option><option value="P3（普通）" selected>P3（普通）</option><option value="P4（较低）">P4（较低）</option></select></div>
+        <div class="field"><label for="create-time">发生时间<span class="required">*</span></label><input id="create-time" name="time" type="datetime-local" required></div>
+        <div class="field"><label for="create-maintainer">维护人员</label><input id="create-maintainer" name="maintainer" autocomplete="off" placeholder="填写演示维护人员姓名"></div>
+        <div class="field"><label for="create-owner">运维负责人</label><input id="create-owner" name="owner" autocomplete="off" placeholder="填写演示负责人姓名"></div>
+        <div class="field full"><label for="create-description">维护描述</label><textarea id="create-description" name="description" rows="3" placeholder="描述影响范围、现象与计划处理内容"></textarea></div>
+      </div></section>
+      <section class="create-section"><h3>关联资源</h3><p class="dialog-note">可关联多个虚构资源；搜索和分类仅用于当前资源列表。</p><div class="asset-picker-filters"><label class="search"><svg><use href="#search"/></svg><input id="create-asset-search" type="search" aria-label="搜索可关联资源" placeholder="搜索资源名称或编号" autocomplete="off"></label><select id="create-asset-type" aria-label="关联资源类型"><option value="">全部资源类型</option><option value="terminal">终端设备</option><option value="infrastructure">基础设施</option><option value="systems">业务系统</option></select></div><div id="create-assets" class="asset-picker" role="group" aria-label="选择关联的虚构资源"></div></section>
+      <section class="create-section"><h3>附件</h3><div class="field"><label for="create-files">本地文件名预览（可多选）</label><input id="create-files" name="files" type="file" multiple aria-describedby="create-files-note"></div><p id="create-files-note" class="dialog-note">只记录所选文件名称与大小，不读取文件正文、不上传。页面刷新后清除。</p><div id="create-file-list" class="create-file-list" aria-live="polite"></div></section>
+    </div>
+    <footer class="dialog-footer"><span class="footer-note">本地内存演示 · 不真实保存</span><button type="button" data-close="work-create">取消</button><button class="primary" type="submit">提交演示工单</button></footer>
+  </form>
+</dialog>
+
+<dialog id="work-action" class="work-dialog work-action" aria-labelledby="action-heading" aria-describedby="action-hint">
+  <header class="dialog-header"><div class="dialog-identity"><h2 id="action-heading">处理工单（演示）</h2><p class="dialog-note">仅变更本页演示数据</p></div><button class="icon quiet" type="button" data-close="work-action" aria-label="关闭工单处理表单"><svg><use href="#close"/></svg></button></header>
+  <form id="work-action-form" class="work-dialog-form">
+    <div class="dialog-body action-body"><p id="action-hint" class="form-notice">请确认处理内容；关闭工单时，每条工单均需填写处理结果。</p><div class="field action-result-field"><label for="action-result-type">结果类型</label><select id="action-result-type" name="resultType"><option value="处理成功">处理成功</option><option value="临时规避">临时规避</option><option value="未发现异常">未发现异常</option><option value="未解决">未解决</option><option value="已升级处理">已升级处理</option><option value="需二次维护">需二次维护</option></select></div><div id="action-fields" class="action-fields"></div></div>
+    <footer class="dialog-footer"><span class="footer-note">仅允许逐阶段流转或取消</span><button type="button" data-close="work-action">取消</button><button id="action-confirm" class="primary" type="submit">确认处理（演示）</button></footer>
+  </form>
+</dialog>
+<div id="work-toast" class="work-toast" role="status" aria-live="polite" hidden></div>
+<script src="vendor/animejs-4.5.0.umd.min.js"></script>
+<script src="asset-terminal-page.js"></script>
+<script src="asset-infrastructure-page.js"></script>
+<script src="asset-systems-page.js"></script>
+<script src="work-order-model-preview.js"></script>
+<script src="work-order-summary-preview.js"></script>
+<script src="work-order-preview.js"></script>
+</body>
+</html>

@@ -19,6 +19,11 @@ type Asset struct {
 	TerminalIP            string `json:"terminal_ip"`
 	OSType                string `json:"os_type"`
 	OSVersion             string `json:"os_version"`
+	Vendor                string `json:"vendor"`
+	Model                 string `json:"model"`
+	CPUInfo               string `json:"cpu_info"`
+	MemoryMB              int64  `json:"memory_mb"`
+	DiskInfo              string `json:"disk_info"`
 	SecuritySoftware      string `json:"security_software"`
 	Status                string `json:"status"`
 	NetType               string `json:"net_type"`
@@ -73,44 +78,50 @@ type PhysicalServer struct {
 }
 
 type ServerApp struct {
-	ID           int64  `json:"id"`
-	ProjectID    int64  `json:"project_id"`
-	ServerID     int64  `json:"server_id"`
-	CmdbAssetID  int64  `json:"cmdb_asset_id"`
-	AppName      string `json:"app_name"`
-	AppType      string `json:"app_type"`
-	Port         string `json:"port"`
-	AccessURL    string `json:"access_url"`
-	Middleware   string `json:"middleware"`
-	DatabaseInfo string `json:"database_info"`
-	Provider     string `json:"provider"`
-	Owner        string `json:"owner"`
-	Status       string `json:"status"`
-	GroupID      int64  `json:"group_id"`
-	GroupName    string `json:"group_name"`
-	Remark       string `json:"remark"`
-	Version      string `json:"version"`
-	Description  string `json:"description"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
-	ServerName   string `json:"server_name"`
-	ServerBizIP  string `json:"server_biz_ip"`
-	ServiceIP    string `json:"service_ip"`
-	NetworkType  string `json:"network_type"`
+	ID                 int64  `json:"id"`
+	ProjectID          int64  `json:"project_id"`
+	ServerID           int64  `json:"server_id"`
+	CmdbAssetID        int64  `json:"cmdb_asset_id"`
+	AssetCode          string `json:"asset_code"`
+	Department         string `json:"department"`
+	Deployment         string `json:"deployment"`
+	DeploymentLocation string `json:"deployment_location"`
+	AppName            string `json:"app_name"`
+	AppType            string `json:"app_type"`
+	Port               string `json:"port"`
+	AccessURL          string `json:"access_url"`
+	Middleware         string `json:"middleware"`
+	DatabaseInfo       string `json:"database_info"`
+	Provider           string `json:"provider"`
+	Owner              string `json:"owner"`
+	Status             string `json:"status"`
+	GroupID            int64  `json:"group_id"`
+	GroupName          string `json:"group_name"`
+	Remark             string `json:"remark"`
+	Version            string `json:"version"`
+	Description        string `json:"description"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
+	ServerName         string `json:"server_name"`
+	ServerBizIP        string `json:"server_biz_ip"`
+	ServiceIP          string `json:"service_ip"`
+	NetworkType        string `json:"network_type"`
 }
 
 type ServerAppQuery struct {
-	Keyword     string
-	AppType     string
-	Status      string
-	Provider    string
-	Owner       string
-	NetworkType string
-	GroupID     int64
-	HostID      int64
-	HostLinked  string
-	Page        int
-	PageSize    int
+	Keyword         string
+	AppType         string
+	Status          string
+	Provider        string
+	Owner           string
+	NetworkType     string
+	Department      string
+	IncludeArchived bool
+	GroupID         int64
+	HostID          int64
+	HostLinked      string
+	Page            int
+	PageSize        int
 }
 
 type AssetLog struct {

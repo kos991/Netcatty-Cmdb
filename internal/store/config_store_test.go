@@ -222,6 +222,34 @@ func containsConfigItem(items []ConfigItem, id, projectID int64) bool {
 	return false
 }
 
+// 机柜 U 数未持久化或越界未拦截时，机柜图会按错误高度绘制。
+func TestLocationRackUnitsPersistAndValidate(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := ConfigItem{Name: "A01 机柜", RackUnits: 47}
+	id, err := s.CreateConfigItem(scope, ConfigKindLocations, &item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item.RackUnits = 42
+	if err := s.UpdateConfigItem(scope, ConfigKindLocations, &item); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListConfigItems(scope, ConfigKindLocations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != id || list[0].RackUnits != 42 {
+		t.Fatalf("机柜 U 数未保存: %+v", list)
+	}
+	if _, err := s.CreateConfigItem(scope, ConfigKindLocations, &ConfigItem{Name: "超高机柜", RackUnits: 61}); err == nil {
+		t.Fatal("超过 60U 的机柜必须拒绝")
+	}
+}
+
 func TestNetworkTypesHaveProjectDefaults(t *testing.T) {
 	s := newCmdbTestStore(t)
 	first, err := s.DefaultProjectScope()

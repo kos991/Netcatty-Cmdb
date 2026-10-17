@@ -108,6 +108,10 @@ func (s *Server) handleCreateCmdbConfig(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if r.PathValue("kind") == store.ConfigKindLocations {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"id": id, "item": body})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"id": id})
 }
 
@@ -126,6 +130,10 @@ func (s *Server) handleUpdateCmdbConfig(w http.ResponseWriter, r *http.Request) 
 	body.ID = id
 	if err := s.Store.UpdateConfigItem(scope, r.PathValue("kind"), &body); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if r.PathValue("kind") == store.ConfigKindLocations {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"success": true, "item": body})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"success": true})

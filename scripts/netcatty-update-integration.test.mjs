@@ -13,17 +13,21 @@ test("Cmdb 设置内容使用 Radix TabContent，切换其他设置时不会常�
   assert.match(source, /<TabsContent value="cmdb"/);
 });
 
-test("Cmdb 设置页复用 Netcatty 原生设置面板并保留三个配置分区", () => {
+test("Cmdb 设置页复用原生面板并保留五个独立配置分区", () => {
   const source = readFileSync(new URL("../integrations/netcatty/cmdb/ConfigCenter.jsx", import.meta.url), "utf8");
 
   assert.match(source, /from '@\/components\/settings\/settings-ui'/);
   for (const component of ['SettingsSection', 'SettingCard', 'SettingRow']) {
     assert.match(source, new RegExp(`<${component}\\b`));
   }
-  for (const tab of ['资产配置', '工单配置', '项目与数据']) {
-    assert.match(source, new RegExp(`>${tab}<`));
+  for (const tab of ['资产目录', '工单配置', '导入模板', '项目存储', '同步维护']) {
+    assert.match(source, new RegExp(`'${tab}'`));
   }
   assert.doesNotMatch(source, /VaultPageHeader/);
+  assert.match(source, /api\.currentProject/);
+  assert.doesNotMatch(source, /list\?\.\[0\]\?\.name/);
+  assert.match(source, /value="cmdb" forceMount/);
+  assert.match(source, /data-\[state=inactive\]:hidden/);
 });
 
 test("将 Netcatty 更新源指向 Cmdb 仓库", () => {

@@ -1,16 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Archive, Boxes, Copy, Maximize2, Minimize2, MoreHorizontal, Network, Pencil, PlugZap, Router, Server as ServerIcon, X } from 'lucide-react'
+import { Archive, Boxes, Copy, Maximize2, Minimize2, MoreHorizontal, Network, Pencil, Router, Server as ServerIcon, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AssetDetailTabBar } from './AssetDetailTabs'
+import RackView from './RackView'
 import { api } from './api'
-import { assertNetcattyLinkReady, connectionForAddress, connectionTargetMismatch } from './NetcattyConnection'
-import DeviceOwnershipBar from './DeviceOwnershipBar'
+import { assertNetcattyLinkReady } from './NetcattyConnection'
 import DeviceRelations from './DeviceRelations'
 import DeviceImages from './DeviceImages'
-import { buildDeviceWorkspaceModel, buildDeviceWorkspaceTabs, buildRouterInterfaceRows, buildServerSpecification, deviceTypeLabel, sourceLabel, deviceReadTime } from './deviceWorkspaceModel'
+import { buildDeviceWorkspaceModel, buildDeviceWorkspaceTabs, buildServerSpecification, deviceTypeLabel, resolveOperatingSystemPresentation, sourceLabel, deviceReadTime } from './deviceWorkspaceModel'
 import { infrastructureFieldProfile, supportsInfrastructurePhotos } from './state'
-import { toast } from '@/components/ui/toast'
 import { useQuery } from './hooks'
 import { useNetcattyDirectory } from './NetcattyDirectory'
 import RouterOperations from './RouterOperations'
@@ -18,6 +17,8 @@ import ServerOperations from './ServerOperations'
 import SwitchWorkspace from './SwitchWorkspace'
 import { ActionIcon, DefinitionList, ErrorBanner, StatusPill, statusTone } from './ui'
 import { VendorBrandValue } from './VendorBrandIcon'
+import OperatingSystemCell from './OperatingSystemCell'
+import InfrastructureQuickConnect from './InfrastructureQuickConnect'
 
 const KIND_ICONS = {
   switch: Network,
@@ -55,62 +56,79 @@ function DeviceWorkspaceHeader({ asset, kind, expanded, onExpandedChange, onClos
   </header>
 }
 
-function DeviceActionBar({ asset, kind, primaryHost, readBusy, lastRead, onConnect, onRead, onAssociate }) {
+function DeviceActionBar({ asset, kind, primaryHost, readBusy, lastRead, onRead }) {
   const managementIP = asset.mgmt_ip || asset.manage_ip
   const primaryHostID = primaryHost?.id
   return <section className="flex h-[44px] shrink-0 items-center gap-2 border-b border-border/70 px-4" data-section="device-action-bar">
     <span className="shrink-0 text-[11px] text-muted-foreground">管理 IP</span>
-    <Button type="button" size="sm" variant="ghost" className="h-7 min-w-0 gap-1.5 px-1 font-mono text-[11px] text-primary" title={primaryHostID ? '使用 Netcatty 连接' : '关联或新建 Netcatty 主机'} onClick={primaryHostID ? onConnect : onAssociate}><PlugZap size={13} className="shrink-0" /><span className="truncate">{managementIP || '关联连接'}</span></Button>
+    <span className="min-w-0 truncate font-mono text-xs">{managementIP || '未配置管理 IP'}</span>
+    <InfrastructureQuickConnect asset={asset} address={managementIP} />
     {kind === 'switch' ? <Button type="button" size="sm" className="h-7 text-[11px]" disabled={readBusy || !primaryHostID} title={!primaryHostID ? '请先关联可用的 Netcatty 主机' : '只读采集设备配置'} onClick={onRead}>{readBusy ? '读取中' : '读取配置'}</Button> : null}
     <span className="ml-auto min-w-0 truncate text-[10px] text-muted-foreground" title={primaryHost?.hostname || ''}>{primaryHost ? `实际目标 ${primaryHost.hostname}${kind === 'switch' ? ` · 最近读取 ${formatTime(lastRead)}` : ''}` : kind === 'switch' ? <>最近读取 <span className="ml-1 font-mono text-foreground">{formatTime(lastRead)}</span></> : '尚未关联 Netcatty 主机'}</span>
   </section>
 }
 
-function DeviceOverview({ detail, kind, snapshot }) {
-  const asset = detail.asset
-  const brand = <VendorBrandValue value={asset.vendor} model={asset.model} />
-  const profile = infrastructureFieldProfile(asset.category_name || asset.device_type || (asset.source_type === 'legacy_server' ? 'server' : ''))
-  const base = [
-    ['设备状态', asset.status],
-    ['设备类型', deviceTypeLabel(asset)],
-    ...(profile.brandModel ? [['品牌 / 型号', brand]] : []),
-    ['供应商', asset.provider],
-    ...(profile.kind === 'storage' ? [['磁盘配置', asset.disk_info]] : []),
-    ...(profile.os ? [['系统', [asset.os_type, asset.os_version].filter(Boolean).join(' ')]] : []),
-    ['业务 IP', asset.biz_ip],
-    ['来源', sourceLabel(asset.source_type)],
-  ]
-  let items = base
-  if (kind === 'switch') {
-    const switchData = snapshot?.snapshot || snapshot
-    const interfaces = switchData?.interfaces || []
-    const abnormal = interfaces.filter((item) => /异常|error|fault/i.test(String(item.state || item.status || ''))).length
-    items = [
-      ['设备名称', switchData?.device?.name || asset.name],
-      ['台账品牌 / 型号', brand],
-      ['采集型号', switchData?.device?.model || '未识别'],
-      ['系统版本', switchData?.device?.version || asset.os_version],
-      ['管理 VLAN', switchData?.device?.managementVlan],
-      ['读取协议', snapshot?.protocol],
-      ['端口状态', interfaces.length ? `${interfaces.length} 个 / ${abnormal} 异常` : '-'],
-      ['最近读取', formatTime(snapshot?.read_at || switchData?.readAt)],
-      ['来源', sourceLabel(asset.source_type)],
-    ]
-  } else if (kind === 'router') {
-    const interfaces = buildRouterInterfaceRows(detail.interfaces || [])
-    items = [...base.slice(0, 4), ['接口数量', interfaces.length], ['已登记网关', new Set(interfaces.map((item) => item.gateway).filter(Boolean)).size], ['IPAM 地址', (detail.ipam || []).length], ['上下联链路', (detail.links || []).length]]
-  } else if (kind === 'server') {
-    const specification = buildServerSpecification(asset)
-    items = [...(profile.brandModel ? [['品牌 / 型号', brand]] : []), ['供应商', asset.provider], ['CPU', specification.cpu], ['内存', specification.memory], ['磁盘', specification.disk], ['操作系统', specification.os], ['管理入口', specification.management], ['承载业务', (detail.related_applications || []).length], ['设备状态', asset.status]]
-  }
-  return <section data-section="device-overview">
-    <header className="mb-2 flex min-h-[30px] items-center border-b border-border/60"><h2 className="text-xs font-semibold">设备概览</h2></header>
+function DetailSection({ title, section, items }) {
+  return <section data-section={section}>
+    <header className="mb-2 flex min-h-[30px] items-center border-b border-border/60"><h2 className="text-xs font-semibold">{title}</h2></header>
     <DefinitionList items={items} />
   </section>
 }
 
-export default function DeviceWorkspace({ id, projects = [], expanded, onExpandedChange, onClose, onEdit, onClone, onArchive, onOpenAsset, onOpenIP, onOpenApplication }) {
-  const { hosts, credentials, connectHost, readSwitch } = useNetcattyDirectory()
+function DeviceHardware({ detail, kind, snapshot }) {
+  const asset = detail.asset
+  const profile = infrastructureFieldProfile(asset.category_name || asset.device_type || (asset.source_type === 'legacy_server' ? 'server' : ''))
+  const specification = buildServerSpecification(asset)
+  const switchDevice = (snapshot?.snapshot || snapshot)?.device
+  const items = [
+    ['资产编码', asset.asset_code],
+    ['设备名称', asset.name],
+    ['设备类型', deviceTypeLabel(asset)],
+    ...(profile.brandModel ? [['品牌 / 型号', <VendorBrandValue value={asset.vendor} model={asset.model} />]] : []),
+    ['SN', asset.sn],
+    ['供应商', asset.provider],
+    ...(kind === 'server' ? [['CPU', specification.cpu], ['内存', specification.memory], ['磁盘', specification.disk], ['MAC', asset.mac || asset.mac_address]] : []),
+    ...(profile.kind === 'storage' ? [['磁盘配置', asset.disk_info]] : []),
+    ...(kind === 'switch' ? [['采集型号', switchDevice?.model || '未识别']] : []),
+    ['设备状态', asset.status],
+    ['来源', sourceLabel(asset.source_type)],
+  ]
+  return <DetailSection title="硬件信息" section="device-hardware" items={items} />
+}
+
+// 负责人与部门来自组织架构，位置来自安装位置登记；两者合并为一个分区查看。
+function DeviceUsage({ asset, ownership }) {
+  const virtual = asset.asset_class === 'virtual'
+  return <DetailSection title="使用与位置" section="device-usage" items={[
+    ['负责人', ownership.owner],
+    ['部门', asset.department],
+    ['组织', ownership.organization],
+    ['所属项目', ownership.project],
+    ['机房 / 区域', asset.data_center || asset.area],
+    ['楼层', asset.floor],
+    ['房间', asset.room],
+    ['机柜 / U 位', virtual ? '无实体位置' : ownership.cabinet || '未登记'],
+    ['地址', [asset.province, asset.city, asset.district, asset.address].filter(Boolean).join(' ')],
+  ]} />
+}
+
+function DeviceSystem({ detail, snapshot }) {
+  const asset = detail.asset
+  const switchDevice = (snapshot?.snapshot || snapshot)?.device
+  const os = resolveOperatingSystemPresentation(asset)
+  return <DetailSection title="系统信息" section="device-system" items={[
+    ['操作系统', <OperatingSystemCell asset={{ ...asset, os_version: '' }} />],
+    ['系统版本', switchDevice?.version || os.version],
+    ['管理账号', asset.admin_user],
+    ['管理入口', buildServerSpecification(asset).management],
+    ['安装日期', asset.install_date],
+    ['保修到期', asset.warranty_date],
+    ['备注', asset.remark],
+  ]} />
+}
+
+export default function DeviceWorkspace({ id, projects = [], expanded, onExpandedChange, onClose, onEdit, onClone, onArchive, onOpenAsset, onOpenIP, onOpenApplication, onOpenCabinet }) {
+  const { hosts, credentials, readSwitch } = useNetcattyDirectory()
   const loader = useCallback(() => api.infrastructureAsset(id), [id])
   const query = useQuery(loader)
   const [snapshot, setSnapshot] = useState(null)
@@ -118,13 +136,12 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
   const [readError, setReadError] = useState('')
   const [requestedLocalPort, setRequestedLocalPort] = useState('')
   const [activeTab, setActiveTab] = useState('operations')
-  const [connectionWarning, setConnectionWarning] = useState('')
   const clearLinkRequest = useCallback(() => setRequestedLocalPort(''), [])
   const asset = query.data?.asset || {}
   const projectName = projects.find((project) => Number(project.id) === Number(asset.project_id))?.name || ''
   const model = buildDeviceWorkspaceModel(asset, { projectName })
-  const navigation = buildDeviceWorkspaceTabs(model.kind, supportsInfrastructurePhotos(asset))
-  useEffect(() => { setSnapshot(query.data?.switch_snapshot || null); setReadError(''); setRequestedLocalPort(''); setConnectionWarning('') }, [id, query.data])
+  const navigation = buildDeviceWorkspaceTabs(model.kind, supportsInfrastructurePhotos(asset), { virtual: asset.asset_class === 'virtual' })
+  useEffect(() => { setSnapshot(query.data?.switch_snapshot || null); setReadError(''); setRequestedLocalPort('') }, [id, query.data])
   useEffect(() => { setActiveTab(navigation.defaultTab) }, [id, model.kind, navigation.defaultTab])
   if (query.error) return <div className="flex min-h-0 flex-1 flex-col"><div className="flex justify-end border-b border-border/70 p-2"><ActionIcon label="关闭设备工作区" onClick={onClose}><X size={16} /></ActionIcon></div><ErrorBanner message={query.error} onRetry={query.reload} /></div>
   if (!query.data) return <div className="grid min-h-0 flex-1 place-items-center text-xs text-muted-foreground">正在加载设备档案…</div>
@@ -133,27 +150,6 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
   const primaryLink = detail.netcatty_links?.find?.((item) => item.is_primary && item.host_id) || detail.netcatty_links?.find?.((item) => item.host_id)
   const primaryHost = hosts.find(host => host.id === primaryLink?.host_id)
   const connections = (detail.netcatty_links || []).map(link => ({ link, host: hosts.find(host => host.id === link.host_id) })).filter(item => item.host)
-  const connectAddress = (address) => {
-    const link = connectionForAddress(address, detail.netcatty_links || [], hosts, credentials)
-    const host = hosts.find(item => item.id === link?.host_id)
-    if (!link) {
-      const difference = connectionTargetMismatch(address, primaryHost)
-      setConnectionWarning(difference ? `所点地址 ${difference.selected} 与默认主机实际目标 ${difference.actual} 不同，未发起连接。` : `地址 ${address} 没有关联目标相同的 Netcatty 主机，未发起连接。`)
-      setActiveTab('network')
-      return
-    }
-    try { assertNetcattyLinkReady(link, host, credentials); setConnectionWarning(''); connectHost(host.id, link.credential_id) } catch (error) { setConnectionWarning(error.message); setActiveTab('network') }
-  }
-  const connect = () => {
-    const managementIP = asset.mgmt_ip || asset.manage_ip
-    if (!managementIP) { setConnectionWarning('尚未填写管理 IP，请在网络配置中填写后再连接。'); setActiveTab('network'); return }
-    const link = connectionForAddress(managementIP, detail.netcatty_links || [], hosts, credentials)
-    const host = hosts.find(item => item.id === link?.host_id)
-    if (link) { try { assertNetcattyLinkReady(link, host, credentials); setConnectionWarning(''); connectHost(host.id, link.credential_id) } catch (error) { toast.error(error.message); setActiveTab('relations') }; return }
-    const difference = connectionTargetMismatch(managementIP, primaryHost)
-    if (difference) { setConnectionWarning(`所点管理地址 ${difference.selected} 与默认主机实际目标 ${difference.actual} 不同，未发起连接。`); setActiveTab('network'); return }
-    try { assertNetcattyLinkReady(primaryLink, primaryHost, credentials); setConnectionWarning(''); connectHost(primaryHost.id, primaryLink.credential_id) } catch (error) { toast.error(error.message); setActiveTab('relations') }
-  }
   const readSwitchConfig = async () => {
     if (!primaryLink?.host_id) { setReadError('请先在凭证中心关联主机'); setActiveTab('relations'); return }
     setReadBusy(true); setReadError('')
@@ -172,23 +168,20 @@ export default function DeviceWorkspace({ id, projects = [], expanded, onExpande
 
   return <div className="flex min-h-0 flex-1 flex-col" data-section="device-workspace" data-device-kind={model.kind}>
     <DeviceWorkspaceHeader asset={asset} kind={model.kind} expanded={expanded} onExpandedChange={onExpandedChange} onClose={onClose} onEdit={onEdit} onClone={onClone} onArchive={onArchive} />
-    <DeviceActionBar asset={asset} kind={model.kind} primaryHost={primaryHost} readBusy={readBusy} lastRead={snapshot?.read_at || snapshot?.snapshot?.readAt} onRead={readSwitchConfig} onConnect={connect} onAssociate={() => setActiveTab('relations')} />
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
-      <TabsList className="h-[38px] w-full shrink-0 justify-start overflow-x-auto rounded-none border-b border-border/70 bg-transparent p-0 px-3" data-section="device-workspace-tabs">
-        {navigation.tabs.map((tab) => <TabsTrigger key={tab.key} value={tab.key} className="h-[38px] rounded-none border-b-2 border-transparent px-3 text-[11px] shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none">{tab.label}</TabsTrigger>)}
-      </TabsList>
-      <div className="min-h-0 flex-1 overflow-auto p-4" data-section="device-workspace-body">
-        {activeTab === 'overview' ? <div className="mb-3"><DeviceOwnershipBar ownership={model.ownership} /></div> : null}
-        {activeTab === 'overview' ? <DeviceOverview detail={detail} kind={model.kind} snapshot={snapshot} /> : null}
-        {activeTab === 'operations' && model.kind === 'switch' ? <SwitchWorkspace detail={detail} snapshot={snapshot} readError={readError} onAddLinkForPort={openLinkForPort} /> : null}
-        {activeTab === 'operations' && model.kind === 'router' ? <RouterOperations detail={detail} /> : null}
-        {activeTab === 'operations' && model.kind === 'server' ? <ServerOperations detail={detail} onOpenApplication={onOpenApplication} /> : null}
-        {activeTab === 'operations' && model.kind === 'generic' ? <DeviceOverview detail={detail} kind={model.kind} snapshot={snapshot} /> : null}
-        {activeTab === 'network' ? <DeviceRelations view="network" id={id} detail={detail} kind={model.kind} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} requestedLocalPort={requestedLocalPort} onLinkRequestHandled={clearLinkRequest} connections={connections} onConnectAddress={connectAddress} connectionWarning={connectionWarning} onGoConnections={() => setActiveTab('relations')} /> : null}
-        {activeTab === 'relations' ? <DeviceRelations view="relations" id={id} detail={detail} kind={model.kind} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} /> : null}
-        {activeTab === 'records' ? <DeviceRelations view="records" id={id} detail={detail} kind={model.kind} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} /> : null}
-        {activeTab === 'photos' && supportsInfrastructurePhotos(asset) ? <section data-section="device-photos"><DeviceImages kind="infrastructure" id={asset.id} /></section> : null}
-      </div>
-    </Tabs>
+    {activeTab === 'operations' && model.kind === 'switch' ? <DeviceActionBar asset={asset} kind={model.kind} primaryHost={primaryHost} readBusy={readBusy} lastRead={snapshot?.read_at || snapshot?.snapshot?.readAt} onRead={readSwitchConfig} /> : null}
+    <AssetDetailTabBar tabs={navigation.tabs} value={activeTab} onChange={setActiveTab} panelId="device-workspace-content" dataSection="device-workspace-tabs" />
+    <div id="device-workspace-content" role="tabpanel" aria-labelledby={`device-workspace-tabs-${activeTab}`} className={`min-h-0 min-w-0 flex-1 p-4 ${activeTab === 'cabinet' ? 'flex flex-col overflow-hidden' : 'overflow-auto'}`} data-section="device-workspace-body">
+      {activeTab === 'hardware' ? <DeviceHardware detail={detail} kind={model.kind} snapshot={snapshot} /> : null}
+      {activeTab === 'operations' && model.kind === 'switch' ? <SwitchWorkspace detail={detail} snapshot={snapshot} readError={readError} onAddLinkForPort={openLinkForPort} /> : null}
+      {activeTab === 'operations' && model.kind === 'router' ? <RouterOperations detail={detail} /> : null}
+      {activeTab === 'operations' && model.kind === 'server' ? <ServerOperations detail={detail} onOpenApplication={onOpenApplication} /> : null}
+      {activeTab === 'network' ? <DeviceRelations view="network" id={id} detail={detail} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} requestedLocalPort={requestedLocalPort} onLinkRequestHandled={clearLinkRequest} connections={connections} /> : null}
+      {activeTab === 'usage' ? <DeviceUsage asset={asset} ownership={model.ownership} /> : null}
+      {activeTab === 'cabinet' ? <div className="min-h-0 flex-1 space-y-4 overflow-auto"><div className="flex h-[480px] flex-col"><RackView asset={asset} onOpenAsset={onOpenAsset} onChanged={query.reload} onOpenCabinet={onOpenCabinet} /></div>{supportsInfrastructurePhotos(asset) && ['server', 'switch'].includes(model.kind) ? <section data-section="device-cabinet-photos"><h2 className="mb-2 text-xs font-semibold">设备照片</h2><DeviceImages kind="infrastructure" id={asset.id} /></section> : null}</div> : null}
+      {activeTab === 'system' ? <DeviceSystem detail={detail} snapshot={snapshot} /> : null}
+      {activeTab === 'photos' && supportsInfrastructurePhotos(asset) ? <section data-section="device-photos"><DeviceImages kind="infrastructure" id={asset.id} /></section> : null}
+      {activeTab === 'records' ? <DeviceRelations view="records" id={id} detail={detail} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} /> : null}
+      {activeTab === 'relations' ? <DeviceRelations view="relations" id={id} detail={detail} onReload={query.reload} onOpenAsset={onOpenAsset} onOpenIP={onOpenIP} /> : null}
+    </div>
   </div>
 }

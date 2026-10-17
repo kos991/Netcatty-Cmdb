@@ -208,7 +208,7 @@ func TestServerAppProviderRoundTrip(t *testing.T) {
 	}
 }
 
-func TestServerAppQueryFiltersActualFieldsAndIPAMNetwork(t *testing.T) {
+func TestServerAppQueryFiltersActualFieldsAndPersistedNetwork(t *testing.T) {
 	s := newCmdbTestStore(t)
 	scope, _ := s.DefaultProjectScope()
 	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "业务网", Category: "专网", CIDR: "10.120.0.0/24"}); err != nil {
@@ -221,7 +221,7 @@ func TestServerAppQueryFiltersActualFieldsAndIPAMNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matching := &ServerApp{AppName: "审判系统", AppType: "业务应用", Provider: "甲供应商", Owner: "张三", GroupID: 0, CmdbAssetID: hostID, ServiceIP: "10.120.0.10", Status: "正常运行"}
+	matching := &ServerApp{AppName: "审判系统", AppType: "业务应用", Provider: "甲供应商", Owner: "张三", GroupID: 0, CmdbAssetID: hostID, ServiceIP: "10.120.0.10", NetworkType: "专网", Status: "正常运行"}
 	if _, err := s.CreateAppForProject(scope, matching); err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +233,7 @@ func TestServerAppQueryFiltersActualFieldsAndIPAMNetwork(t *testing.T) {
 	}
 	rows, total, err := s.QueryServerAppsForProject(scope, ServerAppQuery{Provider: "甲供应商", Owner: "张三", NetworkType: "专网", HostID: hostID, HostLinked: "linked", Page: 1, PageSize: 20})
 	if err != nil || total != 1 || len(rows) != 1 || rows[0].AppName != "审判系统" || rows[0].NetworkType != "专网" {
-		t.Fatalf("业务系统实际字段筛选或 IPAM 网络标识错误: rows=%+v total=%d err=%v", rows, total, err)
+		t.Fatalf("业务系统实际字段筛选或独立网络标识错误: rows=%+v total=%d err=%v", rows, total, err)
 	}
 	rows, total, err = s.QueryServerAppsForProject(scope, ServerAppQuery{NetworkType: "专网", HostLinked: "unlinked", Page: 1, PageSize: 20})
 	if err != nil || total != 0 || len(rows) != 0 {

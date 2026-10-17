@@ -14,8 +14,8 @@ export function infrastructureNamePresentation(record = {}) {
   const serialNumber = clean(record.sn || record.serial_number || record.box_sn)
   const deviceName = clean(record.name || record.device_name) || '未命名设备'
   return {
-    name: assetCode || '未配置编码',
-    secondary: [deviceName, serialNumber ? `SN：${serialNumber}` : '未配置 SN'].join(' · '),
+    name: deviceName,
+    secondary: [assetCode || '未配置编码', serialNumber ? `SN：${serialNumber}` : '未配置 SN'].join(' · '),
   }
 }
 

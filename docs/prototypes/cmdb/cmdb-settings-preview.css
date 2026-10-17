@@ -1,0 +1,93 @@
+.window-actions .cmdb-host-settings-button { width: 28px; height: 26px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); }
+.window-actions .cmdb-host-settings-button:hover { background: var(--muted-surface); color: var(--fg); }
+/* Native SettingsPage navigation and segmented Tabs; each Cmdb panel scrolls independently. */
+.cmdb-settings-dialog { width: min(1160px, calc(100vw - 40px)); height: calc(100vh - 24px); max-height: calc(100vh - 24px); overflow: hidden; background: var(--surface); }
+.cmdb-settings-dialog[open] { display: flex; flex-direction: column; }
+.cmdb-settings-header { display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 8px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.cmdb-settings-header h2 { margin: 0; font-size: 18px; line-height: 28px; font-weight: 600; }
+.cmdb-settings-header .icon { width: 32px; height: 32px; }
+.cmdb-settings-layout { display: grid; grid-template-columns: 224px minmax(0, 1fr); flex: 1; min-height: 0; }
+.cmdb-settings-nav { padding: 12px; border-right: 1px solid var(--border); background: var(--surface); overflow: auto; }
+.cmdb-host-setting { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 8px 12px; margin-bottom: 4px; border-radius: 6px; color: var(--muted); font-size: 14px; line-height: 20px; }
+.cmdb-host-setting svg { width: 14px; height: 14px; }
+.cmdb-host-setting--active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.cmdb-settings-search { position: relative; padding-bottom: 8px; }
+#cmdb-settings-search-open { width: 100%; height: 36px; border: 0; padding: 8px 12px; background: transparent; justify-content: flex-start; color: var(--muted); font-size: 14px; }
+#cmdb-settings-search-open:hover { color: var(--fg); background: var(--muted-surface); }
+.cmdb-settings-search-input { position: relative; }
+.cmdb-settings-search-input > svg { position: absolute; left: 10px; top: 11px; width: 14px; height: 14px; color: var(--muted); }
+.cmdb-settings-search-input > input { width: 100%; min-width: 0; height: 36px; padding: 0 28px 0 30px; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+#cmdb-settings-search-close { position: absolute; right: 3px; top: 5px; width: 26px; height: 26px; padding: 0; }
+#cmdb-settings-search-close svg { width: 14px; height: 14px; }
+#cmdb-settings-search-results { position: absolute; left: 0; right: 0; top: 44px; z-index: 40; max-height: 288px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); box-shadow: 0 4px 14px color-mix(in srgb, var(--fg) 12%, transparent); }
+#cmdb-settings-search-results button { width: 100%; height: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border: 0; border-radius: 0; text-align: left; background: transparent; white-space: normal; }
+#cmdb-settings-search-results button[aria-selected="true"] { background: var(--accent-soft); }
+#cmdb-settings-search-results strong { font-size: 13px; font-weight: 500; line-height: 20px; }
+#cmdb-settings-search-results small { color: var(--muted); font-size: 11px; }
+#cmdb-settings-search-results p { margin: 0; padding: 12px; color: var(--muted); font-size: 12px; line-height: 20px; }
+.cmdb-settings-main { display: flex; flex-direction: column; padding: 16px 24px; min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); }
+.cmdb-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; min-height: 32px; margin-bottom: 12px; }
+.cmdb-settings-heading > div { display: flex; align-items: center; gap: 8px; }
+.cmdb-settings-heading > div > svg { width: 17px; height: 17px; color: var(--muted); }
+.cmdb-settings-heading > span { color: var(--muted); font-size: 11px; }
+.cmdb-settings-tabs { display: flex; align-items: center; align-self: flex-start; flex-shrink: 0; gap: 2px; max-width: 100%; min-height: 40px; margin-bottom: 16px; padding: 4px; border-radius: 6px; background: var(--muted-surface); }
+.cmdb-settings-tabs [role="tab"] { height: 32px; gap: 6px; padding: 0 10px; border: 0; border-radius: 4px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 500; }
+.cmdb-settings-tabs [role="tab"] > svg { width: 14px; height: 14px; }
+.cmdb-settings-tabs [role="tab"][aria-selected="true"] { color: var(--fg); background: var(--surface); box-shadow: 0 1px 3px color-mix(in srgb, var(--fg) 12%, transparent); }
+.cmdb-settings-tabs [role="tab"]:hover { color: var(--fg); }
+.cmdb-settings-panels { flex: 1; min-height: 0; overflow: hidden; }
+.cmdb-settings-panel { height: 100%; min-height: 0; overflow: auto; scrollbar-width: thin; padding: 2px 4px 4px; }
+.cmdb-settings-panel[hidden] { display: none; }
+.cmdb-settings-heading h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.cmdb-setting-section { margin-bottom: 16px; scroll-margin-top: 8px; }
+.cmdb-setting-section:last-child { margin-bottom: 0; }
+.cmdb-setting-section > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 24px; margin-bottom: 8px; }
+.cmdb-setting-section h3 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; }
+.cmdb-setting-section > header button { height: 32px; font-size: 12px; }
+.cmdb-setting-card { padding: 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.cmdb-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 60px; padding: 10px 0; }
+.cmdb-setting-row + .cmdb-setting-row { border-top: 1px solid var(--border); }
+.cmdb-setting-row > div:first-child { flex: 1; min-width: 0; }
+.cmdb-setting-row strong { display: block; font-size: 14px; line-height: 20px; font-weight: 500; }
+.cmdb-setting-row p { margin: 2px 0 0; font-size: 12px; color: var(--muted); line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmdb-setting-row--focused { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; background: var(--accent-soft); }
+.cmdb-setting-control { flex-shrink: 0; max-width: 52%; }
+.cmdb-setting-control button { height: 32px; font-size: 12px; border-radius: 6px; }
+.cmdb-setting-control input { width: 288px; max-width: 100%; height: 36px; padding: 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-size: 14px; box-shadow: 0 1px 2px color-mix(in srgb, var(--fg) 4%, transparent); }
+.cmdb-setting-control input[readonly] { background: var(--bg); color: var(--muted); font-size: 12px; }
+.cmdb-setting-control .cmdb-native-switch { display: inline-flex; align-items: center; justify-content: flex-start; width: 36px; height: 20px; padding: 0; border: 2px solid transparent; border-radius: 999px; background: var(--border); cursor: pointer; }
+.cmdb-native-switch > span { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px color-mix(in srgb, var(--fg) 18%, transparent); }
+.cmdb-setting-control .cmdb-native-switch[aria-checked="true"] { background: var(--accent); }
+.cmdb-native-switch[aria-checked="true"] > span { transform: translateX(16px); }
+.cmdb-setting-control .cmdb-native-switch:disabled { opacity: .5; cursor: not-allowed; }
+.cmdb-setting-value { font-size: 12px; color: var(--muted); }
+.cmdb-control-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.cmdb-control-stack > div { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.cmdb-settings-footer { border-top: 1px solid var(--border); padding: 7px 14px; color: var(--muted); background: var(--surface); font-size: 10px; line-height: 16px; text-align: center; flex-shrink: 0; }
+@media (max-width: 900px) {
+  .cmdb-settings-dialog { width: calc(100vw - 24px); }
+  .cmdb-settings-layout { grid-template-columns: 184px minmax(0, 1fr); }
+  .cmdb-settings-nav { padding: 12px 8px; }
+  .cmdb-settings-main { padding: 16px; }
+  .cmdb-settings-tabs { align-self: stretch; gap: 0; }
+  .cmdb-settings-tabs [role="tab"] { flex: 1; gap: 4px; padding: 0 6px; font-size: 11px; }
+  .cmdb-settings-tabs [role="tab"] > svg { width: 12px; height: 12px; }
+  .cmdb-setting-row { gap: 10px; }
+  .cmdb-setting-control { max-width: 100%; }
+}
+@media (max-width: 600px) {
+  .cmdb-settings-dialog { width: calc(100vw - 16px); height: calc(100vh - 16px); max-height: calc(100vh - 16px); }
+  .cmdb-settings-layout { grid-template-columns: 148px minmax(0, 1fr); }
+  .cmdb-settings-main { padding: 14px; }
+  .cmdb-host-setting { padding-left: 8px; padding-right: 8px; font-size: 12px; }
+  .cmdb-setting-card { padding: 0 12px; }
+  .cmdb-setting-control { width: 100%; }
+  .cmdb-setting-control input { width: 100%; font-size: 12px; }
+  .cmdb-setting-row strong { font-size: 13px; }
+  .cmdb-setting-row p { font-size: 11px; }
+  #cmdb-settings-search-open { padding-left: 8px; padding-right: 8px; font-size: 12px; }
+  .cmdb-settings-tabs { flex-wrap: wrap; }
+  .cmdb-settings-tabs [role="tab"] { flex: 1 1 30%; }
+  .cmdb-settings-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .cmdb-setting-row { flex-wrap: wrap; }
+}

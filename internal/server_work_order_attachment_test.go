@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 
@@ -143,5 +144,80 @@ func TestWorkOrderAttachmentEndpoints(t *testing.T) {
 	mux.ServeHTTP(remove, httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/cmdb/work-orders/%d/attachments/%d", workOrderID, attachment.ID), nil))
 	if remove.Code != http.StatusOK {
 		t.Fatalf("附件删除失败: status=%d body=%s", remove.Code, remove.Body.String())
+	}
+}
+
+func TestWorkOrderAttachmentUploadValidation(t *testing.T) {
+	s := newCmdbTestServer(t)
+	workOrderID, err := s.Store.CreateCmdbWorkOrder(&store.CmdbWorkOrder{Subject: "上传校验"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	s.RegisterRoutes(mux)
+
+	upload := func(workOrder int64, partFn func(*multipart.Writer) error) *httptest.ResponseRecorder {
+		t.Helper()
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		if partFn != nil {
+			if err := partFn(writer); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_ = writer.Close()
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/cmdb/work-orders/%d/attachments", workOrder), &body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 缺少 file 字段必须拒绝
+	noFile := upload(workOrderID, func(w *multipart.Writer) error {
+		return w.WriteField("extra", "no-file")
+	})
+	if noFile.Code != http.StatusBadRequest {
+		t.Fatalf("缺少 file 字段应返回 400: %d %s", noFile.Code, noFile.Body.String())
+	}
+
+	// 不存在的工单必须拒绝
+	missingOrder := upload(999999, func(w *multipart.Writer) error {
+		part, err := w.CreateFormFile("file", "a.txt")
+		if err != nil {
+			return err
+		}
+		_, err = part.Write([]byte("x"))
+		return err
+	})
+	if missingOrder.Code != http.StatusBadRequest {
+		t.Fatalf("不存在的工单应返回 400: %d %s", missingOrder.Code, missingOrder.Body.String())
+	}
+
+	// 文件名含目录成分被扁平化，且保留声明的 content_type
+	preserved := upload(workOrderID, func(w *multipart.Writer) error {
+		header := textproto.MIMEHeader{
+			"Content-Disposition": {`form-data; name="file"; filename="sub/证据.txt"`},
+			"Content-Type":        {"text/plain; charset=utf-8"},
+		}
+		part, err := w.CreatePart(header)
+		if err != nil {
+			return err
+		}
+		_, err = part.Write([]byte("flattened"))
+		return err
+	})
+	if preserved.Code != http.StatusCreated {
+		t.Fatalf("合法附件上传失败: %d %s", preserved.Code, preserved.Body.String())
+	}
+	var uploaded store.WorkOrderAttachment
+	if err := json.Unmarshal(preserved.Body.Bytes(), &uploaded); err != nil {
+		t.Fatal(err)
+	}
+	if uploaded.FileName != "证据.txt" {
+		t.Fatalf("文件名未扁平化: %q", uploaded.FileName)
+	}
+	if uploaded.ContentType != "text/plain; charset=utf-8" {
+		t.Fatalf("content_type 未保留: %q", uploaded.ContentType)
 	}
 }

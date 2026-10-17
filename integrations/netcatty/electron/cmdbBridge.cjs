@@ -11,6 +11,7 @@ const IMPORT_PATHS = new Set([
   "/api/import/sangfor",
   "/api/cmdb/assets/import",
   "/api/ip_pool/import",
+  "/api/cmdb/work-orders/import",
 ]);
 
 const CMDB_CHANNELS = Object.freeze({
@@ -192,7 +193,9 @@ function registerCmdbBridge({
     } else {
       const selection = await dialog.showOpenDialog({
         properties: ["openFile"],
-        filters: [{ name: "Excel", extensions: ["xls", "xlsx"] }],
+        filters: payload.path === "/api/cmdb/work-orders/import"
+          ? [{ name: "CSV", extensions: ["csv"] }]
+          : [{ name: "Excel", extensions: ["xls", "xlsx"] }],
       });
       if (selection.canceled || !selection.filePaths?.[0]) return { cancelled: true };
       filePath = selection.filePaths[0];

@@ -729,7 +729,7 @@ func (s *Store) attachIPOwnersForProject(scope ProjectScope, list []IPEntry) err
 	}
 
 	// 应用使用设备地址只增加使用关系，不改变地址的设备归属。
-	rows, err := s.db.Query(`SELECT id,app_name,service_ip FROM server_apps WHERE project_id=? AND service_ip IN (`+inClause+`)`, queryArgs(1)...)
+	rows, err := s.db.Query(`SELECT id,app_name,service_ip FROM server_apps WHERE project_id=? AND deleted_at IS NULL AND IFNULL(status,'') NOT IN ('已归档','已注销') AND service_ip IN (`+inClause+`)`, queryArgs(1)...)
 	if err != nil {
 		return err
 	}

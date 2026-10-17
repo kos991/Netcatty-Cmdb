@@ -45,11 +45,34 @@ export default function Organizations({ open, onOpenChange, onChanged, people = 
   const [collapsed, setCollapsed] = useState(() => new Set())
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const rows = query.data?.rows || []
+  const rows = useMemo(() => query.data?.rows || [], [query.data])
   useEffect(() => {
     if (query.data) setDraft((current) => ({ ...(query.data.rows.find((row) => row.id === current?.id) || query.data.rows[0]) }))
   }, [query.data])
   const tree = useMemo(() => filterTaxonomyTree(query.data?.tree || [], search), [query.data, search])
+  const parentOptions = useMemo(() => {
+    const excluded = new Set()
+    const excludeBranch = (id) => {
+      const numericId = Number(id)
+      if (excluded.has(numericId)) return
+      excluded.add(numericId)
+      rows.filter((row) => Number(row.parent_id) === numericId).forEach((row) => excludeBranch(row.id))
+    }
+    if (draft?.id) excludeBranch(draft.id)
+    return organizationParentOptions(rows.filter((row) => !excluded.has(Number(row.id))), draft?.node_type || 'organization')
+  }, [rows, draft?.id, draft?.node_type])
+  const draftPath = useMemo(() => {
+    if (!draft?.node_type) return ''
+    const names = [draft.name || `未命名${ORG_TYPES[draft.node_type]}`]
+    const visited = new Set(draft.id ? [Number(draft.id)] : [])
+    let parent = rows.find((row) => Number(row.id) === Number(draft.parent_id))
+    while (parent && !visited.has(Number(parent.id))) {
+      visited.add(Number(parent.id))
+      names.unshift(parent.name)
+      parent = rows.find((row) => Number(row.id) === Number(parent.parent_id))
+    }
+    return names.join(' / ')
+  }, [draft, rows])
   const disabled = action.busy || query.loading || Boolean(query.error)
   const childType = draft?.node_type === 'organization' ? 'department' : draft?.node_type === 'department' ? 'group' : null
   const beginCreate = (nodeType, parentId = 0) => { setError(''); setDraft({ id: 0, name: '', node_type: nodeType, parent_id: parentId, sort_order: 0 }) }
@@ -58,6 +81,7 @@ export default function Organizations({ open, onOpenChange, onChanged, people = 
     setError('')
     try {
       const body = organizationEditorPayload(draft, rows)
+      if (body.parent_id && !parentOptions.some((option) => Number(option.value) === body.parent_id)) throw new Error('上级节点不能是当前节点或其下级')
       const result = draft.id ? (await api.updateConfig('org-nodes', draft.id, body), { id: draft.id }) : await api.createConfig('org-nodes', body)
       setDraft({ ...body, id: result.id })
       await query.reload()
@@ -78,7 +102,7 @@ export default function Organizations({ open, onOpenChange, onChanged, people = 
   return <>
     <Dialog open={open} onOpenChange={(next) => { if (!action.busy) onOpenChange?.(next) }}>
       <DialogContent data-organization-maintenance className="flex h-[min(680px,calc(100vh-40px))] w-[min(900px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
-        <DialogHeader className="shrink-0 border-b border-border px-5 py-4"><DialogTitle className="flex items-center gap-2 text-sm tracking-normal"><Users size={16} />组织架构维护</DialogTitle></DialogHeader>
+        <DialogHeader className="shrink-0 border-b border-border px-5 py-4"><DialogTitle className="flex items-center gap-2 text-sm tracking-normal"><Users size={16} />维护组织架构</DialogTitle><p className="text-[11px] text-muted-foreground">选择左侧目录，在右侧新增或编辑组织节点</p></DialogHeader>
         {error || query.error ? <ErrorBanner title="操作未完成" message={error || query.error} onRetry={query.error ? query.reload : undefined} /> : null}
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(240px,32%)_minmax(0,1fr)] max-[640px]:grid-cols-1 max-[640px]:grid-rows-[minmax(140px,35%)_minmax(0,1fr)]">
           <section aria-label="组织架构目录" className="flex min-h-0 flex-col border-r border-border max-[640px]:border-b max-[640px]:border-r-0">
@@ -97,10 +121,12 @@ export default function Organizations({ open, onOpenChange, onChanged, people = 
               <fieldset disabled={disabled} className="grid min-w-0 gap-4">
                 <div className="grid gap-1.5"><Label htmlFor="organization-name" className="text-xs text-muted-foreground">名称 *</Label><Input id="organization-name" required value={draft.name || ''} onChange={(event) => change('name', event.target.value)} className="h-9 text-xs" /></div>
                 <div className="grid gap-1.5"><Label htmlFor="organization-type" className="text-xs text-muted-foreground">节点类型</Label><SelectControl id="organization-type" aria-label="节点类型" className="w-full" disabled={disabled || Boolean(draft.id)} value={draft.node_type} onChange={(value) => setDraft((current) => ({ ...current, node_type: value, parent_id: 0 }))} options={Object.entries(ORG_TYPES).map(([value, label]) => ({ value, label }))} /></div>
-                <div className="grid gap-1.5"><Label htmlFor="organization-parent" className="text-xs text-muted-foreground">上级节点</Label><SelectControl id="organization-parent" aria-label="上级节点" className="w-full" disabled={disabled || draft.node_type === 'organization'} value={draft.parent_id || 0} onChange={(value) => change('parent_id', Number(value))} options={organizationParentOptions(rows, draft.node_type)} /></div>
+                <div className="grid gap-1.5"><Label htmlFor="organization-parent" className="text-xs text-muted-foreground">上级节点</Label><SelectControl id="organization-parent" aria-label="上级节点" className="w-full" disabled={disabled || draft.node_type === 'organization'} value={draft.parent_id || 0} onChange={(value) => change('parent_id', Number(value))} options={parentOptions} /></div>
                 <div className="grid gap-1.5"><Label htmlFor="organization-sort" className="text-xs text-muted-foreground">排序</Label><Input id="organization-sort" type="number" min="0" step="1" value={draft.sort_order ?? 0} onChange={(event) => change('sort_order', event.target.value)} className="h-9 text-xs" /></div>
                 <div className="grid gap-1.5"><Label htmlFor="organization-person-count" className="text-xs text-muted-foreground">引用人员</Label><Input id="organization-person-count" readOnly value={peopleError ? '加载失败' : peopleLoading ? '加载中' : `${organizationPersonCount(draft, people)} 人`} className="h-9 bg-muted/30 text-xs tabular-nums text-muted-foreground" /></div>
               </fieldset>
+              <p aria-live="polite" className="break-words text-[11px] leading-relaxed text-muted-foreground">归属路径：{draftPath}</p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">组织为顶级，部门只能属于组织，分组只能属于部门。上级不能选择自身或下级节点。</p>
               <div className="flex items-center justify-between border-t border-border pt-4">
                 <Button type="button" variant="ghost" size="sm" className="gap-1 text-destructive hover:text-destructive" disabled={disabled || !draft.id} onClick={() => setConfirmDelete(true)}><Trash2 size={14} />删除</Button>
                 <Button type="submit" size="sm" disabled={disabled}>{action.busy ? <Spinner className="mr-1.5" /> : null}保存</Button>
@@ -108,6 +134,7 @@ export default function Organizations({ open, onOpenChange, onChanged, people = 
             </form> : <EmptyState label="选择左侧组织节点，或新增组织" />}
           </section>
         </div>
+        <footer className="flex shrink-0 justify-end border-t border-border px-5 py-3"><Button type="button" variant="outline" size="sm" disabled={action.busy} onClick={() => onOpenChange?.(false)}>关闭</Button></footer>
       </DialogContent>
     </Dialog>
     <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} title={`删除${ORG_TYPES[draft?.node_type] || '组织节点'}`} message={`确认删除“${draft?.name || ''}”？存在子节点或引用人员时不能删除。`} confirmLabel="删除" destructive busy={action.busy} onConfirm={remove} />

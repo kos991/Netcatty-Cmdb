@@ -33,6 +33,7 @@ var projectScopedTables = []string{
 	"ip_subnets",
 	"servers",
 	"server_apps",
+	"server_app_logs",
 	"cmdb_orgs",
 	"cmdb_groups",
 	"cmdb_device_categories",
@@ -44,6 +45,7 @@ var projectScopedTables = []string{
 	"cmdb_switch_snapshots",
 	"cmdb_asset_history",
 	"cmdb_work_orders",
+	"cmdb_work_order_logs",
 	"cmdb_work_order_asset_links",
 	"cmdb_work_order_attachments",
 	"cmdb_inventory_tasks",
@@ -353,6 +355,10 @@ func migrateProjectUniqueIndexes(tx *sql.Tx) error {
 		if _, err := tx.Exec(idx.create); err != nil {
 			return fmt.Errorf("create project unique index after %s: %w", idx.drop, err)
 		}
+	}
+	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_ip_pool_project_ip
+		ON ip_pool(project_id, ip)`); err != nil {
+		return fmt.Errorf("create project IP pool lookup index: %w", err)
 	}
 	if _, err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_orders_project_order_no
 		ON cmdb_work_orders(project_id, order_no) WHERE order_no <> '' AND deleted_at IS NULL`); err != nil {

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>网络 · 机柜与网络 · 设计原型</title>
+<link rel="stylesheet" href="cmdb-preview.css">
+<link rel="stylesheet" href="cmdb-settings-preview.css">
+<link rel="stylesheet" href="cmdb-settings-catalog-preview.css">
+<link rel="stylesheet" href="cmdb-settings-operations-preview.css">
+<script src="cabinet-network-nav-preview.js" defer></script>
+<link rel="stylesheet" href="address-pool-preview.css">
+</head>
+<body class="ip-review-active">
+<script src="vendor/netcatty-icons.js"></script>
+<script src="cmdb-settings-data-preview.js"></script>
+<script src="cmdb-settings-catalog-preview.js"></script>
+<script src="cmdb-settings-operations-preview.js"></script>
+<script src="cmdb-settings-preview.js"></script>
+<div class="app">
+<div class="tabs"><span class="tab">▧&nbsp; Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab">▱&nbsp; SFTP</span><span class="tab">＋</span><div class="window-actions"><svg><use href="#settings"/></svg><span>—</span><span>□</span><span>×</span></div></div>
+<div class="shell">
+<nav class="rail" aria-label="工作区"><div class="logo">N</div><button aria-label="设备资产" title="设备资产" onclick="location.href='device-assets-preview.html#terminal'"><svg><use href="#monitor"/></svg></button><button aria-label="组织架构" title="组织架构" onclick="location.href='organization-preview.html'"><svg><use href="#people"/></svg></button><button class="selected" aria-label="机柜与网络" title="机柜与网络"><svg><use href="#network"/></svg></button><button aria-label="工单与统计" title="工单与统计" onclick="location.href='work-order-preview.html'"><svg><use href="#chart"/></svg></button></nav>
+<main class="surface">
+<header id="pool-toolbar" class="toolbar" aria-label="地址池工具栏">
+  <details class="new-menu"><summary aria-label="新增地址池" title="新增地址池"><svg><use href="#plus"/></svg>新增地址池 <span class="chevron">⌄</span></summary><div class="menu"><button data-pool-editor="new">新增地址池</button><button disabled>从资产 IP 生成</button><small>切换地址池使用右侧选择器；编辑仅作用于当前地址池</small></div></details>
+  <details class="pool-selector"><summary aria-label="选择地址池"><span id="pool-choice"></span><span class="chevron">⌄</span></summary><div class="menu"><input id="pool-find" aria-label="搜索地址池" placeholder="搜索地址池名称、CIDR"><div id="pool-options"></div></div></details>
+  <label class="search"><svg><use href="#search"/></svg><input id="pool-search" aria-label="查询 IP 或资产" placeholder="查询 IP、资产名称"></label>
+  <div class="toolbar-actions">
+  <button data-pool-editor="edit">编辑当前地址池</button>
+  <button id="pool-add-ip">补录 IP</button>
+  <details class="toolbar-filter"><summary class="icon toolbar-icon" aria-label="查询 IP" title="查询 IP"><svg><use href="#filter"/></svg></summary><div class="menu"><label class="toolbar-field" for="pool-status">状态<select id="pool-status" aria-label="地址状态"><option value="">全部状态</option><option value="used">已占用</option><option value="free">空闲</option><option value="reserved">已预留</option><option value="abnormal">异常</option></select></label><button id="pool-reset" class="quiet">重置查询</button></div></details>
+  <details class="pool-transfer toolbar-transfer"><summary class="icon toolbar-icon" aria-label="导入/导出 IP" title="导入/导出 IP"><svg aria-hidden="true"><use href="#transfer"/></svg></summary><div class="menu"><button disabled><svg><use href="#upload"/></svg>导入 IP</button><button disabled><svg><use href="#download"/></svg>按当前条件导出</button><small>设计原型，不读写业务文件</small></div></details>
+  </div>
+</header>
+<section id="pool-content" class="pool-view" aria-label="网络地址池">
+  <div class="pool-summary">
+    <div class="pool-identity"><h1 id="pool-heading"></h1><p id="pool-metadata"></p></div>
+    <div class="pool-stat"><span>地址总数</span><strong id="pool-total"></strong></div>
+    <div class="pool-stat used"><span>已占用</span><strong id="pool-used"></strong></div>
+    <div class="pool-stat reserved"><span>已预留</span><strong id="pool-reserved"></strong></div>
+    <div class="pool-stat"><span>空闲</span><strong id="pool-free"></strong></div>
+    <div class="pool-stat abnormal"><span>异常</span><strong id="pool-abnormal"></strong></div>
+  </div>
+  <div class="pool-controls">
+    <div class="segmented" aria-label="地址显示方式"><button data-ip-layout="grid" aria-pressed="true">方格</button><button data-ip-layout="table" aria-pressed="false">列表</button></div>
+    <div class="pool-legend"><span><i class="used"></i>已占用</span><span><i></i>空闲</span><span><i class="reserved"></i>预留</span><span><i class="abnormal"></i>异常</span><span><i class="special"></i>网络 / 广播（只读）</span></div>
+  </div>
+  <div id="pool-address-layout" class="pool-address-layout">
+  <div class="pool-scroll">
+    <div id="ip-grid" class="ip-grid"></div>
+    <table id="ip-table" class="ip-table" hidden><thead><tr><th style="width:22%">IP 地址</th><th style="width:16%">网络类型</th><th style="width:16%">状态</th><th>占用对象</th><th style="width:18%">位置</th></tr></thead><tbody id="ip-table-body"></tbody></table>
+    <p id="pool-empty" class="pool-empty" hidden>没有匹配地址</p>
+  </div>
+    <aside id="ip-detail" aria-label="IP 地址详情" hidden>
+      <header class="dialog-header"><h2 id="ip-detail-title">IP 地址详情</h2><button id="ip-detail-close" type="button" class="icon quiet" aria-label="关闭 IP 详情"><svg><use href="#close"/></svg></button></header>
+      <div class="dialog-body"><p class="selection-note">所选 IP 保持在左侧可见；蓝色边框标识当前地址。</p><dl id="ip-detail-fields" class="ip-definition"></dl><p class="dialog-note">示例地址，仅用于设计预览。网络地址与广播地址只读、不可分配。</p></div>
+      <footer class="dialog-footer"><button id="ip-relocate" type="button">定位所选 IP</button><span id="ip-detail-actions"></span></footer>
+    </aside>
+  </div>
+  <footer class="pool-pager"><span id="pool-page-count" class="count"></span><select id="pool-page-size" aria-label="每页地址数"><option value="96">96 条 / 页</option><option value="128">128 条 / 页</option><option value="256" selected>256 条 / 页</option></select><button id="pool-prev">上一页</button><button id="pool-next">下一页</button></footer>
+</section>
+<dialog id="pool-editor" class="pool-maintenance">
+  <header class="dialog-header"><h2 id="pool-editor-title"></h2><button class="icon quiet" data-close="pool-editor" aria-label="关闭地址池维护">×</button></header>
+  <div class="pool-maintenance-body">
+    <div class="dialog-body"><div class="fields">
+      <p id="pool-editor-scope" class="field full"></p>
+      <div class="field full"><label for="pool-name">地址池名称</label><input id="pool-name" placeholder="例如：办公内网"></div>
+      <div class="field"><label for="pool-category">网络类型</label><select id="pool-category"><option>内网</option><option>专网</option><option>外网</option></select></div>
+      <div class="field"><label for="pool-cidr">CIDR</label><input id="pool-cidr" placeholder="192.168.10.0/24"></div>
+      <div class="field"><label for="pool-gateway">网关</label><input id="pool-gateway"></div>
+      <div class="field"><label for="pool-vlan">VLAN</label><input id="pool-vlan"></div>
+      <div class="field"><label for="pool-vni">VXLAN VNI</label><input id="pool-vni"></div>
+      <div class="field"><label for="pool-purpose">用途</label><input id="pool-purpose"></div>
+    </div><p class="dialog-note">这是表单布局预览，不保存或修改业务数据。</p></div>
+  </div>
+  <footer class="dialog-footer"><button data-close="pool-editor">关闭</button><button class="primary" disabled>保存地址池</button></footer>
+</dialog>
+<dialog id="pool-ip-editor">
+  <header class="dialog-header"><h2>补录 IP</h2><button class="icon quiet" data-close="pool-ip-editor" aria-label="关闭补录 IP">×</button></header>
+  <div class="dialog-body"><div class="fields"><div class="field full"><label for="new-ip-address">IP 地址</label><input id="new-ip-address" placeholder="填写当前地址池内的地址"></div><div class="field full"><label for="new-ip-note">备注</label><input id="new-ip-note"></div></div><p class="dialog-note">仅展示补录表单，不新增真实地址。</p></div>
+  <footer class="dialog-footer"><button data-close="pool-ip-editor">关闭</button><button class="primary" disabled>确认补录</button></footer>
+</dialog>
+<div class="prototype-label">设计原型 · 示例数据 · 不连接业务服务</div>
+</main>
+</div>
+</div>
+<script src="address-pool-preview.js"></script>
+</body>
+</html>

@@ -240,6 +240,26 @@ test("allows native IPAM import with preview and commit", async () => {
   ]);
 });
 
+test("work-order CSV import selects once and consumes its confirmation token", async () => {
+  let selections = 0;
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async (options) => {
+        selections++;
+        assert.deepEqual(options.filters, [{ name: "CSV", extensions: ["csv"] }]);
+        return { canceled: false, filePaths: ["C:/imports/work-orders.csv"] };
+      },
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+    fetchImpl: async () => new Response('{"valid":1}', { status: 200 }),
+  });
+  const preview = await handlers.get(CMDB_CHANNELS.importFile)({}, { path: "/api/cmdb/work-orders/import" });
+  const commit = { path: "/api/cmdb/work-orders/import", commit: true, token: preview.token };
+  await handlers.get(CMDB_CHANNELS.importFile)({}, commit);
+  await assert.rejects(handlers.get(CMDB_CHANNELS.importFile)({}, commit), /令牌无效/);
+  assert.equal(selections, 1);
+});
+
 test("returns cancellation without writing when export selection is cancelled", async () => {
   let writes = 0;
   const handlers = registerTestBridge({

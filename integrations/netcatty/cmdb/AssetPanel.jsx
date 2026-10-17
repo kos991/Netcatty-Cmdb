@@ -1,17 +1,21 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Maximize2, Minimize2, Pencil, X } from 'lucide-react'
 import { AsidePanel, AsidePanelContent, AsidePanelFooter } from '@/components/ui/aside-panel'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ActionIcon, StatusPill, statusTone } from './ui'
 
-export function AssetPanel({ open, onClose, title, subtitle, status, icon: Icon, expanded = false, onExpandedChange, onEdit, actions, children, footer, dataSection = 'cmdb-asset-panel' }) {
-  return <AsidePanel open={open} onClose={onClose} width={expanded ? 'w-full' : 'w-[420px]'} dataSection={dataSection}>
+export function AssetPanel({ open, onClose, title, subtitle, status, icon: Icon, expanded: controlledExpanded, onExpandedChange, onEdit, actions, tabs, children, footer, dataSection = 'cmdb-asset-panel' }) {
+  const [localExpanded, setLocalExpanded] = useState(false)
+  const expanded = controlledExpanded ?? localExpanded
+  const changeExpanded = (value) => { setLocalExpanded(value); onExpandedChange?.(value) }
+  return <AsidePanel open={open} onClose={onClose} width={expanded ? 'w-full' : 'w-[420px]'} layout="overlay" dataSection={dataSection}>
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border/70 px-4">
       {Icon ? <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Icon size={16} /></span> : null}
       <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-sm font-semibold">{title}</h2>{status ? <StatusPill tone={statusTone(status)}>{status}</StatusPill> : null}</div>{subtitle ? <p className="truncate text-[11px] text-muted-foreground" title={subtitle}>{subtitle}</p> : null}</div>
-      <div className="flex shrink-0 items-center gap-0.5">{actions}{onExpandedChange ? <ActionIcon label={expanded ? '还原面板' : '展开面板'} onClick={() => onExpandedChange(!expanded)}>{expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</ActionIcon> : null}{onEdit ? <ActionIcon label="编辑" onClick={onEdit}><Pencil size={15} /></ActionIcon> : null}<ActionIcon label="关闭详情" onClick={onClose}><X size={16} /></ActionIcon></div>
+      <div className="flex shrink-0 items-center gap-0.5">{actions}<ActionIcon label={expanded ? '还原面板' : '展开面板'} onClick={() => changeExpanded(!expanded)}>{expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</ActionIcon>{onEdit ? <ActionIcon label="编辑" onClick={onEdit}><Pencil size={15} /></ActionIcon> : null}<ActionIcon label="关闭详情" onClick={onClose}><X size={16} /></ActionIcon></div>
     </header>
+    {tabs}
     <AsidePanelContent className="min-h-0">{children}</AsidePanelContent>
     {footer ? <AsidePanelFooter>{footer}</AsidePanelFooter> : null}
   </AsidePanel>

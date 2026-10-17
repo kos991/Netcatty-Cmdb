@@ -16,36 +16,28 @@ export const INFRASTRUCTURE_COLUMN_KEYS = [
   'asset_code',
   'device_type',
   'vendor_model',
-  'operating_system',
-  'owner_department',
-  'location',
   'management_ip',
   'network_type',
+  'location',
+  'owner_department',
   'status',
   'actions',
 ]
 
 export const SYSTEM_COLUMN_KEYS = [
-  'name_version',
+  'name_code',
   'app_type',
-  'provider',
-  'owner',
+  'version',
+  'host',
   'service_ip',
   'network_type',
-  'host',
+  'owner',
   'status',
   'actions',
 ]
 
-export function visibleAssetColumnKeys(kind, density = 'wide') {
-  const all = { terminal: TERMINAL_COLUMN_KEYS, infrastructure: INFRASTRUCTURE_COLUMN_KEYS, system: SYSTEM_COLUMN_KEYS }[kind] || []
-  if (density === 'wide') return all
-  const compact = {
-    terminal: ['asset_code', 'device_type', 'ip', 'network_type', 'status', 'actions'],
-    infrastructure: ['asset_code', 'device_type', 'location', 'management_ip', 'network_type', 'status', 'actions'],
-    system: ['name_version', 'app_type', 'provider', 'service_ip', 'network_type', 'status', 'actions'],
-  }
-  return compact[kind] || all
+export function visibleAssetColumnKeys(kind) {
+  return { terminal: TERMINAL_COLUMN_KEYS, infrastructure: INFRASTRUCTURE_COLUMN_KEYS, system: SYSTEM_COLUMN_KEYS }[kind] || []
 }
 
 const clean = (value) => String(value ?? '').trim()
@@ -55,11 +47,12 @@ export function canonicalNetworkType(value) {
   const normalized = clean(value).toLowerCase()
   if (!normalized) return '未配置'
   if (/外网|公网|internet|\bwan\b/.test(normalized)) return '外网'
-  if (/内网|专网|政法|业务网|管理网|隔离网|\blan\b/.test(normalized)) return '内网'
+  if (/专网|政法/.test(normalized)) return '专网'
+  if (/内网|业务网|管理网|隔离网|\blan\b/.test(normalized)) return '内网'
   return '未配置'
 }
 
-function validIPv4(value) {
+export function validIPv4(value) {
   const parts = clean(value).split('.')
   return parts.length === 4 && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)
 }
@@ -84,6 +77,18 @@ export function terminalNetworkRows(asset = {}) {
     })
   }
   return rows
+}
+
+const TERMINAL_HARDWARE_FIELDS = [
+  { key: 'vendor', label: '品牌 / 厂商' },
+  { key: 'model', label: '型号' },
+  { key: 'cpu_info', label: 'CPU 配置' },
+  { key: 'memory_mb', label: '内存（MB）', type: 'number', min: 0 },
+  { key: 'disk_info', label: '硬盘 / 磁盘配置' },
+]
+
+export function terminalHardwareFields(deviceType) {
+  return /台式|笔记本/.test(clean(deviceType)) && !isCloudDevice(deviceType) ? TERMINAL_HARDWARE_FIELDS : []
 }
 
 export function terminalBusinessNetworkType(asset = {}) {

@@ -15,7 +15,12 @@ test('编辑工单时保留已配置目录中不存在的历史类别和运维�
 test('新建工单默认值采用当前配置中的首项，仍优先保留有效首选项', () => {
   assert.equal(chooseWorkOrderDefault(['验收', '维护'], '故障处理'), '验收')
   assert.equal(chooseWorkOrderDefault(['验收', '维护'], '维护'), '维护')
-  assert.equal(chooseWorkOrderDefault([], '故障处理'), '故障处理')
+  assert.equal(chooseWorkOrderDefault([], '故障处理'), '')
+})
+
+test('空目录或仅含空白的目录不生成第二套默认值', () => {
+  assert.equal(chooseWorkOrderDefault(undefined, 'P3（普通）'), '')
+  assert.equal(chooseWorkOrderDefault([' ', ''], '排障'), '')
 })
 
 test('编辑工单用项目 ID 补回项目名称并保留现有字段', () => {
@@ -33,7 +38,7 @@ test('编辑工单用项目 ID 补回项目名称并保留现有字段', () => {
     operation_type: '联动验收',
     plan_time: '2026-10-10T16:00:00',
     actual_time: '',
-    priority: 'P3（普通）',
+    priority: '',
     status: '新建',
   })
 })

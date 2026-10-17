@@ -88,6 +88,58 @@ func TestAttachCmdbAssetBusinessNetworkTypesUsesBusinessIPAMSubnet(t *testing.T)
 	}
 }
 
+func TestAttachCmdbAssetBusinessNetworkTypesUsesManagementIPAMSubnet(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetID := insertCmdbAsset(t, s, CmdbAsset{Name: "管理服务器", AssetCode: "INFRA-MGMT", MgmtIP: "10.20.30.5"})
+	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "内网", Category: "内网", CIDR: "10.20.30.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+	list, _, err := s.QueryCmdbAssetsForProject(scope, CmdbAssetQuery{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AttachCmdbAssetBusinessNetworkTypesForProject(scope, list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != assetID || list[0].BusinessNetworkType != "内网" {
+		t.Fatalf("管理 IP 网络归属错误: %+v", list)
+	}
+}
+
+func TestAttachCmdbAssetBusinessNetworkTypesMatchesUnregisteredIPBySubnetCIDR(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 网段先于资产建立：资产 IP 未登记进 IP 台账，只能按网段 CIDR 判定。
+	for _, subnet := range []IPSubnet{
+		{Name: "管理网", Category: "内网", CIDR: "10.9.9.0/24"},
+		{Name: "大段", Category: "外网", CIDR: "172.16.0.0/16"},
+		{Name: "小段", Category: "专网", CIDR: "172.16.5.0/24"},
+	} {
+		subnet := subnet
+		if _, err := s.CreateIPSubnetForProject(scope, &subnet); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insertCmdbAsset(t, s, CmdbAsset{Name: "双网服务器", AssetCode: "INFRA-DUAL", BizIP: "172.16.5.9", MgmtIP: "10.9.9.9"})
+	list, _, err := s.QueryCmdbAssetsForProject(scope, CmdbAssetQuery{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AttachCmdbAssetBusinessNetworkTypesForProject(scope, list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].BusinessNetworkType != "专网" {
+		t.Fatalf("业务 IP 应优先并取最长前缀网段: %+v", list)
+	}
+}
+
 func TestQueryCmdbAssetsSortWhitelistRejectsUnknownField(t *testing.T) {
 	s := newCmdbTestStore(t)
 	insertCmdbAsset(t, s, CmdbAsset{Name: "A", AssetCode: "ZC1", Status: "在线"})
@@ -107,7 +159,8 @@ func TestQueryCmdbAssetsSortWhitelistRejectsUnknownField(t *testing.T) {
 
 func TestQueryCmdbAssetsInfrastructureScope(t *testing.T) {
 	s := newCmdbTestStore(t)
-	result, err := s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('交换机', 0, 0)`)
+	// 分类必须显式声明 asset_scope：基础设施范围以该字段为准，名称启发式不再参与判定。
+	result, err := s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order, asset_scope) VALUES ('交换机', 0, 0, 'infrastructure')`)
 	if err != nil {
 		t.Fatalf("插入交换机分类失败: %v", err)
 	}
@@ -115,7 +168,7 @@ func TestQueryCmdbAssetsInfrastructureScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读取交换机分类 ID 失败: %v", err)
 	}
-	result, err = s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('云桌面终端', 0, 0)`)
+	result, err = s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order, asset_scope) VALUES ('云桌面终端', 0, 0, 'terminal')`)
 	if err != nil {
 		t.Fatalf("插入终端分类失败: %v", err)
 	}

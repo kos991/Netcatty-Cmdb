@@ -80,7 +80,7 @@ func TestParseLegacyAssetImportReadsIndependentAssetName(t *testing.T) {
 
 func TestLegacyAssetExportIncludesOperatingSystemColumns(t *testing.T) {
 	values := legacyAssetExportValues(store.Asset{ID: 9, AssetName: "出口名称", AssetCode: "OS-EXPORT", DeviceType: "台式电脑", OSType: "Windows 11", OSVersion: "23H2", Status: "在用"})
-	if len(values) != 16 || values[1] != "出口名称" || values[11] != "Windows 11" || values[12] != "23H2" {
+	if len(values) != 21 || values[1] != "出口名称" || values[11] != "Windows 11" || values[12] != "23H2" {
 		t.Fatalf("终端导出系统列错误: %#v", values)
 	}
 }

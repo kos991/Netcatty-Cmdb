@@ -206,7 +206,7 @@ func TestIPAMFollowingConnectionTracksOnlyItsAddress(t *testing.T) {
 	}
 }
 
-func TestIPAMDeletingIndependentApplicationReleasesVIP(t *testing.T) {
+func TestIPAMArchivingIndependentApplicationPreservesVIP(t *testing.T) {
 	s := newCmdbTestStore(t)
 	_, err := s.CreateIPSubnet(&IPSubnet{Name: "VIP", CIDR: "10.92.0.0/24"})
 	if err != nil {
@@ -221,9 +221,18 @@ func TestIPAMDeletingIndependentApplicationReleasesVIP(t *testing.T) {
 	if err = s.DeleteApp(id); err != nil {
 		t.Fatal(err)
 	}
-	var status string
-	if err = s.db.QueryRow(`SELECT status FROM ip_pool WHERE ip='10.92.0.10'`).Scan(&status); err != nil || status != "空闲" {
-		t.Fatalf("删除独立应用未释放 VIP: %s %v", status, err)
+	var status, ownerType string
+	var ownerID int64
+	if err = s.db.QueryRow(`SELECT status,owner_type,owner_id FROM ip_pool WHERE ip='10.92.0.10'`).Scan(&status, &ownerType, &ownerID); err != nil || status != "在用" || ownerType != "application" || ownerID != id {
+		t.Fatalf("注销归档必须保留 VIP 归属: status=%s owner=%s/%d err=%v", status, ownerType, ownerID, err)
+	}
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, logs, err := s.GetAppForProject(scope, id)
+	if err != nil || got.ServiceIP != "10.92.0.10" || got.Status != "已注销" || len(logs) != 2 {
+		t.Fatalf("注销归档丢失应用地址或履历: app=%+v logs=%+v err=%v", got, logs, err)
 	}
 }
 

@@ -305,7 +305,7 @@ func TestProjectScopeConfigUniqueIndexesMigrateIdempotently(t *testing.T) {
 	newIndexes := []string{
 		"idx_cmdb_orgs_project_parent_name", "idx_cmdb_groups_project_parent_name", "idx_cmdb_categories_project_parent_name",
 		"idx_cmdb_models_project_vendor_model", "idx_cmdb_labels_project_code", "idx_cmdb_assets_project_source",
-		"idx_cmdb_cf_project_key", "idx_ip_subnets_project_name",
+		"idx_cmdb_cf_project_key", "idx_ip_subnets_project_name", "idx_ip_pool_project_ip",
 	}
 	for _, name := range oldIndexes {
 		var count int

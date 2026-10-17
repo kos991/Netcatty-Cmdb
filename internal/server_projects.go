@@ -67,6 +67,15 @@ func (s *Server) handleListCmdbProjects(w http.ResponseWriter, _ *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"list": projects, "total": len(projects)})
 }
 
+func (s *Server) handleGetCurrentCmdbProject(w http.ResponseWriter, r *http.Request) {
+	project, err := s.Store.ResolveProject(requestProjectScope(r))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, project)
+}
+
 func (s *Server) handleCreateCmdbProject(w http.ResponseWriter, r *http.Request) {
 	var body store.CmdbProject
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

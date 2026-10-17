@@ -164,40 +164,12 @@ func backfillSubnetAssetIPs(tx *sql.Tx, projectID int64, subnet *IPSubnet) error
 	if err != nil || !prefix.Addr().Is4() {
 		return nil
 	}
-	rows, err := tx.Query(`
-		SELECT ip, owner_type, owner_id, owner_name, account, department, room FROM (
-			SELECT mgmt_ip ip, 'infrastructure' owner_type, id owner_id, name owner_name, owner account, department, room, 1 priority FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
-			UNION ALL SELECT manage_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
-			UNION ALL SELECT biz_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
-			UNION ALL SELECT public_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
-			UNION ALL SELECT i.ip, 'infrastructure', a.id, a.name, a.owner, a.department, a.room, 1 FROM cmdb_asset_interfaces i JOIN cmdb_assets a ON a.id=i.asset_id AND a.project_id=i.project_id WHERE i.project_id=? AND a.deleted_at IS NULL
-			UNION ALL SELECT mgmt_ip, 'server', id, device_name, admin_user, '', location, 2 FROM servers WHERE project_id=?
-			UNION ALL SELECT biz_ip, 'server', id, device_name, admin_user, '', location, 2 FROM servers WHERE project_id=?
-			UNION ALL SELECT ip, 'terminal', id, asset_code, user_name, department, room, 3 FROM assets WHERE project_id=?
-			UNION ALL SELECT terminal_ip, 'terminal', id, asset_code, user_name, department, room, 3 FROM assets WHERE project_id=?
-			UNION ALL SELECT service_ip, 'application', id, app_name, owner, '', '', 4 FROM server_apps WHERE project_id=? AND deleted_at IS NULL
-		) WHERE ip<>'' ORDER BY priority, owner_id`, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID)
-	if err != nil {
-		return err
-	}
 	type candidate struct {
 		ip, ownerType, ownerName, account, department, room string
-		ownerID                                             int64
+		ownerID                                          int64
 	}
 	var candidates []candidate
-	for rows.Next() {
-		var item candidate
-		if err := rows.Scan(&item.ip, &item.ownerType, &item.ownerID, &item.ownerName, &item.account, &item.department, &item.room); err != nil {
-			rows.Close()
-			return err
-		}
-		candidates = append(candidates, item)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
-	rows.Close()
+	// 所有基础设施地址先于旧服务器、终端和应用回填，应用共享业务地址时仍由基础设施占用。
 	interfaceRows, err := tx.Query(`SELECT IFNULL(i.additional_ips_json,'[]'),a.id,IFNULL(a.name,''),IFNULL(a.owner,''),IFNULL(a.department,''),IFNULL(a.room,'')
 		FROM cmdb_asset_interfaces i JOIN cmdb_assets a ON a.id=i.asset_id AND a.project_id=i.project_id
 		WHERE i.project_id=? AND a.deleted_at IS NULL`, projectID)
@@ -226,6 +198,35 @@ func backfillSubnetAssetIPs(tx *sql.Tx, projectID int64, subnet *IPSubnet) error
 		return err
 	}
 	interfaceRows.Close()
+	rows, err := tx.Query(`
+		SELECT IFNULL(ip,''), IFNULL(owner_type,''), owner_id, IFNULL(owner_name,''), IFNULL(account,''), IFNULL(department,''), IFNULL(room,'') FROM (
+			SELECT mgmt_ip ip, 'infrastructure' owner_type, id owner_id, name owner_name, owner account, department, room, 1 priority FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
+			UNION ALL SELECT manage_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
+			UNION ALL SELECT biz_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
+			UNION ALL SELECT public_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
+			UNION ALL SELECT i.ip, 'infrastructure', a.id, a.name, a.owner, a.department, a.room, 1 FROM cmdb_asset_interfaces i JOIN cmdb_assets a ON a.id=i.asset_id AND a.project_id=i.project_id WHERE i.project_id=? AND a.deleted_at IS NULL
+			UNION ALL SELECT mgmt_ip, 'server', id, device_name, admin_user, '', location, 2 FROM servers WHERE project_id=?
+			UNION ALL SELECT biz_ip, 'server', id, device_name, admin_user, '', location, 2 FROM servers WHERE project_id=?
+			UNION ALL SELECT ip, 'terminal', id, asset_code, user_name, department, room, 3 FROM assets WHERE project_id=?
+			UNION ALL SELECT terminal_ip, 'terminal', id, asset_code, user_name, department, room, 3 FROM assets WHERE project_id=?
+			UNION ALL SELECT service_ip, 'application', id, app_name, owner, '', '', 4 FROM server_apps WHERE project_id=? AND deleted_at IS NULL
+		) WHERE ip<>'' ORDER BY priority, owner_id`, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var item candidate
+		if err := rows.Scan(&item.ip, &item.ownerType, &item.ownerID, &item.ownerName, &item.account, &item.department, &item.room); err != nil {
+			rows.Close()
+			return err
+		}
+		candidates = append(candidates, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
 	for _, item := range candidates {
 		address, err := netip.ParseAddr(strings.TrimSpace(item.ip))
 		if err != nil || !address.Is4() || !prefix.Contains(address) || specialIPv4Address(prefix.String(), item.ip) != "" {

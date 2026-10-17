@@ -149,7 +149,7 @@ export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = 
       <thead className={cn('sticky top-0 z-20 text-[11px] text-muted-foreground', hasPinnedColumns ? 'bg-background' : 'bg-secondary/30 backdrop-blur')}>
         <tr className="border-b border-border/30">
           {selectable ? <th style={{ width: selectionWidth, minWidth: selectionWidth }} className={cn('px-3 py-1', hasPinnedColumns && 'border-b border-border/30', pinSelection && 'sticky left-0 z-10 bg-background')}><input type="checkbox" aria-label="选择全部" checked={allSelected} onChange={(event) => onSelectedChange(event.target.checked ? rows.map((row) => row[rowKey]) : [])} /></th> : null}
-          {columns.map((column, index) => <th key={column.key} style={columnStyle(column, index)} className={cn('h-[30px] whitespace-nowrap px-3 py-1 font-medium', column.headerClassName, hasPinnedColumns && 'border-b border-border/30', column.sticky && 'sticky z-10 bg-background')}>{column.label}</th>)}
+          {columns.map((column, index) => <th key={column.key} style={columnStyle(column, index)} className={cn('whitespace-nowrap px-3 font-normal', compact ? 'h-[30px] py-1' : 'h-11 py-3', column.headerClassName, hasPinnedColumns && 'border-b border-border/30', column.sticky && 'sticky z-10 bg-background')}>{column.label}</th>)}
         </tr>
       </thead>
       <tbody>
@@ -157,7 +157,7 @@ export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = 
         {!loading && !rows.length ? <tr><td colSpan={columns.length + (selectable ? 1 : 0)}><EmptyState label={empty} /></td></tr> : null}
         {!loading && rows.map((row) => <tr key={row[rowKey]} onClick={() => onRowClick?.(row)} className={cn('group border-b border-border/30 transition-colors hover:bg-secondary/60', onRowClick && 'cursor-pointer')}>
           {selectable ? <td className={cn('px-3 py-1', hasPinnedColumns && 'border-b border-border/30', pinSelection && 'sticky left-0 z-10 bg-background group-hover:bg-secondary')} onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label="选择此行" checked={selectedSet.has(row[rowKey])} onChange={(event) => onSelectedChange(event.target.checked ? [...selected, row[rowKey]] : selected.filter((id) => id !== row[rowKey]))} /></td> : null}
-          {columns.map((column, index) => <td key={column.key} style={columnStyle(column, index)} className={cn('h-[38px] px-3 py-1 align-middle text-foreground', rowClassName, column.className, hasPinnedColumns && 'border-b border-border/30', column.sticky && 'sticky z-10 bg-background group-hover:bg-secondary')}>{column.render ? column.render(row[column.key], row) : (row[column.key] ?? '-')}</td>)}
+          {columns.map((column, index) => <td key={column.key} style={columnStyle(column, index)} className={cn('px-3 align-middle text-foreground', compact ? 'h-[38px] py-1' : 'h-[57px] py-2.5', rowClassName, column.className, hasPinnedColumns && 'border-b border-border/30', column.sticky && 'sticky z-10 bg-background group-hover:bg-secondary')}>{column.render ? column.render(row[column.key], row) : (row[column.key] ?? '-')}</td>)}
         </tr>)}
       </tbody>
     </table>
@@ -206,4 +206,12 @@ export function Metric({ label, value, note, tone = 'default' }) {
 
 export function ActionIcon({ label, children, danger, ...props }) {
   return <Button type="button" variant="ghost" size="icon" className={cn('h-[28px] w-[28px]', danger && 'text-destructive hover:text-destructive')} aria-label={label} title={label} {...props}>{children}</Button>
+}
+
+// 三类资产列表首列统一样式：主名称 12px 加粗链接色，副信息 11px 灰色，均截断并保留完整悬停提示。
+export function AssetNameCell({ title, subtitle, onOpen }) {
+  return <div className="min-w-0">
+    <Button type="button" variant="link" title={title} className="h-auto max-w-full justify-start truncate p-0 text-left text-xs font-semibold" onClick={onOpen}>{title}</Button>
+    {subtitle ? <p title={subtitle} className="truncate text-[11px] text-muted-foreground">{subtitle}</p> : null}
+  </div>
 }

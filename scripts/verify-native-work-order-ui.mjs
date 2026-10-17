@@ -61,7 +61,8 @@ try {
   }
 
   // IPAM 顶部保留搜索和数据操作，但不再显示无用的筛选入口。
-  await page.locator('[data-section="cmdb-sidebar"] button[aria-label="IPAM/IP"]').click()
+  await page.locator('[data-section="cmdb-sidebar"] button[aria-label="机柜与网络"]').click()
+  await page.locator('[data-network-view="ip"]').click()
   const ipamHeader = page.locator('[data-section="cmdb-ipam-header"]')
   await ipamHeader.getByPlaceholder(/搜索 IP/).waitFor()
   await ipamHeader.getByRole('button', { name: '导入\/导出' }).waitFor()

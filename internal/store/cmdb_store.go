@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 )
@@ -435,23 +436,31 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		args = append(args, v)
 	}
 	if strings.EqualFold(strings.TrimSpace(q.ResourceScope), "infrastructure") {
+		// 基础设施范围以分类目录的 asset_scope 为准；device_type 只作为分类缺失时的兜底，
+		// 必须复用 cmdbDeviceTypeAliases 的规范别名，避免中文类型（服务器/安全设备等）被漏掉。
+		deviceTypeAliases := []string{
+			"server", "physical_server", "服务器", "物理服务器", "物理主机",
+			"virtual_machine", "vm", "虚拟机", "云主机", "云资源", "ecs",
+			"hyperconverged", "hci", "超融合", "超融合集群", "超融合节点",
+			"switch", "交换机",
+			"router", "路由器",
+			"security_device", "security", "安全设备", "防火墙", "网闸", "负载均衡",
+			"storage", "存储", "存储设备",
+			"cloud_desktop", "云桌面", "云桌面平台", "桌面池",
+		}
+		placeholders := make([]string, len(deviceTypeAliases))
+		for i, alias := range deviceTypeAliases {
+			placeholders[i] = "?"
+			args = append(args, alias)
+		}
 		where = append(where, `(a.source_type = 'legacy_server'
 			OR (a.source_type = 'manual' AND IFNULL(a.device_type,'') = '' AND IFNULL(a.category_id,0) = 0)
-			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage','hyperconverged','hci','超融合','cloud_desktop')
+			OR lower(trim(IFNULL(a.device_type,''))) IN (`+strings.Join(placeholders, ",")+`)
 			OR EXISTS (
 				SELECT 1 FROM cmdb_device_categories scope_category
 				WHERE scope_category.id = a.category_id
 				AND scope_category.project_id = a.project_id
-				AND (scope_category.name LIKE '%服务器%'
-					OR scope_category.name LIKE '%虚拟机%'
-					OR scope_category.name LIKE '%超融合%'
-					OR scope_category.name LIKE '%交换机%'
-					OR scope_category.name LIKE '%网络设备%'
-					OR scope_category.name LIKE '%路由器%'
-					OR scope_category.name LIKE '%安全设备%'
-					OR scope_category.name LIKE '%存储设备%'
-					OR scope_category.name LIKE '%云桌面平台%'
-					OR scope_category.name LIKE '%桌面池%')
+				AND scope_category.asset_scope = 'infrastructure'
 			))`)
 	}
 
@@ -659,21 +668,26 @@ func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope
 	if len(assets) == 0 {
 		return nil
 	}
-	assetIndexes := make(map[string][]int)
+	// 业务 IP 优先，其次管理 IP；先取 IP 台账登记的网段类别，再按已定义网段 CIDR 最长前缀匹配。
+	candidates := make([][]string, len(assets))
+	wanted := make(map[string]struct{})
 	for index := range assets {
-		ip := strings.TrimSpace(assets[index].BizIP)
-		if ip == "" {
-			continue
+		for _, raw := range []string{assets[index].BizIP, assets[index].MgmtIP, assets[index].ManageIP} {
+			ip := strings.TrimSpace(raw)
+			if ip == "" {
+				continue
+			}
+			candidates[index] = append(candidates[index], ip)
+			wanted[ip] = struct{}{}
 		}
-		assetIndexes[ip] = append(assetIndexes[ip], index)
 	}
-	if len(assetIndexes) == 0 {
+	if len(wanted) == 0 {
 		return nil
 	}
-	placeholders := make([]string, 0, len(assetIndexes))
-	args := make([]interface{}, 0, len(assetIndexes)+1)
+	placeholders := make([]string, 0, len(wanted))
+	args := make([]interface{}, 0, len(wanted)+1)
 	args = append(args, scope.ProjectID)
-	for ip := range assetIndexes {
+	for ip := range wanted {
 		placeholders = append(placeholders, "?")
 		args = append(args, ip)
 	}
@@ -683,19 +697,86 @@ func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	registered := make(map[string]string, len(wanted))
 	for rows.Next() {
 		var ip, category string
 		if err := rows.Scan(&ip, &category); err != nil {
+			rows.Close()
 			return err
 		}
-		for _, index := range assetIndexes[ip] {
-			if assets[index].BusinessNetworkType == "" {
+		if _, seen := registered[ip]; !seen && category != "" {
+			registered[ip] = category
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	type subnetCategory struct {
+		network  *net.IPNet
+		category string
+	}
+	subnetRows, err := s.db.Query(`SELECT IFNULL(cidr,''), IFNULL(prefix,''), IFNULL(category,'') FROM ip_subnets WHERE project_id=? ORDER BY sort_order, id`, scope.ProjectID)
+	if err != nil {
+		return err
+	}
+	var subnets []subnetCategory
+	for subnetRows.Next() {
+		var cidr, prefix, category string
+		if err := subnetRows.Scan(&cidr, &prefix, &category); err != nil {
+			subnetRows.Close()
+			return err
+		}
+		cidr = strings.TrimSpace(cidr)
+		if cidr == "" && strings.TrimSpace(prefix) != "" {
+			cidr = strings.TrimSpace(prefix) + ".0/24"
+		}
+		if _, network, err := net.ParseCIDR(cidr); err == nil && strings.TrimSpace(category) != "" {
+			subnets = append(subnets, subnetCategory{network: network, category: strings.TrimSpace(category)})
+		}
+	}
+	if err := subnetRows.Err(); err != nil {
+		subnetRows.Close()
+		return err
+	}
+	if err := subnetRows.Close(); err != nil {
+		return err
+	}
+	categoryForIP := func(raw string) string {
+		if category := registered[raw]; category != "" {
+			return category
+		}
+		ip := net.ParseIP(raw)
+		if ip == nil {
+			return ""
+		}
+		best, bestBits := "", -1
+		for _, subnet := range subnets {
+			if !subnet.network.Contains(ip) {
+				continue
+			}
+			if bits, _ := subnet.network.Mask.Size(); bits > bestBits {
+				best, bestBits = subnet.category, bits
+			}
+		}
+		return best
+	}
+	for index := range assets {
+		if assets[index].BusinessNetworkType != "" {
+			continue
+		}
+		for _, ip := range candidates[index] {
+			if category := categoryForIP(ip); category != "" {
 				assets[index].BusinessNetworkType = category
+				break
 			}
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 // GetCmdbAsset 读取单个资产及其全部网络接口。
@@ -760,9 +841,6 @@ func (s *Store) InsertCmdbAssetForProject(scope ProjectScope, a *CmdbAsset) (int
 	if a.UHeight == 0 {
 		a.UHeight = a.HeightU
 	}
-	if a.UStart == 0 && a.StartU > 0 {
-		a.UStart = a.StartU
-	}
 	if a.Country == "" {
 		a.Country = "中国"
 	}
@@ -777,12 +855,6 @@ func (s *Store) InsertCmdbAssetForProject(scope ProjectScope, a *CmdbAsset) (int
 	}
 	if a.MAC == "" && a.MACAddress != "" {
 		a.MAC = a.MACAddress
-	}
-	if a.Area == "" && a.DataCenter != "" {
-		a.Area = a.DataCenter
-	}
-	if a.DataCenter == "" && a.Area != "" {
-		a.DataCenter = a.Area
 	}
 	if a.Description == "" && a.Remark != "" {
 		a.Description = a.Remark
@@ -813,6 +885,9 @@ func (s *Store) InsertCmdbAssetForProject(scope ProjectScope, a *CmdbAsset) (int
 	}
 	if a.OrgName == "" && a.Organization != "" {
 		a.OrgName = a.Organization
+	}
+	if err := normalizeAssetRackLocation(a, true); err != nil {
+		return 0, err
 	}
 
 	if len(a.CustomFields) > 0 {

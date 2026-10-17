@@ -275,6 +275,15 @@ func insertProjectScopedRow(t *testing.T, db *sql.DB, table, prefix string) int6
 		result, err = db.Exec(`INSERT INTO servers(asset_code, updated_at) VALUES (?, '')`, value)
 	case "server_apps":
 		result, err = db.Exec(`INSERT INTO server_apps(app_name, updated_at) VALUES (?, '')`, value)
+	case "server_app_logs":
+		var appID int64
+		err = db.QueryRow(`SELECT id FROM server_apps ORDER BY id LIMIT 1`).Scan(&appID)
+		if err == sql.ErrNoRows {
+			appID = insertProjectScopedRow(t, db, "server_apps", prefix+"-app-log")
+		} else if err != nil {
+			t.Fatalf("读取应用履历的应用 ID: %v", err)
+		}
+		result, err = db.Exec(`INSERT INTO server_app_logs(project_id,app_id,log_type,operator,description,log_time) VALUES(0,?,'测试','测试',?,'')`, appID, value)
 	case "cmdb_orgs":
 		result, err = db.Exec(`INSERT INTO cmdb_orgs(name, updated_at) VALUES (?, '')`, value)
 	case "cmdb_groups":
@@ -333,6 +342,15 @@ func insertProjectScopedRow(t *testing.T, db *sql.DB, table, prefix string) int6
 		result, err = db.Exec(`INSERT INTO cmdb_asset_history(asset_id, event_type, occurred_at, updated_at) VALUES (?, ?, ?, '')`, assetID, value, value)
 	case "cmdb_work_orders":
 		result, err = db.Exec(`INSERT INTO cmdb_work_orders(subject, updated_at) VALUES (?, '')`, value)
+	case "cmdb_work_order_logs":
+		var workOrderID int64
+		err = db.QueryRow(`SELECT id FROM cmdb_work_orders ORDER BY id LIMIT 1`).Scan(&workOrderID)
+		if err == sql.ErrNoRows {
+			workOrderID = insertProjectScopedRow(t, db, "cmdb_work_orders", prefix+"-log-order")
+		} else if err != nil {
+			t.Fatalf("读取工单记录的工单 ID: %v", err)
+		}
+		result, err = db.Exec(`INSERT INTO cmdb_work_order_logs(work_order_id,action,content,operator,created_at) VALUES(?,'测试',?,'测试','')`, workOrderID, value)
 	case "cmdb_work_order_asset_links":
 		var workOrderID int64
 		err = db.QueryRow(`SELECT id FROM cmdb_work_orders ORDER BY id LIMIT 1`).Scan(&workOrderID)

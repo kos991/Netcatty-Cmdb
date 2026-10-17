@@ -30,7 +30,8 @@ func (s *Store) ListCmdbTaxonomyForProject(scope ProjectScope, kind string) ([]C
 		}
 		q := fmt.Sprintf(`SELECT t.id, t.project_id, IFNULL(t.sync_id,''), t.name, t.parent_id, t.sort_order,
 			%s,
-			(SELECT COUNT(*) FROM %s c WHERE c.project_id=? AND c.asset_scope=? AND c.parent_id=t.id)
+			(SELECT COUNT(*) FROM %s c WHERE c.project_id=? AND c.asset_scope=? AND c.parent_id=t.id),
+			IFNULL(t.short_code,'')
 			FROM %s t WHERE t.project_id=? AND t.asset_scope=? ORDER BY t.sort_order,t.id`, usageSQL, spec.Table, spec.Table)
 		rows, err = s.db.Query(q, scope.ProjectID, scope.ProjectID, spec.AssetScope, scope.ProjectID, spec.AssetScope)
 	} else {
@@ -42,7 +43,7 @@ func (s *Store) ListCmdbTaxonomyForProject(scope ProjectScope, kind string) ([]C
 		}
 		q := fmt.Sprintf(`SELECT t.id, t.project_id, IFNULL(t.sync_id,''), t.name, t.parent_id, t.sort_order,
 			%s,
-			(SELECT COUNT(*) FROM %s c WHERE c.project_id=? AND c.parent_id=t.id)
+			(SELECT COUNT(*) FROM %s c WHERE c.project_id=? AND c.parent_id=t.id), ''
 			FROM %s t WHERE t.project_id=? ORDER BY t.sort_order,t.id`, usageSQL, spec.Table, spec.Table)
 		if kind == "groups" {
 			rows, err = s.db.Query(q, scope.ProjectID, scope.ProjectID, scope.ProjectID, scope.ProjectID, scope.ProjectID)
@@ -57,7 +58,7 @@ func (s *Store) ListCmdbTaxonomyForProject(scope ProjectScope, kind string) ([]C
 	out := make([]CmdbTaxonomyNode, 0, 16)
 	for rows.Next() {
 		var n CmdbTaxonomyNode
-		if err := rows.Scan(&n.ID, &n.ProjectID, &n.SyncID, &n.Name, &n.ParentID, &n.SortOrder, &n.AssetCount, &n.ChildCount); err != nil {
+		if err := rows.Scan(&n.ID, &n.ProjectID, &n.SyncID, &n.Name, &n.ParentID, &n.SortOrder, &n.AssetCount, &n.ChildCount, &n.ShortCode); err != nil {
 			return nil, err
 		}
 		out = append(out, n)

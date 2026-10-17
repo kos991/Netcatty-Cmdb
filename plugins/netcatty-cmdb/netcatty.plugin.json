@@ -1,0 +1,126 @@
+{
+  "$schema": "../../build/netcatty-final/packages/plugin-contract/schema/plugin-contract.schema.json",
+  "manifestVersion": 1,
+  "id": "com.netcatty.cmdb",
+  "name": "netcatty-cmdb",
+  "displayName": {
+    "en": "CMDB Asset Platform",
+    "zh-CN": "CMDB 资产管理"
+  },
+  "description": "常州中级人民法院资产与服务器全景管理平台 (跨平台全适配)",
+  "version": "1.3.1",
+  "publisher": "czfy",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "netcatty": ">=0.0.0",
+    "api": ">=0.1.0-internal <0.2.0"
+  },
+  "main": {
+    "browser": "dist/index.js",
+    "node": "embed_loader.js"
+  },
+  "permissions": {
+    "required": [
+      "views",
+      "commands",
+      "menus",
+      "runtime.advanced",
+      {
+        "permission": "companion.execute",
+        "resources": [
+          "com.netcatty.cmdb.server"
+        ]
+      }
+    ],
+    "optional": []
+  },
+  "companionExecutables": [
+    {
+      "id": "com.netcatty.cmdb.server",
+      "variants": [
+        {
+          "path": "backend/cmdb-server.exe",
+          "platforms": [
+            "win32-x64"
+          ],
+          "sha256": "1eb707cb6022ed0e11f9359c9e2ea32070f3bef3953ec598c972b0d1e224c2c5"
+        },
+        {
+          "path": "backend/cmdb-server-linux-amd64",
+          "platforms": [
+            "linux-x64"
+          ],
+          "sha256": "21e6eec1460aa6be36fca6eee13a1097f5ad48936f373ca0582bfa5423d299aa"
+        },
+        {
+          "path": "backend/cmdb-server-linux-arm64",
+          "platforms": [
+            "linux-arm64"
+          ],
+          "sha256": "6ba5cc510107b0d21de2e1dbf03b2833809807e13f4c9770f85bff2190bd57ba"
+        },
+        {
+          "path": "backend/cmdb-server-darwin-arm64",
+          "platforms": [
+            "darwin-arm64"
+          ],
+          "sha256": "9d0ff8b35aec8a2d74769566f2fccd9cc821d58f65872086e81fa72655cd7b2f"
+        },
+        {
+          "path": "backend/cmdb-server-darwin-amd64",
+          "platforms": [
+            "darwin-x64"
+          ],
+          "sha256": "ced2aeadbe7ac96e17b37bbc27d0e3dc29fba72d46852c2bbd1c5c3b6f525f68"
+        }
+      ]
+    }
+  ],
+  "contributes": {
+    "views": [
+      {
+        "id": "com.netcatty.cmdb.workspace",
+        "title": {
+          "zh-CN": "CMDB",
+          "en": "CMDB"
+        },
+        "entry": "dist/index.js",
+        "icon": {
+          "kind": "package",
+          "light": "icon.svg"
+        },
+        "location": "aside"
+      }
+    ],
+    "commands": [
+      {
+        "id": "com.netcatty.cmdb.open",
+        "title": {
+          "zh-CN": "打开 CMDB 资产管理",
+          "en": "Open CMDB"
+        }
+      },
+      {
+        "id": "com.netcatty.cmdb.syncHosts",
+        "title": {
+          "zh-CN": "同步 CMDB 主机至 Netcatty",
+          "en": "Sync CMDB Hosts to Netcatty"
+        }
+      }
+    ],
+    "menus": [
+      {
+        "command": "com.netcatty.cmdb.open",
+        "location": "commandPalette",
+        "group": "cmdb",
+        "order": 1
+      },
+      {
+        "command": "com.netcatty.cmdb.syncHosts",
+        "location": "commandPalette",
+        "group": "cmdb",
+        "order": 2
+      }
+    ]
+  }
+}

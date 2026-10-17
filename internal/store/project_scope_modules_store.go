@@ -72,7 +72,23 @@ func (s *Store) CreateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	if _, err := s.ResolveProject(scope); err != nil {
 		return 0, err
 	}
-	if err := s.requireAssetInProject(s.db, scope.ProjectID, w.AssetID); err != nil {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	id, err := s.createCmdbWorkOrderInTx(tx, scope, w)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (s *Store) createCmdbWorkOrderInTx(tx *sql.Tx, scope ProjectScope, w *CmdbWorkOrder) (int64, error) {
+	if err := s.requireAssetInProject(tx, scope.ProjectID, w.AssetID); err != nil {
 		return 0, err
 	}
 	nowTime := time.Now()
@@ -93,11 +109,6 @@ func (s *Store) CreateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	w.ResolvedAt = ""
 	w.ClosedAt = ""
 	w.Result = ""
-	tx, err := s.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
 	orderNo, err := nextWorkOrderNumber(tx, scope.ProjectID, nowTime)
 	if err != nil {
 		return 0, err
@@ -126,8 +137,8 @@ func (s *Store) CreateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 	if err := tx.QueryRow(`SELECT sync_id FROM cmdb_work_orders WHERE id=? AND project_id=?`, id, scope.ProjectID).Scan(&w.SyncID); err != nil {
 		return id, err
 	}
-	if err := tx.Commit(); err != nil {
-		return id, err
+	if err := insertWorkOrderLog(tx, scope.ProjectID, id, "新建", "创建工单", w.Owner, now); err != nil {
+		return 0, err
 	}
 	return id, nil
 }
@@ -196,7 +207,7 @@ func (s *Store) GetCmdbWorkOrderForProject(scope ProjectScope, id int64) (*CmdbW
 	if _, err := s.ResolveProject(scope); err != nil {
 		return nil, err
 	}
-	item, err := scanCmdbWorkOrder(s.db.QueryRow(cmdbWorkOrderSelect+" WHERE project_id=? AND id=?", scope.ProjectID, id))
+	item, err := scanCmdbWorkOrder(s.db.QueryRow(cmdbWorkOrderSelect+" WHERE project_id=? AND id=? AND deleted_at IS NULL", scope.ProjectID, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("工单不属于当前项目: %w", ErrProjectScopedNotFound)
 	}
@@ -257,6 +268,16 @@ func (s *Store) UpdateCmdbWorkOrderForProject(scope ProjectScope, w *CmdbWorkOrd
 		w.Assets = []WorkOrderAssetRef{{AssetType: "infrastructure", AssetID: w.AssetID}}
 	}
 	if err := s.replaceWorkOrderAssetRefs(tx, scope, w.ID, w.Assets); err != nil {
+		return err
+	}
+	action, content := "更新", "更新工单信息"
+	if current.Status != w.Status {
+		action, content = w.Status, current.Status+" → "+w.Status
+		if strings.TrimSpace(w.Result) != "" {
+			content += "：" + strings.TrimSpace(w.Result)
+		}
+	}
+	if err := insertWorkOrderLog(tx, scope.ProjectID, w.ID, action, content, w.Maintainer, now); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -404,6 +425,9 @@ func (s *Store) CloseCmdbWorkOrdersForProject(scope ProjectScope, items []CmdbWo
 			WHERE id=? AND project_id=?`, next.Status, next.Result, next.ClosedAt, next.WorkMinutes, now, item.ID, scope.ProjectID); err != nil {
 			return 0, err
 		}
+		if err := insertWorkOrderLog(tx, scope.ProjectID, item.ID, "已关闭", strings.TrimSpace(next.Result), current.Maintainer, now); err != nil {
+			return 0, err
+		}
 		updated++
 	}
 	if err := tx.Commit(); err != nil {
@@ -489,6 +513,10 @@ func (s *Store) DeleteCmdbWorkOrderForProject(scope ProjectScope, id int64) erro
 		return err
 	}
 	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM cmdb_work_order_logs WHERE project_id=? AND work_order_id=?`, scope.ProjectID, id); err != nil {
+		_ = restoreAttachments()
+		return err
+	}
 	if _, err := tx.Exec(`DELETE FROM cmdb_work_order_attachments WHERE project_id=? AND work_order_id=?`, scope.ProjectID, id); err != nil {
 		_ = restoreAttachments()
 		return err

@@ -7,7 +7,7 @@ export default function DeviceOwnershipBar({ ownership }) {
     <AssetPanelSection title="资产归属" icon={Building2}>
       <AssetPanelFields items={[
         ['项目', ownership.project], ['组织', ownership.organization],
-        ['负责人', ownership.owner],
+        ['分组', ownership.group], ['负责人', ownership.owner],
         ['位置', ownership.location],
         ...(ownership.cabinet ? [['机柜位置', ownership.cabinet]] : []),
       ]} />

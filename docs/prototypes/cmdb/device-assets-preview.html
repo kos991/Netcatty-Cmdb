@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>设备资产 · 设计原型</title>
+<link rel="stylesheet" href="cmdb-preview.css">
+<link rel="stylesheet" href="device-assets-preview.css">
+<link rel="stylesheet" href="asset-create-preview.css">
+<link rel="stylesheet" href="asset-brand-logos.css">
+<link rel="stylesheet" href="cmdb-settings-preview.css">
+<link rel="stylesheet" href="cmdb-settings-catalog-preview.css">
+<link rel="stylesheet" href="cmdb-settings-operations-preview.css">
+</head>
+<body>
+<script src="vendor/netcatty-icons.js"></script>
+<script src="cmdb-settings-data-preview.js"></script>
+<script src="cmdb-settings-catalog-preview.js"></script>
+<script src="cmdb-settings-operations-preview.js"></script>
+<script src="cmdb-settings-preview.js"></script>
+<script src="cabinet-network-nav-preview.js" defer></script>
+<div class="app">
+<div class="tabs"><span class="tab">▧&nbsp; Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab">▱&nbsp; SFTP</span><span class="tab">＋</span><div class="window-actions"><svg><use href="#settings"/></svg><span>—</span><span>□</span><span>×</span></div></div>
+<div class="shell">
+<nav class="rail" aria-label="工作区"><div class="logo">N</div><button class="selected" aria-label="设备资产" title="设备资产"><svg><use href="#monitor"/></svg></button><button aria-label="组织架构" title="组织架构" onclick="location.href='organization-preview.html'"><svg><use href="#people"/></svg></button><button id="open-network" aria-label="机柜与网络" title="机柜与网络"><svg><use href="#network"/></svg></button><button aria-label="工单与统计" title="工单与统计" onclick="location.href='work-order-preview.html'"><svg><use href="#chart"/></svg></button></nav>
+<main class="surface">
+<header class="toolbar assets-toolbar" aria-label="设备资产工具栏">
+  <details class="new-menu"><summary id="asset-create-summary" aria-label="新增终端资产" title="新增终端资产"><svg><use href="#plus"/></svg><span id="asset-create-label">新增终端资产</span> <span class="chevron">⌄</span></summary><div class="menu"><button data-create="terminal">终端资产</button><button data-create="infrastructure">基础设备</button><button data-create="systems">业务系统</button></div></details>
+  <label class="toolbar-field" for="asset-view">资产类别 <select id="asset-view" class="toolbar-selector" aria-label="资产类别"><option value="terminal">终端资产</option><option value="infrastructure">基础设备</option><option value="systems">业务系统</option></select></label>
+  <label class="search"><svg><use href="#search"/></svg><input id="asset-search" aria-label="搜索三类资产" placeholder="搜索名称、资产编号、SN、IP 或使用人"></label>
+  <div class="toolbar-actions">
+  <button id="filter-toggle" class="icon toolbar-icon" type="button" aria-label="查询资产" title="查询资产" aria-controls="asset-filter-bar" aria-expanded="false"><svg aria-hidden="true"><use href="#filter"/></svg></button>
+  <details class="asset-transfer toolbar-transfer"><summary class="icon toolbar-icon" aria-label="导入/导出资产" title="导入/导出资产"><svg aria-hidden="true"><use href="#transfer"/></svg></summary><div class="menu"><button disabled><svg><use href="#upload"/></svg>导入预览</button><button disabled><svg><use href="#download"/></svg>下载导入模板</button><hr><button disabled><svg><use href="#download"/></svg>按当前条件导出</button><small>设计原型，不读写业务文件</small></div></details>
+  </div>
+</header>
+<section id="asset-global-results" class="selection-summary" aria-label="跨类别搜索结果" hidden></section>
+<section id="asset-filter-bar" class="asset-filters" aria-label="资产筛选" hidden><span id="asset-filter-options" style="display:contents"></span><details class="asset-filter-picker"><summary>筛选项 <span class="chevron">⌄</span></summary><div id="asset-filter-picker-options" class="menu"></div></details><button id="asset-filter-reset" class="quiet">重置</button><label class="include-archived"><input id="include-archived" type="checkbox">含已注销</label></section>
+<div class="assets-main">
+  <div id="asset-selection" class="selection-summary" hidden><span id="asset-selected-count"></span><button id="asset-batch-preview" class="quiet" style="height:23px;font-size:11px">批量修改（预览）</button><button id="asset-selection-clear" class="quiet" style="height:23px;font-size:11px">清除选择</button></div>
+  <div class="asset-table-wrap"><table class="asset-table"><colgroup id="asset-colgroup"></colgroup><thead><tr id="asset-table-head"></tr></thead><tbody id="asset-table-body"></tbody></table><p id="asset-empty" class="asset-empty" hidden>没有匹配资产</p></div>
+  <footer class="asset-pagination"><span id="asset-count" class="count"></span><select id="asset-page-size" aria-label="每页资产数"><option value="10">10 条 / 页</option><option value="20">20 条 / 页</option></select><button id="asset-prev">上一页</button><button id="asset-next">下一页</button></footer>
+</div>
+<div class="prototype-label">设计原型 · 三类资产示例数据 · 保存、导入导出和注销均不执行业务操作</div>
+</main>
+</div>
+</div>
+<dialog id="asset-sheet" class="asset-sheet" aria-label="资产侧栏">
+  <header class="dialog-header">
+    <span id="asset-sheet-icon" class="sheet-device-icon" aria-hidden="true"></span>
+    <div class="sheet-identity"><div class="sheet-title-row"><h2 id="asset-sheet-title"></h2><span id="asset-sheet-status" class="asset-status"></span></div><p id="asset-sheet-subtitle"></p></div>
+    <div class="sheet-header-actions"><span id="asset-header-extra"></span><button id="asset-header-expand" class="icon quiet" aria-label="最大化详情" title="最大化详情" hidden></button><button id="asset-header-edit" class="icon quiet" aria-label="编辑资产" title="编辑资产"><svg><use href="#edit"/></svg></button><button class="icon quiet" data-close="asset-sheet" aria-label="关闭资产侧栏" title="关闭详情"><svg><use href="#close"/></svg></button></div>
+  </header>
+  <nav id="asset-detail-tabs" class="asset-detail-tabs" role="tablist" aria-label="详情分区" hidden></nav>
+  <div id="asset-sheet-body" class="dialog-body"></div><footer id="asset-sheet-footer" class="dialog-footer"></footer>
+</dialog>
+<dialog id="asset-actions" class="operations-menu"><header class="dialog-header"><h2>资产操作</h2><button class="icon quiet" data-close="asset-actions" aria-label="关闭资产操作">×</button></header><div id="asset-actions-body" class="dialog-body"></div></dialog>
+<dialog id="asset-operation" class="operation-dialog"><header class="dialog-header"><h2 id="asset-operation-title"></h2><button class="icon quiet" data-close="asset-operation" aria-label="关闭流程预览">×</button></header><div id="asset-operation-body" class="dialog-body"></div><footer class="dialog-footer"><button data-close="asset-operation">关闭</button><button class="primary" disabled>确认（原型示意）</button></footer></dialog>
+<script src="asset-terminal-page.js"></script>
+<script src="asset-infrastructure-page.js"></script>
+<script src="asset-systems-page.js"></script>
+<script src="asset-brand-logos.js"></script>
+<script src="asset-detail-preview.js"></script>
+<script src="asset-hardware-controls-preview.js"></script>
+<script src="asset-create-preview.js"></script>
+<script src="device-assets-preview.js"></script>
+</body>
+</html>

@@ -372,29 +372,16 @@ func (s *Store) CmdbAssetRelationsForProject(scope ProjectScope, asset *CmdbAsse
 			where = "app.project_id=? AND (app.cmdb_asset_id=? OR app.server_id=?)"
 			args = []interface{}{scope.ProjectID, asset.ID, asset.SourceID}
 		}
-		rows, err := s.db.Query(`SELECT app.id, app.project_id, IFNULL(app.server_id,0), IFNULL(app.cmdb_asset_id,0),
-			IFNULL(app.app_name,''), IFNULL(app.app_type,''), IFNULL(app.port,''), IFNULL(app.access_url,''),
-			IFNULL(app.middleware,''), IFNULL(app.database_info,''), IFNULL(app.provider,''), IFNULL(app.owner,''),
-			IFNULL(app.status,''), IFNULL(app.remark,''), IFNULL(app.created_at,''), IFNULL(app.updated_at,''),
-			COALESCE(NULLIF(server.device_name,''), NULLIF(asset_host.name,''), ''),
-			IFNULL(app.service_ip,'')
-			FROM server_apps app
-			LEFT JOIN servers server ON server.id=app.server_id AND server.project_id=app.project_id
-			LEFT JOIN cmdb_assets asset_host ON asset_host.id=app.cmdb_asset_id AND asset_host.project_id=app.project_id
-			WHERE `+where+` ORDER BY app.id DESC`, args...)
+		rows, err := s.db.Query(serverAppDetailSelect+` WHERE `+where+` AND IFNULL(app.status,'') NOT IN ('已归档','已注销') ORDER BY app.id DESC`, args...)
 		if err != nil {
 			return nil, err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var app ServerApp
-			if err := rows.Scan(&app.ID, &app.ProjectID, &app.ServerID, &app.CmdbAssetID, &app.AppName, &app.AppType,
-				&app.Port, &app.AccessURL, &app.Middleware, &app.DatabaseInfo, &app.Provider, &app.Owner,
-				&app.Status, &app.Remark, &app.CreatedAt, &app.UpdatedAt, &app.ServerName, &app.ServerBizIP); err != nil {
+			if err := scanServerAppDetail(rows, &app); err != nil {
 				return nil, err
 			}
-			setLegacyServerAppFields(&app)
-			app.ServiceIP = app.ServerBizIP
 			relations.RelatedApplications = append(relations.RelatedApplications, app)
 		}
 		if err := rows.Err(); err != nil {

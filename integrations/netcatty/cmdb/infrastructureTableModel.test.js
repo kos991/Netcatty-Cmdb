@@ -7,18 +7,18 @@ import {
   infrastructureNetworkZoneOptions,
 } from './infrastructureTableModel.js'
 
-test('基础设施身份展示以资产编码为主并在摘要中显示设备名称和 SN', () => {
+test('基础设施身份展示以设备名称为主并在摘要中显示资产编码和 SN', () => {
   assert.deepEqual(infrastructureNamePresentation({ name: '核心服务器', asset_code: 'INFRA-001', sn: 'SN-001' }), {
-    name: 'INFRA-001',
-    secondary: '核心服务器 · SN：SN-001',
+    name: '核心服务器',
+    secondary: 'INFRA-001 · SN：SN-001',
   })
   assert.deepEqual(infrastructureNamePresentation({ name: '备用服务器', asset_code: 'INFRA-002' }), {
-    name: 'INFRA-002',
-    secondary: '备用服务器 · 未配置 SN',
+    name: '备用服务器',
+    secondary: 'INFRA-002 · 未配置 SN',
   })
   assert.deepEqual(infrastructureNamePresentation({ name: '核心交换机', asset_code: '' }), {
-    name: '未配置编码',
-    secondary: '核心交换机 · 未配置 SN',
+    name: '核心交换机',
+    secondary: '未配置编码 · 未配置 SN',
   })
 })
 
@@ -51,8 +51,8 @@ test('管理 IP 的网络标识优先读取匹配管理接口的真实网络区�
   })
 })
 
-test('基础设施网络类型只展示业务 IP 的 IPAM 归属并归一为内外网', () => {
-  assert.equal(infrastructureNetworkSummary({ biz_ip: '138.64.7.20', business_network_type: '专网', net_type: '外网' }).businessNetworkType, '内网')
+test('基础设施网络类型只展示业务 IP 的 IPAM 归属且保留专网', () => {
+  assert.equal(infrastructureNetworkSummary({ biz_ip: '138.64.7.20', business_network_type: '专网', net_type: '外网' }).businessNetworkType, '专网')
   assert.equal(infrastructureNetworkSummary({ biz_ip: '191.162.17.20', business_network_type: '外网', net_type: '内网' }).businessNetworkType, '外网')
   assert.equal(infrastructureNetworkSummary({ mgmt_ip: '10.0.0.10', net_type: '外网' }).businessNetworkType, '未配置')
 })

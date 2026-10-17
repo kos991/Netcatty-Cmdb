@@ -1,30 +1,30 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { BarChart3, CheckCircle2, ChevronDown, ChevronRight, Cloud, CloudDownload, Download, Eye, FileDown, Filter, Link2, Paperclip, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { ArrowDownUp, ArrowRight, ChevronDown, Cloud, CloudDownload, Download, Eye, FileDown, Filter, Link2, Paperclip, Pencil, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/toast'
-import { VaultHeaderSearch, VaultPageHeader, vaultHeaderIconButtonClass, vaultHeaderSecondaryButtonClass } from '@/components/vault/VaultPageHeader'
+import { VaultHeaderSearch, VaultPageHeader } from '@/components/vault/VaultPageHeader'
 import { api } from './api'
 import { downloadCmdbAttachmentFromCloud } from '../../application/CmdbCloudSync'
-import { allPages, useAction, useQuery } from './hooks'
+import { allPages, useAction, useDirectory, useQuery } from './hooks'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { formatLocalDateTimeInput, normalizeWorkOrderFilters } from './state'
 import { buildWorkOrderClosures, canBulkCloseWorkOrders, getEditableWorkOrderStatuses, getNextWorkOrderStatus, missingWorkOrderClosureResults, summarizeWorkOrders } from './workOrderStatsModel'
 import { chooseWorkOrderDefault, includeCurrentWorkOrderValue, resolveWorkOrderEditValues } from './workOrderFormModel'
-import { ActionIcon, DataTable, ErrorBanner, Field, Pagination, SearchBox, SelectControl, StatusPill, statusTone } from './ui'
+import { ActionIcon, DataTable, ErrorBanner, Field, SearchBox, SelectControl } from './ui'
+import WorkOrderDetail from './WorkOrderDetail'
+import ImportDialog from './ImportDialog'
+import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 
-const BIZ_TYPES = ['故障处理', '日常维护', '变更操作', '资产调配']
-const OPERATION_TYPES = ['排障', '优化', '响应', '值守']
 const STATUSES = ['新建', '处理中', '已解决', '已关闭', '已分配', '已取消']
 const RESULTS = ['处理成功', '临时规避', '未发现异常', '未解决', '已升级处理', '需二次维护']
-const PRIORITIES = ['P1（紧急）', 'P2（较高）', 'P3（普通）', 'P4（较低）']
 
 const HANDLER_KEY = 'netcatty_cmdb_work_order_handler'
+const EMPTY_OPTIONS = []
 const emptyFilters = () => ({ biz_type: '', operation_type: '', priority: '', status: '', result: '', owner: '', maintainer: '', date_from: '', date_to: '', asset_keyword: '', keyword: '' })
 const orderBody = (values) => ({ ...values, asset_id: (values.assets || []).find((item) => item.asset_type === 'infrastructure')?.asset_id || 0, plan_time: String(values.plan_time || '').replace('T', ' '), actual_time: String(values.actual_time || '').replace('T', ' ') })
 const formatWorkOrderTime = (value) => String(value || '').replace('T', ' ').slice(0, 16) || '—'
@@ -111,14 +111,12 @@ function AttachmentPanel({ workOrderId, stagedFiles = [], onAddFiles, onRemoveSt
   </div><Dialog open={!!previewImage} onOpenChange={(open) => { if (!open) { if (previewImage?.source.startsWith('blob:')) URL.revokeObjectURL(previewImage.source); setPreviewImage(null) } }}><DialogContent className="w-[min(880px,calc(100vw-32px))] max-w-none p-4 sm:max-w-none"><DialogHeader><DialogTitle className="truncate text-sm">{previewImage?.name}</DialogTitle></DialogHeader>{previewImage ? <img alt={previewImage.name} src={previewImage.source} className="max-h-[75vh] w-full object-contain" /> : null}</DialogContent></Dialog></Field>
 }
 
-export default function WorkOrders({ mode = 'stats', onModeChange }) {
-  const [modeMenuOpen, setModeMenuOpen] = useState(false)
+export default function WorkOrders({ focusTarget, onNavigate }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [filters, setFilters] = useState(emptyFilters)
   const [filterOpen, setFilterOpen] = useState(false)
-  const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(10)
   const [editor, setEditor] = useState(null)
   const [viewingOrder, setViewingOrder] = useState(null)
   const [statsValues, setStatsValues] = useState({})
@@ -129,10 +127,13 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
   const [completing, setCompleting] = useState([])
   const [closureResults, setClosureResults] = useState({})
   const [selectedOrderIds, setSelectedOrderIds] = useState([])
+  const [detailRefresh, setDetailRefresh] = useState(0)
+  const [cancelling, setCancelling] = useState(null)
+  const [transferOpen, setTransferOpen] = useState(false)
   const action = useAction()
   const assets = useQuery(loadAssets, [])
-  const workConfig = useQuery(loadWorkConfig, [])
-  const projects = useQuery(api.projects)
+  const workConfig = useDirectory(loadWorkConfig)
+  const project = useQuery(api.currentProject)
   const normalizedFilters = normalizeWorkOrderFilters(filters)
   const loader = useCallback(() => api.workOrders({ ...normalizeWorkOrderFilters(filters), page, page_size: pageSize }), [filters, page, pageSize])
   const query = useQuery(loader)
@@ -141,10 +142,13 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
   const reloadWorkOrders = query.reload
   const reloadWorkOrderStats = statsQuery.reload
   useEffect(() => {
-    const refresh = () => { reloadWorkOrders(); reloadWorkOrderStats() }
+    const refresh = () => { reloadWorkOrders(); reloadWorkOrderStats(); setDetailRefresh((value) => value + 1) }
     window.addEventListener('cmdb:refresh-work-orders', refresh)
     return () => window.removeEventListener('cmdb:refresh-work-orders', refresh)
   }, [reloadWorkOrders, reloadWorkOrderStats])
+  useEffect(() => {
+    if (['cmdb_work_orders', 'work_orders'].includes(focusTarget?.tableKey) && focusTarget.id) setViewingOrder({ id: focusTarget.id })
+  }, [focusTarget])
   const change = (key, value) => {
     setFilters((old) => ({ ...old, [key]: value }))
     setPage(1)
@@ -153,15 +157,14 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
   const resetFilters = () => {
     const next = emptyFilters()
     setFilters(next)
-    setKeyword('')
     setPage(1)
     setSelectedOrderIds([])
   }
-  const configuredCategories = workConfig.data?.categories?.length ? workConfig.data.categories : BIZ_TYPES
-  const configuredOperationTypes = workConfig.data?.operationTypes?.length ? workConfig.data.operationTypes : OPERATION_TYPES
-  const configuredPriorities = workConfig.data?.priorities?.length ? workConfig.data.priorities : PRIORITIES
+  const configuredCategories = workConfig.data?.categories || EMPTY_OPTIONS
+  const configuredOperationTypes = workConfig.data?.operationTypes || EMPTY_OPTIONS
+  const configuredPriorities = workConfig.data?.priorities || EMPTY_OPTIONS
   const configuredWorkOrderOptions = { categories: configuredCategories, operationTypes: configuredOperationTypes, priorities: configuredPriorities }
-  const open = (record = {}) => { setEditor(record); setStatsValues(resolveWorkOrderEditValues(record, projects.data?.list || [])) }
+  const open = (record = {}) => { setEditor(record); setStatsValues(resolveWorkOrderEditValues(record, project.data ? [project.data] : [])) }
   useEffect(() => {
     if (!createOpen) return
     setValues((current) => {
@@ -172,10 +175,10 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
         biz_type: current.id ? current.biz_type : chooseWorkOrderDefault(configuredCategories, current.biz_type),
         operation_type: current.id ? current.operation_type : chooseWorkOrderDefault(configuredOperationTypes, current.operation_type),
         priority: current.id ? current.priority : chooseWorkOrderDefault(configuredPriorities, current.priority),
-        project_name: projects.data?.list?.[0]?.name || current.project_name || '当前项目',
+        project_name: project.data?.name || current.project_name || '',
       }
     })
-  }, [createOpen, projects.data, configuredCategories, configuredOperationTypes, configuredPriorities])
+  }, [createOpen, project.data, configuredCategories, configuredOperationTypes, configuredPriorities])
   const renderFilterFields = (valuesToFilter, update, reset) => <>
     <div className="mb-3 flex items-center justify-between"><strong className="text-xs">筛选条件</strong><Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={reset}>重置</Button></div>
     <div className="grid gap-3">
@@ -197,7 +200,7 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
     { key: 'priority', label: '优先级', required: true, options: choices(configuredPriorities) },
     ...textFields([['plan_time', '发生时间', 'datetime-local']]),
     { key: 'operation_type', label: '运维类型', required: true, options: choices(configuredOperationTypes) },
-    ...textFields([['maintainer', '经办人']]),
+    ...textFields([['maintainer', '经办人'], ['owner', '运维负责人']]),
     { key: 'subject', label: '工单主题', required: true, wide: true },
     { key: 'remark', label: '故障内容', type: 'textarea' },
   ]
@@ -210,8 +213,7 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
           ? { ...field, options: choices(includeCurrentWorkOrderValue(configuredPriorities, statsValues.priority)) }
           : field),
     { key: 'status', label: '维护状态', options: choices(getEditableWorkOrderStatuses(editor?.status || statsValues.status || '新建')) },
-    ...(['已解决', '已关闭'].includes(statsValues.status) ? [{ key: 'result', label: '处理结果', type: 'textarea' }] : []),
-    ...(['已解决', '已关闭'].includes(statsValues.status) ? textFields([['actual_time', '完成时间', 'datetime-local']]) : []),
+    ...(['已解决', '已关闭'].includes(statsValues.status) ? [{ key: 'result', label: '处理结果', type: 'textarea', required: statsValues.status === '已关闭' }] : []),
     ...(['已关闭'].includes(statsValues.status) ? [{ key: 'work_minutes', label: '工时（分钟）', disabled: true }] : []),
   ]
   const saveDraft = () => action.run(async () => {
@@ -245,23 +247,23 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
   }, values.id ? '工单已保存' : '工单已创建')
   const saveExisting = () => action.run(async () => {
     const source = { ...statsValues }
-    if (['已解决', '已关闭'].includes(source.status) && !source.actual_time) source.actual_time = formatLocalDateTimeInput().replace('T', ' ')
     validateFields(fields, source)
     const id = editor?.id
     if (id) await api.updateWorkOrder(id, orderBody(source))
     else await api.createWorkOrder(orderBody(source))
     setEditor(null)
     await Promise.all([query.reload(), statsQuery.reload()])
+    setDetailRefresh((value) => value + 1)
   }, '工单已保存')
-  const searchValue = keyword
-  const completeWorkOrders = (ids) => {
+  const completeWorkOrders = (ids, detailRows = []) => {
     const validIds = ids.filter(Boolean)
-    const rows = query.data?.list || []
+    const rows = [...(query.data?.list || []), ...detailRows]
     if (!canBulkCloseWorkOrders(rows, validIds)) {
       toast.error('只能关闭“已解决”状态的工单，请先完成处理并标记解决')
       return
     }
-    const selected = validIds.map((id) => rows.find((row) => row.id === id)).filter(Boolean)
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    const selected = validIds.map((id) => byId.get(id)).filter(Boolean)
     setClosureResults(Object.fromEntries(selected.map((row) => [row.id, row.result || ''])))
     setCompleting(selected)
   }
@@ -277,6 +279,7 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
       const updated = Number(result?.updated || 0)
       if (updated !== items.length) throw new Error(`仅关闭 ${updated} 张工单，列表未发生完整更新，请刷新后重试`)
       await Promise.all([query.reload(), statsQuery.reload()])
+      setDetailRefresh((value) => value + 1)
       setCompleting([])
       setClosureResults({})
       setSelectedOrderIds([])
@@ -286,74 +289,78 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
     const nextStatus = getNextWorkOrderStatus(row.status)
     if (!nextStatus) return
     if (nextStatus === '已关闭') {
-      completeWorkOrders([row.id])
+      completeWorkOrders([row.id], [row])
       return
     }
     action.run(async () => {
       const body = { ...row, status: nextStatus }
-      if (nextStatus === '已解决' && !body.actual_time) body.actual_time = formatLocalDateTimeInput().replace('T', ' ')
       await api.updateWorkOrder(row.id, body)
       await Promise.all([query.reload(), statsQuery.reload()])
+      setDetailRefresh((value) => value + 1)
     }, nextStatus === '处理中' ? '工单已开始处理' : '工单已标记解决')
   }
-  const header = <VaultPageHeader dataSection="cmdb-operations-header" contentClassName="h-auto min-h-14 flex-wrap">
-    <Dropdown open={modeMenuOpen} onOpenChange={setModeMenuOpen}><DropdownTrigger asChild><Button data-work-order-mode-trigger type="button" variant="secondary" className={vaultHeaderSecondaryButtonClass}><Plus size={15} />新建工单<ChevronDown size={14} /></Button></DropdownTrigger><DropdownContent align="start" sideOffset={8} className="w-44 p-1">
-      {[["create", "新建工单", Plus], ["stats", "统计与查询", BarChart3]].map(([key, label, Icon]) => <button type="button" data-work-order-mode-option={key} key={key} onClick={() => { setModeMenuOpen(false); if (key === 'create') setCreateOpen(true); else onModeChange?.('stats') }} className="flex h-9 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-secondary"><Icon size={14} /><span>{label}</span></button>)}
-    </DropdownContent></Dropdown>
-    {mode === 'stats' ? <VaultHeaderSearch className="min-w-[180px] max-w-[520px] flex-1" value={searchValue} onChange={(event) => { const value = event.target.value; setKeyword(value); if (!value) change('keyword', '') }} onKeyDown={(event) => { if (event.key === 'Enter') change('keyword', keyword.trim()) }} placeholder="搜索工单号或主题" rightAdornment={searchValue ? <button type="button" aria-label="清除工单搜索" title="清除工单搜索" className="grid h-6 w-6 place-items-center rounded hover:bg-foreground/10" onClick={() => { setKeyword(''); change('keyword', '') }}><X size={13} /></button> : null} /> : null}
+  const header = <VaultPageHeader dataSection="cmdb-operations-header" contentClassName="h-auto min-h-[54px] flex-wrap gap-2.5 px-3.5 py-[9px]">
+    <Dropdown><DropdownTrigger asChild><Button data-work-order-mode-trigger type="button" variant="secondary" className="h-[34px] shrink-0 gap-1.5 rounded-[7px] border border-border bg-muted px-2.5 text-xs font-medium text-foreground"><Plus size={15} />新增工单<ChevronDown size={12} className="opacity-70" /></Button></DropdownTrigger><DropdownContent align="start" sideOffset={8} className="w-40 p-1">{(configuredCategories.length ? configuredCategories : ['新建工单']).map((category) => <button type="button" key={category} className="flex h-[34px] w-full items-center rounded px-2 text-left text-xs hover:bg-secondary" onClick={() => { if (configuredCategories.length) setValues((current) => ({ ...current, biz_type: category })); setCreateOpen(true) }}>{category}</button>)}</DropdownContent></Dropdown>
+    <VaultHeaderSearch className="min-w-[140px] max-w-[520px] flex-[1_1_240px]" inputClassName="h-[34px] rounded-[7px] text-xs" value={filters.keyword} onChange={(event) => change('keyword', event.target.value)} placeholder="搜索工单号、维护主题、关联资产" rightAdornment={filters.keyword ? <button type="button" aria-label="清除工单搜索" title="清除工单搜索" className="grid h-6 w-6 place-items-center rounded hover:bg-foreground/10" onClick={() => change('keyword', '')}><X size={13} /></button> : null} />
     <span className="min-w-0 flex-1" />
-    {mode === 'stats' ? <>
-      <Popover open={filterOpen} onOpenChange={setFilterOpen}><PopoverTrigger asChild><Button data-work-orders-filter type="button" variant="ghost" size="icon" className={vaultHeaderIconButtonClass} aria-label="选择筛选项" title="选择筛选项"><Filter size={16} /></Button></PopoverTrigger><PopoverContent align="end" sideOffset={8} className="max-h-[min(70vh,560px)] w-[min(320px,calc(100vw-32px))] overflow-y-auto p-3">{renderFilterFields(filters, change, resetFilters)}</PopoverContent></Popover>
-      <Button type="button" variant="ghost" size="icon" aria-label="导出工单" title="导出工单" className={vaultHeaderIconButtonClass} onClick={() => action.run(() => api.exportWorkOrders(normalizedFilters))}><Download size={16} /></Button>
-    </> : <span className="text-xs text-muted-foreground">新建工单</span>}
+    <Popover open={filterOpen} onOpenChange={setFilterOpen}><PopoverTrigger asChild><Button data-work-orders-filter type="button" variant="ghost" size="icon" className="h-[34px] w-8" aria-label="查询工单" title="查询工单"><Filter size={16} /></Button></PopoverTrigger><PopoverContent align="end" sideOffset={8} className="max-h-[min(70vh,560px)] w-[min(320px,calc(100vw-32px))] overflow-y-auto p-3">{renderFilterFields(filters, change, resetFilters)}</PopoverContent></Popover>
+    <ImportDialog importer={api.importWorkOrders} title="导入工单" onImported={() => { query.reload(); statsQuery.reload() }} renderTrigger={(startImport, importBusy) => <Dropdown open={transferOpen} onOpenChange={setTransferOpen}><DropdownTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="导入/导出工单" title="导入/导出工单" className="h-[34px] w-8"><ArrowDownUp size={16} /></Button></DropdownTrigger><DropdownContent align="end" className="w-44 p-1"><button type="button" disabled={importBusy} onClick={() => { setTransferOpen(false); startImport() }} className="flex h-9 w-full items-center gap-2 rounded px-2 text-xs hover:bg-secondary"><Upload size={14} />导入工单</button><button type="button" disabled={action.busy} onClick={() => { setTransferOpen(false); action.run(() => api.exportWorkOrders(normalizedFilters)) }} className="flex h-9 w-full items-center gap-2 rounded px-2 text-xs hover:bg-secondary"><Download size={14} />导出当前筛选</button><button type="button" disabled={action.busy} onClick={() => { setTransferOpen(false); action.run(() => api.downloadWorkOrderTemplate()) }} className="flex h-9 w-full items-center gap-2 rounded px-2 text-xs hover:bg-secondary"><FileDown size={14} />下载导入模板</button></DropdownContent></Dropdown>} />
+    <Button type="button" variant="ghost" size="icon" className="h-[34px] w-8" aria-label="刷新工单" title="刷新工单" disabled={query.loading || statsQuery.loading} onClick={() => { query.reload(); statsQuery.reload() }}><RefreshCw size={16} className={query.loading || statsQuery.loading ? 'animate-spin' : ''} /></Button>
   </VaultPageHeader>
   const currentRows = query.error ? [] : query.data?.list || []
   const selectedCloseAllowed = canBulkCloseWorkOrders(currentRows, selectedOrderIds)
   const workOrderColumns = [
-    { key: 'order_no', label: '工单号', width: 132, sticky: 'left', className: 'whitespace-nowrap font-mono text-[11px]', render: (value, row) => <button type="button" aria-label={`查看工单 ${value || ''}`} className="block max-w-full truncate text-left text-primary hover:underline" title={`查看工单 ${value || ''}`} onClick={() => setViewingOrder(row)}>{value || '查看详情'}</button> },
-    { key: 'priority', label: '优先级', width: 78, className: 'whitespace-nowrap', render: (value) => <StatusPill tone={String(value).startsWith('P1') || value === '高' ? 'danger' : String(value).startsWith('P2') || value === '中' ? 'warning' : 'neutral'}>{value || '-'}</StatusPill> },
-    { key: 'subject', label: '维护主题', width: 180, className: 'min-w-0', render: (value) => <span className="block truncate font-medium" title={value || ''}>{value || '-'}</span> },
-    { key: 'maintenance_type', label: '维护类型', width: 142, className: 'min-w-0', render: (_, row) => <div className="min-w-0"><span className="block truncate" title={row.biz_type || ''}>{row.biz_type || '-'}</span><span className="block truncate text-[10px] text-muted-foreground" title={row.operation_type || ''}>{row.operation_type || '-'}</span></div> },
-    { key: 'assets', label: '关联资产', width: 148, className: 'min-w-0', render: (value) => { const names = (value || []).map((item) => item.asset_name).filter(Boolean).join('、'); return <span className="block truncate" title={names}>{names || '-'}</span> } },
-    { key: 'processing_time', label: '处理时间', width: 132, className: 'whitespace-nowrap text-[11px]', render: (_, row) => { const value = row.closed_at || row.resolved_at || row.started_at || row.plan_time; const label = row.closed_at ? '关闭时间' : row.resolved_at ? '解决时间' : row.started_at ? '开始处理' : '发生时间'; return <div><span className="block" title={value ? `${label}：${value}` : ''}>{formatWorkOrderTime(value)}</span>{row.status === '已关闭' ? <span className="block text-[10px] text-muted-foreground">{row.started_at && row.resolved_at ? `${row.work_minutes || 0} 分钟` : '历史工时不可结算'}</span> : null}</div> } },
-    { key: 'maintainer', label: '维护人员', width: 112, className: 'min-w-0', render: (value) => <span className="block truncate" title={value || ''}>{value || '-'}</span> },
-    { key: 'status', label: '维护状态', width: 128, className: 'whitespace-nowrap', render: (value, row) => { const next = getNextWorkOrderStatus(value); const label = next === '处理中' ? '开始处理' : next === '已解决' ? '标记解决' : next === '已关闭' ? '结单' : ''; return <div className="flex flex-col items-start gap-0.5"><StatusPill tone={statusTone(value)}>{value || '-'}</StatusPill>{next ? <Button data-work-order-next-status={next} type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[10px]" disabled={action.busy} onClick={() => advanceWorkOrder(row)}>{label}<ChevronRight size={12} className="ml-0.5" /></Button> : null}</div> } },
-    { key: 'actions', label: '操作', width: 80, sticky: 'right', className: 'whitespace-nowrap', render: (_, row) => <div className="flex"><ActionIcon label="编辑工单" onClick={() => open(row)}><Pencil size={15} /></ActionIcon><ActionIcon label="删除工单" danger onClick={() => setDeleting(row)}><Trash2 size={15} /></ActionIcon></div> },
+    { key: 'order_no', label: '工单号', width: 180, className: 'whitespace-nowrap font-mono text-[11px]', render: (value, row) => <button type="button" aria-label={`查看工单 ${value || ''}`} className="block max-w-full truncate text-left text-primary hover:underline" title={`查看工单 ${value || ''}`} onClick={() => setViewingOrder(row)}>{value || '查看详情'}</button> },
+    { key: 'priority', label: '优先级', width: 100, className: 'whitespace-nowrap', render: (value) => <span className={`inline-flex max-w-full rounded px-1.5 py-[3px] text-[10px] leading-[15px] ${/^P1|高/.test(String(value)) ? 'bg-destructive/10 text-destructive' : /^P2|中/.test(String(value)) ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : /^P3/.test(String(value)) ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'}`}>{value || '-'}</span> },
+    { key: 'subject', label: '维护主题', className: 'min-w-0', render: (value) => <span className="block truncate" title={value || ''}>{value || '-'}</span> },
+    { key: 'maintenance_type', label: '维护类型', width: 100, className: 'min-w-0', render: (_, row) => <div className="min-w-0"><span className="block truncate" title={row.biz_type || ''}>{row.biz_type || '-'}</span><span className="mt-1 block truncate text-[10px] leading-[14px] text-muted-foreground" title={row.operation_type || ''}>{row.operation_type || '-'}</span></div> },
+    { key: 'assets', label: '关联资产', width: 160, className: 'min-w-0', render: (value) => { const names = (value || []).map((item) => item.asset_name).filter(Boolean).join('、'); return <span className="block truncate" title={names}>{names || '-'}</span> } },
+    { key: 'processing_time', label: '处理时间', width: 164, className: 'whitespace-nowrap text-[11px]', render: (_, row) => { const value = row.closed_at || row.resolved_at || row.started_at || row.plan_time; const label = row.closed_at ? '关闭时间' : row.resolved_at ? '解决时间' : row.started_at ? '开始处理' : '发生时间'; return <div title={row.status === '已关闭' ? `${label}；${row.started_at && row.resolved_at ? `${row.work_minutes || 0} 分钟` : '历史工时不可结算'}` : label}><time className="block">{formatWorkOrderTime(value)}</time><span className="mt-1 block text-[10px] leading-[14px] text-muted-foreground">{label}</span></div> } },
+    { key: 'maintainer', label: '维护人员', width: 108, className: 'min-w-0', render: (value) => <span className="block truncate" title={value || ''}>{value || '-'}</span> },
+    { key: 'status', label: '维护状态', width: 96, sticky: 'right', className: 'whitespace-nowrap border-l border-border/60', render: (value) => <span className={`inline-flex rounded px-1.5 py-[3px] text-[10px] leading-[15px] ${['新建', '已分配'].includes(value) ? 'bg-primary/10 text-primary' : value === '处理中' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : ['已解决', '已关闭'].includes(value) ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-muted/50 text-muted-foreground'}`}>{value || '-'}</span> },
+    { key: 'actions', label: '操作', width: 108, sticky: 'right', className: 'whitespace-nowrap', render: (_, row) => <div className="flex items-center gap-1.5"><button type="button" className="text-[11px] text-primary hover:underline" onClick={() => setViewingOrder(row)}>详情</button><button type="button" aria-label="编辑工单" title="编辑工单" className="grid h-[26px] w-[22px] shrink-0 place-items-center text-muted-foreground hover:text-primary" onClick={() => open(row)}><Pencil size={13} /></button><button type="button" aria-label="删除工单" title="删除工单" className="grid h-[26px] w-[22px] shrink-0 place-items-center text-muted-foreground hover:text-destructive" onClick={() => setDeleting(row)}><Trash2 size={13} /></button></div> },
   ]
-  return <div className="flex min-h-0 flex-1 flex-col">{header}
+  return <div className="flex min-h-0 flex-1 flex-col bg-card">{header}
     {query.error && <ErrorBanner message={query.error} onRetry={query.reload} />}
     {statsQuery.error && <ErrorBanner message={`统计加载失败：${statsQuery.error}`} onRetry={statsQuery.reload} />}
-    {mode === 'stats' ? <section data-work-order-stats aria-label="工单处理流程" className="shrink-0 border-b border-border/70 px-4 py-2">
-      <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
-        {[
-          ['new', '新建', statsQuery.data?.new || 0],
-          ['processing', '处理中', statsQuery.data?.processing || 0],
-          ['resolved', '已解决', statsQuery.data?.resolved || 0],
-          ['closed', '已关闭', statsQuery.data?.closed || 0],
-        ].map(([key, label, value], index) => <React.Fragment key={key}>
-          {index > 0 ? <ChevronRight size={14} className="shrink-0 text-muted-foreground/60" /> : null}
-          <div className="flex min-w-[95px] flex-1 items-center gap-2 py-1">
-            <span className="grid size-6 shrink-0 place-items-center rounded-full border border-border text-[10px] text-muted-foreground">{index + 1}</span>
-            <span className="min-w-0"><span className="block truncate text-[10px] text-muted-foreground">{label}</span><strong data-work-order-stat={key} className="block font-mono text-sm leading-4 tabular-nums">{statsQuery.loading || statsQuery.error ? '—' : value}</strong></span>
+    <section data-work-order-stats aria-label="工单流转" className="shrink-0 min-w-0 border-b border-border/60 px-[18px] py-2">
+      <h2 className="mb-1.5 text-xs font-semibold leading-4">工单流转</h2>
+      <div data-work-order-stages className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain [scrollbar-width:thin]">
+          <div className="flex min-h-[88px] min-w-[650px] items-center px-4 py-3.5">
+            <div className="flex min-w-0 flex-1 items-center">
+              {[
+                ['new', '新建', statsQuery.data?.new || 0],
+                ['processing', '处理中', statsQuery.data?.processing || 0],
+                ['resolved', '已解决', statsQuery.data?.resolved || 0],
+                ['closed', '已关闭', statsQuery.data?.closed || 0],
+              ].map(([key, label, count], index) => <React.Fragment key={key}>
+                {index > 0 ? <ArrowRight size={32} strokeWidth={1.5} className="mx-1 h-4 w-8 shrink-0 text-primary/70" /> : null}
+                <button type="button" data-work-order-stage={key} aria-pressed={filters.status === label} onClick={() => change('status', filters.status === label ? '' : label)} className={`flex h-12 min-w-0 flex-[1_0_86px] items-center justify-between gap-2.5 rounded-md border px-3 text-left hover:border-primary/50 hover:bg-primary/5 ${filters.status === label ? 'border-primary bg-primary/10 ring-2 ring-primary/10' : 'border-border bg-background'}`}><span className="text-xs font-medium">{label}</span><strong data-work-order-stat={key} className="font-mono text-xl font-semibold leading-none tabular-nums text-primary">{statsQuery.loading || statsQuery.error ? '—' : count}</strong></button>
+              </React.Fragment>)}
+            </div>
+            <div className="ml-5 flex w-28 shrink-0 border-l border-border pl-5"><button type="button" data-work-order-stage="cancelled" aria-pressed={filters.status === '已取消'} onClick={() => change('status', filters.status === '已取消' ? '' : '已取消')} className={`flex h-12 min-w-0 flex-1 items-center justify-between gap-2.5 rounded-md border border-dashed px-3 text-xs text-muted-foreground hover:border-primary/50 ${filters.status === '已取消' ? 'border-primary bg-primary/5' : 'border-border'}`}><span className="whitespace-nowrap">已取消</span><strong data-work-order-stat="cancelled" className="font-mono text-xl font-semibold leading-none tabular-nums">{statsQuery.loading || statsQuery.error ? '—' : statsQuery.data?.cancelled || 0}</strong></button></div>
           </div>
-        </React.Fragment>)}
-        <span className="ml-auto shrink-0 border-l border-border/60 pl-3 text-[10px] text-muted-foreground">本月完成 <strong data-work-order-stat="completedThisMonth" className="ml-1 font-mono text-xs tabular-nums text-foreground">{statsQuery.loading || statsQuery.error ? '—' : statsQuery.data?.completedThisMonth || 0}</strong></span>
+        </div>
       </div>
-    </section> : null}
-    {selectedOrderIds.length ? <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2 text-xs"><span className="flex items-center gap-3"><span>已选 {selectedOrderIds.length} 张工单</span><span className="text-muted-foreground">批量结单仅适用于全部已解决的工单</span></span><Button data-work-order-bulk-close type="button" size="sm" onClick={() => completeWorkOrders(selectedOrderIds)} disabled={action.busy || !selectedCloseAllowed}><CheckCircle2 size={14} className="mr-1" />批量结单</Button></div> : null}
-    <DataTable compact pinSelection loading={query.loading} rows={currentRows} selected={selectedOrderIds} onSelectedChange={setSelectedOrderIds} columns={workOrderColumns} />
-    <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(p, s) => { setPage(p); setPageSize(s); setSelectedOrderIds([]) }} />
+    </section>
+    <header data-work-order-list-heading className="flex min-h-[50px] shrink-0 flex-wrap items-center gap-3 border-b border-border/60 px-[18px] py-2.5"><h2 className="text-xs font-semibold">工单列表</h2><span className="text-[11px] text-muted-foreground">已选 {selectedOrderIds.length} 张</span><span className="flex-1" /><Button data-work-order-bulk-close type="button" size="sm" variant="outline" className="h-[29px] text-[11px]" onClick={() => completeWorkOrders(selectedOrderIds)} disabled={action.busy || !selectedCloseAllowed}>批量关闭</Button></header>
+    <div data-work-order-table className="flex min-h-0 min-w-0 flex-1 flex-col [&_table]:min-w-[1320px] [&_table]:table-fixed [&_th]:h-[37px] [&_th]:px-2.5 [&_th]:py-2.5 [&_th]:text-[11px] [&_th]:leading-4 [&_td]:h-[57px] [&_td]:px-2.5 [&_td]:py-[11px] [&_td]:text-xs [&_td]:leading-[15px] [&_td]:bg-card [&_tbody_tr:nth-child(even)_td]:bg-background [&_tbody_tr:hover_td]:bg-muted/40 [&_input[type=checkbox]]:m-0 [&_input[type=checkbox]]:size-3.5 [scrollbar-width:thin]">
+      <DataTable pinSelection loading={query.loading} rows={currentRows} selected={selectedOrderIds} onSelectedChange={setSelectedOrderIds} columns={workOrderColumns} />
+    </div>
+    <footer data-work-order-pagination className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/60 px-4 py-[9px] text-[11px] text-muted-foreground"><span className="mr-auto">共 {query.data?.total || 0} 条，第 {page} / {Math.max(1, Math.ceil((query.data?.total || 0) / pageSize))} 页</span><SelectControl aria-label="每页工单数" value={pageSize} onChange={(size) => { setPage(1); setPageSize(Number(size)); setSelectedOrderIds([]) }} options={[10, 20, 50, 100].map((size) => ({ value: size, label: `${size} 条 / 页` }))} className="h-[30px] w-[108px] min-w-0 text-[11px]" /><Button type="button" variant="outline" className="h-[29px] px-3 text-[11px]" disabled={page <= 1} onClick={() => { setPage(page - 1); setSelectedOrderIds([]) }}>上一页</Button><Button type="button" variant="outline" className="h-[29px] px-3 text-[11px]" disabled={page >= Math.max(1, Math.ceil((query.data?.total || 0) / pageSize))} onClick={() => { setPage(page + 1); setSelectedOrderIds([]) }}>下一页</Button></footer>
     <Dialog open={createOpen} onOpenChange={(next) => { if (!action.busy) setCreateOpen(next) }}>
-      <DialogContent data-work-order-create-dialog className="flex h-[min(680px,calc(100vh-40px))] w-[min(900px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+      <DialogContent data-work-order-create-dialog className="flex h-[min(680px,calc(100vh-40px))] w-[min(760px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
         <DialogHeader className="shrink-0 border-b border-border px-5 py-4"><DialogTitle className="flex items-center gap-2 text-sm tracking-normal"><Plus size={16} />新建工单</DialogTitle><div className="flex min-w-0 flex-wrap gap-2 text-xs text-muted-foreground"><span>{values.project_name || '当前项目'}</span><span>/</span><span>{values.order_no || '待生成编号'}</span></div></DialogHeader>
         {createOpen && <>
           {workConfig.error && <ErrorBanner message={workConfig.error} onRetry={workConfig.reload} />}
           {assets.error && <ErrorBanner message={assets.error} onRetry={assets.reload} />}
+          {project.error && <ErrorBanner message={project.error} onRetry={project.reload} />}
           <div data-work-order-editor className="min-h-0 flex-1 overflow-y-auto px-5">
             <form id="cmdb-work-order-form" onSubmit={(event) => { event.preventDefault(); saveDraft() }}>
               <fieldset disabled={action.busy} className="min-w-0">
-                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">受理信息</h3><Fields fields={createFields.slice(2, 7)} value={values} onChange={setValues} className="gap-3" /></section>
-                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">处理内容</h3><Fields fields={createFields.slice(7)} value={values} onChange={setValues} className="gap-3" /></section>
+                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">受理信息</h3><Fields fields={createFields.slice(2, 8)} value={values} onChange={setValues} className="gap-3" /></section>
+                <section className="border-b border-border/60 py-4"><h3 className="mb-3 text-sm font-semibold">处理内容</h3><Fields fields={createFields.slice(8)} value={values} onChange={setValues} className="gap-3" /></section>
                 <section className="py-4"><h3 className="mb-3 text-sm font-semibold">资源与附件</h3><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><Field label="关联资源"><div className="flex min-w-0 items-center gap-2"><AssetPicker floating options={assets.data || []} value={values.assets || []} onChange={(next) => setValues({ ...values, assets: next })} /><span className="min-w-0 truncate text-xs text-muted-foreground">{values.assets?.length ? `已关联 ${values.assets.length} 项 · ${values.assets.map((item) => item.asset_name).join('、')}` : '未关联资源'}</span></div></Field><AttachmentPanel workOrderId={values.id} refreshKey={attachmentRefresh} stagedFiles={stagedFiles} onAddFiles={(files) => { const accepted = files.filter((file) => file.size <= 50 * 1024 * 1024); if (accepted.length !== files.length) toast.error('超过 50 MiB 的附件未加入'); setStagedFiles((current) => [...current, ...accepted]) }} onRemoveStagedFile={(file) => setStagedFiles((current) => current.filter((item) => item !== file))} busy={action.busy} className="min-w-0 sm:col-span-1" /></div></section>
               </fieldset>
             </form>
@@ -362,26 +369,8 @@ export default function WorkOrders({ mode = 'stats', onModeChange }) {
         </>}
       </DialogContent>
     </Dialog>
-    <Dialog open={!!viewingOrder} onOpenChange={(next) => { if (!next) setViewingOrder(null) }}>
-      <DialogContent data-work-order-detail className="flex max-h-[min(760px,calc(100vh-32px))] w-[min(760px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
-        <DialogHeader className="shrink-0 border-b border-border px-5 py-4"><DialogTitle className="text-sm tracking-normal">工单详情</DialogTitle><div className="truncate font-mono text-xs text-muted-foreground">{viewingOrder?.order_no || '工单编号'}</div></DialogHeader>
-        {viewingOrder ? <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-3">
-            {[
-              ['优先级', viewingOrder.priority], ['维护状态', viewingOrder.status], ['维护主题', viewingOrder.subject],
-              ['工单类别', viewingOrder.biz_type], ['运维类型', viewingOrder.operation_type], ['维护人员', viewingOrder.maintainer],
-              ['负责人', viewingOrder.owner], ['发生时间', formatWorkOrderTime(viewingOrder.plan_time)], ['开始处理', formatWorkOrderTime(viewingOrder.started_at)],
-              ['解决时间', formatWorkOrderTime(viewingOrder.resolved_at || viewingOrder.actual_time)], ['关闭时间', formatWorkOrderTime(viewingOrder.closed_at)],
-              ['处理时长', viewingOrder.status === '已关闭' ? (viewingOrder.started_at && viewingOrder.resolved_at ? `${viewingOrder.work_minutes || 0} 分钟` : '历史时间不完整') : '结单时自动计算'], ['处理结果', viewingOrder.result],
-            ].map(([label, value]) => <div key={label} className="min-w-0"><span className="block text-[10px] text-muted-foreground">{label}</span><span className="block break-words text-xs" title={String(value || '')}>{value || '—'}</span></div>)}
-          </div>
-          <section className="border-t border-border/60 pt-3"><h3 className="mb-2 text-xs font-semibold">关联资产</h3>{viewingOrder.assets?.length ? <div className="flex flex-wrap gap-1.5">{viewingOrder.assets.map((asset) => <span key={`${asset.asset_type}:${asset.asset_id}`} className="rounded border border-border px-2 py-1 text-[11px]">{asset.asset_name || '未命名资产'}</span>)}</div> : <p className="text-xs text-muted-foreground">未关联资产</p>}</section>
-          {viewingOrder.remark ? <section className="border-t border-border/60 pt-3"><h3 className="mb-2 text-xs font-semibold">问题描述</h3><p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{viewingOrder.remark}</p></section> : null}
-          <AttachmentPanel workOrderId={viewingOrder.id} />
-        </div> : null}
-        <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-3"><Button type="button" variant="outline" onClick={() => setViewingOrder(null)}>关闭</Button>{viewingOrder ? <Button type="button" onClick={() => { const current = viewingOrder; setViewingOrder(null); open(current) }}><Pencil size={14} className="mr-1" />编辑工单</Button> : null}</div>
-      </DialogContent>
-    </Dialog>
+    {viewingOrder ? <WorkOrderDetail orderId={viewingOrder.id} projectName={project.data?.name} refreshKey={detailRefresh} busy={action.busy} onClose={() => setViewingOrder(null)} onEdit={(order) => { setViewingOrder(null); open(order) }} onAdvance={(order) => { setViewingOrder(order); advanceWorkOrder(order) }} onCancel={setCancelling} onNavigate={onNavigate} AttachmentPanel={AttachmentPanel} /> : null}
+    <ConfirmDialog open={!!cancelling} onOpenChange={(open) => { if (!open) setCancelling(null) }} title="取消工单" message={`确认取消“${cancelling?.subject || ''}”？`} confirmLabel="取消工单" busy={action.busy} onConfirm={() => action.run(async () => { await api.updateWorkOrder(cancelling.id, { ...cancelling, status: '已取消' }); setCancelling(null); setDetailRefresh((value) => value + 1); await Promise.all([query.reload(), statsQuery.reload()]) }, '工单已取消')} />
     <Dialog open={!!editor} onOpenChange={(next) => { if (!next && !action.busy) setEditor(null) }}>
       <DialogContent data-work-order-edit-dialog className="flex max-h-[min(720px,calc(100vh-32px))] w-[min(760px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
         <DialogHeader className="shrink-0 border-b border-border px-5 py-4"><DialogTitle className="text-sm tracking-normal">编辑工单</DialogTitle></DialogHeader>

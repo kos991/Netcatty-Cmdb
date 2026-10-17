@@ -10,6 +10,7 @@ import {
   patchUpdateRepositoryConfig,
   patchUpdateTranslations,
 } from "./netcatty-update-integration.mjs";
+import { CMDB_SETTINGS_HOST_PATCHES } from "./netcatty-settings-integration.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const integrationRoot = join(repositoryRoot, "integrations", "netcatty");
@@ -79,7 +80,6 @@ cpSync(join(integrationRoot, "CmdbCloudSync.ts"), join(target, "application", "C
 cpSync(join(integrationRoot, "CmdbCloudSync.test.ts"), join(target, "application", "cmdbCloudSync.test.ts"));
 cpSync(join(integrationRoot, "CmdbAttachmentCloudSync.ts"), join(target, "application", "CmdbAttachmentCloudSync.ts"));
 cpSync(join(integrationRoot, "CmdbAttachmentCloudSync.test.ts"), join(target, "application", "cmdbAttachmentCloudSync.test.ts"));
-cpSync(join(integrationRoot, "CmdbSyncPayloadIntegration.test.ts"), join(target, "application", "cmdbSyncPayloadIntegration.test.ts"));
 cpSync(join(integrationRoot, "electron", "cmdbService.cjs"), join(target, "electron", "cmdbService.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbService.test.cjs"), join(target, "electron", "cmdbService.test.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbBridge.cjs"), join(target, "electron", "bridges", "cmdbBridge.cjs"));
@@ -374,6 +374,7 @@ update("infrastructure/services/updateService.ts", patchUpdateRepositoryConfig);
 update("electron-builder.config.cjs", patchUpdateRepositoryConfig);
 update("components/SettingsApplicationTab.tsx", (source) => patchSettingsApplicationTab(source, netcattyVersion));
 update("components/SettingsPage.tsx", patchSettingsPageWithCmdb);
+for (const [relativePath, patch] of CMDB_SETTINGS_HOST_PATCHES) update(relativePath, patch);
 update("components/settings/tabs/SettingsSystemTab.tsx", patchSettingsSystemTab);
 update("application/app/useAppStartupEffects.ts", patchStartupUpdateAction);
 update("application/i18n/locales/zh-CN/core.ts", patchUpdateTranslations);

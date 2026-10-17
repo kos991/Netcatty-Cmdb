@@ -1,26 +1,25 @@
 import React, { useState } from 'react'
-import { PlugZap } from 'lucide-react'
+import { SquareTerminal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api } from './api'
 import { useAction } from './hooks'
 import { connectionForAddress, connectionFromLinks, connectionTargetMismatch, netcattyLinkStatus, persistNetcattyConnection } from './NetcattyConnection'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
 import { useNetcattyDirectory } from './NetcattyDirectory'
-import { quickConnectControlPresentation } from './state'
 import { ModalForm } from './ui'
+import { validIPv4 } from './assetTableModel'
 
-export default function InfrastructureQuickConnect({ asset, address, label }) {
+export default function InfrastructureQuickConnect({ asset, address, label, assetType = 'infrastructure' }) {
   const { hosts, credentials, connectHost, bindHostCredential } = useNetcattyDirectory()
   const [connection, setConnection] = useState(null)
   const [referenceError, setReferenceError] = useState('')
   const action = useAction()
-  const control = quickConnectControlPresentation(asset)
   const selectedAddress = address ?? (asset.mgmt_ip || asset.manage_ip || '')
   const selectedHost = hosts.find(item => item.id === connection?.host_id)
   const mismatch = connectionTargetMismatch(selectedAddress, selectedHost)
 
   const connect = () => action.run(async () => {
-    const result = await api.netcattyLinks({ asset_type: 'infrastructure', asset_id: asset.id })
+    const result = await api.netcattyLinks({ asset_type: assetType, asset_id: asset.id })
     const links = result.list || []
     const matched = connectionForAddress(selectedAddress, links, hosts, credentials)
     const link = matched || connectionForAddress(selectedAddress, links, hosts)
@@ -49,7 +48,7 @@ export default function InfrastructureQuickConnect({ asset, address, label }) {
     const targetDifference = connectionTargetMismatch(selectedAddress, hosts.find(host => host.id === connection.host_id))
     if (targetDifference) throw new Error(`所点管理地址 ${targetDifference.selected} 与主机实际目标 ${targetDifference.actual} 不同，请调整关联主机后连接`)
     await persistNetcattyConnection(api, {
-      assetType: 'infrastructure',
+      assetType,
       assetId: asset.id,
       connection,
       hosts,
@@ -60,12 +59,15 @@ export default function InfrastructureQuickConnect({ asset, address, label }) {
     await connectHost(connection.host_id, connection.credential_id)
   })
 
+  if (!validIPv4(selectedAddress)) return null
+  const accessibleLabel = `${label ? `${label} · ` : ''}使用 Netcatty 连接 ${selectedAddress}`
+
   return <>
-    <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-1.5 text-[11px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={label || control.ariaLabel} title={label || control.ariaLabel} disabled={action.busy} onClick={event => { event.stopPropagation(); void connect() }}><PlugZap size={13} /><span>{label || control.label}</span></Button>
+    <Button type="button" variant="ghost" size="icon" className="h-[22px] w-[22px] shrink-0 rounded p-0 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={accessibleLabel} title={accessibleLabel} disabled={action.busy} onClick={event => { event.stopPropagation(); void connect() }}><SquareTerminal size={13} aria-hidden="true" /></Button>
     {connection ? <ModalForm title="关联主机并连接" open onOpenChange={open => { if (!open && !action.busy) setConnection(null) }} busy={action.busy} onSubmit={saveAndConnect} submitLabel="保存关联并连接">
-      <p className="text-xs text-muted-foreground">{asset.name} · 所点管理地址 {selectedAddress || '未填写'} · 实际目标 {selectedHost?.hostname || '未选择'}</p>
+      <p className="text-xs text-muted-foreground">{asset.name || asset.asset_name || asset.app_name || asset.asset_code} · 所点地址 {selectedAddress} · 实际目标 {selectedHost?.hostname || '未选择'}</p>
       {mismatch ? <p className="text-xs text-destructive">所点地址 {mismatch.selected} 与实际目标 {mismatch.actual} 不同，请调整关联主机。</p> : null}
-      <NetcattyConnectionFields asset={{ ...asset, mgmt_ip: selectedAddress, manage_ip: selectedAddress }} value={connection} onChange={value => { setConnection(value); setReferenceError('') }} hosts={hosts} credentials={credentials} error={referenceError} />
+      <NetcattyConnectionFields asset={{ ...asset, ip: selectedAddress, mgmt_ip: selectedAddress, manage_ip: selectedAddress }} value={connection} onChange={value => { setConnection(value); setReferenceError('') }} hosts={hosts} credentials={credentials} error={referenceError} />
     </ModalForm> : null}
   </>
 }

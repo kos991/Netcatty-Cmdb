@@ -20,6 +20,7 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 	}
 	if err := addMissingColumns(db, "cmdb_device_categories", map[string]string{
 		"asset_scope": "TEXT NOT NULL DEFAULT 'infrastructure'",
+		"short_code":  "TEXT NOT NULL DEFAULT ''",
 	}); err != nil {
 		return fmt.Errorf("migrate cmdb_device_categories columns: %w", err)
 	}
@@ -162,8 +163,6 @@ func MigrateCMDBFullSchema(db *sql.DB) error {
 		"UPDATE cmdb_assets SET mgmt_ip = manage_ip WHERE (mgmt_ip IS NULL OR mgmt_ip = '') AND manage_ip IS NOT NULL AND manage_ip <> ''",
 		"UPDATE cmdb_assets SET mac_address = mac WHERE (mac_address IS NULL OR mac_address = '') AND mac IS NOT NULL AND mac <> ''",
 		"UPDATE cmdb_assets SET mac = mac_address WHERE (mac IS NULL OR mac = '') AND mac_address IS NOT NULL AND mac_address <> ''",
-		"UPDATE cmdb_assets SET area = data_center WHERE (area IS NULL OR area = '') AND data_center IS NOT NULL AND data_center <> ''",
-		"UPDATE cmdb_assets SET data_center = area WHERE (data_center IS NULL OR data_center = '') AND area IS NOT NULL AND area <> ''",
 		"UPDATE cmdb_assets SET description = remark WHERE (description IS NULL OR description = '') AND remark IS NOT NULL AND remark <> ''",
 		"UPDATE cmdb_assets SET remark = description WHERE (remark IS NULL OR remark = '') AND description IS NOT NULL AND description <> ''",
 		"UPDATE cmdb_assets SET geo_address = address WHERE (geo_address IS NULL OR geo_address = '') AND address IS NOT NULL AND address <> ''",

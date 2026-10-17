@@ -126,12 +126,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListAssets(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
 	query := legacyAssetQueryFromRequest(r)
-	list, total, err := s.Store.QueryAssetsForProject(scope, query)
-	if err != nil {
-		writeErr(w, 500, err.Error())
-		return
-	}
-	summary, err := s.Store.AssetStatusSummaryForQueryForProject(scope, query)
+	list, total, summary, err := s.Store.QueryAssetsWithSummaryForProject(scope, query)
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -237,6 +232,10 @@ func (s *Server) handleCreateAsset(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "请求体解析失败")
 		return
 	}
+	if body.MemoryMB < 0 {
+		writeErr(w, http.StatusBadRequest, "内存（MB）不能为负数")
+		return
+	}
 
 	op := body.Operator
 	if op == "" {
@@ -267,6 +266,10 @@ func (s *Server) handleUpdateAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "请求体解析失败")
+		return
+	}
+	if body.MemoryMB < 0 {
+		writeErr(w, http.StatusBadRequest, "内存（MB）不能为负数")
 		return
 	}
 	body.Asset.ID = id
@@ -571,10 +574,14 @@ func (s *Server) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.Store.DeleteAppForProject(scope, id); err != nil {
-		writeErr(w, 500, err.Error())
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrProjectScopedNotFound) {
+			status = http.StatusNotFound
+		}
+		writeErr(w, status, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]interface{}{"message": "业务系统已删除"})
+	writeJSON(w, 200, map[string]interface{}{"message": "业务系统已注销归档"})
 }
 
 func (s *Server) handleListAllApps(w http.ResponseWriter, r *http.Request) {
@@ -600,9 +607,11 @@ func serverAppQueryFromRequest(r *http.Request, page, pageSize int) store.Server
 	values := r.URL.Query()
 	groupID, _ := strconv.ParseInt(values.Get("group_id"), 10, 64)
 	hostID, _ := strconv.ParseInt(values.Get("host_id"), 10, 64)
+	includeArchived, _ := strconv.ParseBool(values.Get("include_archived"))
 	return store.ServerAppQuery{
 		Keyword: values.Get("keyword"), AppType: values.Get("app_type"), Status: values.Get("status"),
 		Provider: values.Get("provider"), Owner: values.Get("owner"), NetworkType: values.Get("network_type"),
+		Department: values.Get("department"), IncludeArchived: includeArchived,
 		GroupID: groupID, HostID: hostID, HostLinked: values.Get("host_linked"), Page: page, PageSize: pageSize,
 	}
 }
@@ -617,7 +626,7 @@ func (s *Server) handleExportApps(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	headers := []interface{}{"序号", "系统名称", "系统分类", "资产分组", "版本", "供应商", "承载服务器", "业务 IP", "网络类型", "端口", "访问地址", "中间件", "数据库", "负责人", "状态", "说明"}
+	headers := []interface{}{"序号", "系统名称", "系统分类", "资产分组", "版本", "供应商", "承载服务器", "业务 IP", "网络类型", "端口", "访问地址", "中间件", "数据库", "负责人", "状态", "说明", "资产编号", "所属部门", "部署方式", "部署位置", "备注"}
 	if err := f.SetSheetRow(sheet, "A1", &headers); err != nil {
 		writeErr(w, 500, err.Error())
 		return
@@ -631,7 +640,7 @@ func (s *Server) handleExportApps(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, app := range apps {
-			values := []interface{}{row - 1, app.AppName, app.AppType, app.GroupName, app.Version, app.Provider, app.ServerName, app.ServiceIP, app.NetworkType, app.Port, app.AccessURL, app.Middleware, app.DatabaseInfo, app.Owner, app.Status, app.Description}
+			values := []interface{}{row - 1, app.AppName, app.AppType, app.GroupName, app.Version, app.Provider, app.ServerName, app.ServiceIP, app.NetworkType, app.Port, app.AccessURL, app.Middleware, app.DatabaseInfo, app.Owner, app.Status, app.Description, app.AssetCode, app.Department, app.Deployment, app.DeploymentLocation, app.Remark}
 			if err := f.SetSheetRow(sheet, "A"+strconv.Itoa(row), &values); err != nil {
 				writeErr(w, 500, err.Error())
 				return
@@ -738,12 +747,17 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, st)
 }
 
-// ---- 导出终端资产 Excel ----
+// ---- 导出终端资产 Excel / CSV ----
 func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
 	assets, err := s.Store.AllAssetsMatchingQueryForProject(scope, legacyAssetQueryFromRequest(r))
 	if err != nil {
 		writeErr(w, 500, err.Error())
+		return
+	}
+	headers := []string{"序号", "资产名称", "资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "使用人", "部门", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注", "品牌/厂商", "型号", "CPU", "内存（MB）", "磁盘"}
+	if r.URL.Query().Get("format") == "csv" {
+		writeLegacyAssetCSV(w, headers, assets)
 		return
 	}
 
@@ -752,7 +766,6 @@ func (s *Server) handleExportAssets(w http.ResponseWriter, r *http.Request) {
 	sheet := "资产台账"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"序号", "资产名称", "资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "使用人", "部门", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(sheet, cell, h)
@@ -780,6 +793,7 @@ func legacyAssetExportValues(a store.Asset) []interface{} {
 	}
 	return []interface{}{
 		a.ID, a.AssetName, a.AssetCode, a.DeviceType, a.BoxSN, displaySN, a.UserName, a.Department, a.Room, a.IP, terminalIP, a.OSType, a.OSVersion, a.Status, a.NetType, a.Remark,
+		a.Vendor, a.Model, a.CPUInfo, a.MemoryMB, a.DiskInfo,
 	}
 }
 
@@ -791,13 +805,13 @@ func (s *Server) handleDownloadTemplate(w http.ResponseWriter, r *http.Request) 
 	sheet := "资产导入模板"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"资产名称", "资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "当前使用人", "所属组织", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注"}
+	headers := []string{"资产名称", "资产编码", "设备类型", "设备SN/终端主机SN", "显示器SN（仅云桌面）", "当前使用人", "所属组织", "房间/位置", "设备/业务IP", "终端物理IP", "操作系统类型", "操作系统版本", "状态", "网络类型", "备注", "品牌/厂商", "型号", "CPU", "内存（MB）", "磁盘"}
 	for colIdx, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 1)
 		f.SetCellValue(sheet, cell, h)
 	}
 
-	example := []interface{}{"示例办公终端", "ASSET-2026-001", "云桌面盒子", "BOX-SN-001", "DISPLAY-SN-001", "示例人员", "信息技术部", "A101", "10.10.1.10", "10.10.1.11", "统信 UOS", "20", "在用", "内网", "云桌面双 SN 示例；普通设备只填写设备 SN"}
+	example := []interface{}{"示例办公终端", "ASSET-2026-001", "台式电脑", "HOST-SN-001", "", "示例人员", "信息技术部", "A101", "10.10.1.10", "", "统信 UOS", "20", "在用", "内网", "台式机硬件填写示例；云桌面可填写双 SN", "联想", "开天 M630Z", "兆芯 KX-U6780A", 16384, "512GB SSD"}
 	for colIdx, v := range example {
 		cell, _ := excelize.CoordinatesToCellName(colIdx+1, 2)
 		f.SetCellValue(sheet, cell, v)
@@ -818,12 +832,15 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/cmdb/projects", s.handleListCmdbProjects)
 	mux.HandleFunc("POST /api/cmdb/projects", s.handleCreateCmdbProject)
 	mux.HandleFunc("PUT /api/cmdb/projects/{id}", s.handleUpdateCmdbProject)
+	scoped("GET /api/cmdb/projects/current", s.handleGetCurrentCmdbProject)
 	scoped("GET /api/meta", s.handleMeta)
 	scoped("GET /api/assets", s.handleListAssets)
 	scoped("GET /api/assets/{id}", s.handleGetAsset)
 	scoped("GET /api/assets/{id}/relations", s.handleAssetRelations)
 	scoped("POST /api/assets", s.handleCreateAsset)
 	scoped("POST /api/assets/batch", s.handleBatchTerminalAssets)
+	scoped("GET /api/assets/name-backfill", s.handlePreviewTerminalNames)
+	scoped("POST /api/assets/name-backfill", s.handleApplyTerminalNames)
 	scoped("PUT /api/assets/{id}", s.handleUpdateAsset)
 	scoped("DELETE /api/assets/{id}", s.handleDeleteAsset)
 	scoped("POST /api/assets/{id}/transfer", s.handleTransferUser)
@@ -840,6 +857,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("GET /api/servers/{id}/apps", s.handleListServerApps)
 	scoped("POST /api/servers/{id}/apps", s.handleCreateServerApp)
 	scoped("POST /api/apps", s.handleCreateCmdbApp)
+	scoped("GET /api/apps/{id}", s.handleGetApp)
 	scoped("PUT /api/apps/{id}", s.handleUpdateApp)
 	scoped("DELETE /api/apps/{id}", s.handleDeleteApp)
 	scoped("GET /api/apps", s.handleListAllApps)
@@ -861,6 +879,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 
 	// IP 网段管理（子网定义）
 	scoped("GET /api/ip_subnets", s.handleListIPSubnets)
+	scoped("GET /api/ip_subnets/suggestions", s.handleSubnetSuggestions)
 	scoped("POST /api/ip_subnets", s.handleCreateIPSubnet)
 	scoped("PUT /api/ip_subnets/{id}", s.handleUpdateIPSubnet)
 	scoped("DELETE /api/ip_subnets/{id}", s.handleDeleteIPSubnet)
@@ -873,6 +892,9 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 
 	// Cmdb 资源管理
 	scoped("GET /api/cmdb/meta", s.handleCmdbMeta)
+	scoped("GET /api/cmdb/rack-migration", s.handlePreviewRackMigration)
+	scoped("POST /api/cmdb/rack-migration", s.handleApplyRackMigration)
+	scoped("POST /api/cmdb/rack-migration/rollback", s.handleRollbackRackMigration)
 	scoped("GET /api/cmdb/assets", s.handleListCmdbAssets)
 	scoped("GET /api/cmdb/assets/{id}", s.handleGetCmdbAsset)
 	scoped("GET /api/cmdb/asset-images/{kind}/{id}", s.handleGetAssetImages)
@@ -912,6 +934,11 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	// CMDB 工单管理
 	scoped("GET /api/cmdb/work-orders", s.handleListCmdbWorkOrders)
 	scoped("GET /api/cmdb/work-orders/export", s.handleExportCmdbWorkOrders)
+	scoped("GET /api/cmdb/work-orders/template", s.handleDownloadCmdbWorkOrderTemplate)
+	scoped("POST /api/cmdb/work-orders/import", s.handleImportCmdbWorkOrders)
+	scoped("GET /api/cmdb/work-orders/{id}", s.handleGetCmdbWorkOrder)
+	scoped("GET /api/cmdb/work-orders/{id}/logs", s.handleListCmdbWorkOrderLogs)
+	scoped("POST /api/cmdb/work-orders/{id}/logs", s.handleAddCmdbWorkOrderLog)
 	scoped("POST /api/cmdb/work-orders", s.handleCreateCmdbWorkOrder)
 	scoped("PUT /api/cmdb/work-orders/{id}", s.handleUpdateCmdbWorkOrder)
 	scoped("POST /api/cmdb/work-orders/batch", s.handleBatchUpdateCmdbWorkOrders)
@@ -971,6 +998,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("GET /api/cmdb/taxonomy/{kind}", s.handleListCmdbTaxonomy)
 	scoped("POST /api/cmdb/taxonomy/{kind}", s.handleCreateCmdbTaxonomy)
 	scoped("PUT /api/cmdb/taxonomy/{kind}/{id}", s.handleUpdateCmdbTaxonomy)
+	scoped("PUT /api/cmdb/taxonomy/terminal-categories/{id}/short-code", s.handleSetTerminalCategoryShortCode)
 	scoped("DELETE /api/cmdb/taxonomy/{kind}/{id}", s.handleDeleteCmdbTaxonomy)
 
 	// CMDB 人员档案与资产穿透

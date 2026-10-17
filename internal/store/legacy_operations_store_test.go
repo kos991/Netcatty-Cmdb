@@ -59,6 +59,7 @@ func TestLegacyOperationsServerAppSchemaSupportsFreshAndLegacyDatabases(t *testi
 	requiredColumns := []string{
 		"server_id", "app_name", "app_type", "port", "access_url", "middleware",
 		"database_info", "owner", "status", "remark", "created_at", "updated_at",
+		"asset_code", "version", "department", "network_type", "description", "deployment", "deployment_location",
 	}
 
 	t.Run("全新数据库", func(t *testing.T) {
@@ -309,11 +310,23 @@ func TestLegacyOperationsAppCRUDRelationsAndQueries(t *testing.T) {
 		t.Fatal("删除不存在应用必须返回错误")
 	}
 	if err := s.DeleteApp(appID); err != nil {
-		t.Fatalf("删除应用失败: %v", err)
+		t.Fatalf("注销归档应用失败: %v", err)
 	}
 	apps, err = s.GetAppsByServerID(serverID)
 	if err != nil || len(apps) != 0 {
-		t.Fatalf("删除后服务器应用应为空，apps=%+v err=%v", apps, err)
+		t.Fatalf("归档后服务器默认应用列表应为空，apps=%+v err=%v", apps, err)
+	}
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	archived, logs, err := s.GetAppForProject(scope, appID)
+	if err != nil || archived.Status != "已注销" || archived.ServerID != serverID || len(logs) == 0 || logs[0].LogType != "注销归档" {
+		t.Fatalf("注销归档必须保留应用、承载关联和履历: app=%+v logs=%+v err=%v", archived, logs, err)
+	}
+	restored, _, err := s.QueryServerAppsForProject(scope, ServerAppQuery{IncludeArchived: true, Keyword: archived.AppName})
+	if err != nil || len(restored) != 1 || restored[0].ID != appID {
+		t.Fatalf("归档应用无法查询: %+v %v", restored, err)
 	}
 }
 

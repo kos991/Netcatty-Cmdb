@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { createPortal } from 'react-dom'
 
-import { Archive, ArrowLeftRight, History, Image as ImageIcon, Monitor, MoreHorizontal, Network, Pencil, RotateCcw, UserRound, Wrench } from 'lucide-react'
+import { Archive, ArrowLeftRight, Cpu, History, Image as ImageIcon, KeyRound, MapPin, Monitor, MonitorCog, MoreHorizontal, Network, Pencil, RotateCcw, Wrench } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
@@ -14,13 +14,13 @@ import { Spinner } from '@/components/ui/spinner'
 
 import { api } from './api'
 
-import { allPages, directoryChanged, useAction, useDirectory, useQuery, useTableDensity } from './hooks'
+import { allPages, directoryChanged, useAction, useDirectory, useQuery } from './hooks'
 
 import { choices, Fields, textFields, validateFields } from './Fields'
 
 import { formatDepartmentName, isCloudDevice, normalizeAsset, nowText, terminalSerialProfile } from './state'
 
-import { ActionIcon, DataTable, EmptyState, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
+import { ActionIcon, AssetNameCell, DataTable, EmptyState, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
 
 import AssetTransferMenu from './AssetTransferMenu'
 
@@ -36,12 +36,15 @@ import OperatingSystemCell from './OperatingSystemCell'
 
 import AssetFilterPicker, { useAssetFilterSelection } from './AssetFilterPicker'
 
-import { buildLinkedHostByAssetID, operatingSystemTypeFromDetectedHost } from './deviceWorkspaceModel'
+import { buildDeviceWorkspaceTabs, buildLinkedHostByAssetID, operatingSystemTypeFromDetectedHost } from './deviceWorkspaceModel'
+import { AssetDetailTabBar } from './AssetDetailTabs'
 
 import { useNetcattyDirectory } from './NetcattyDirectory'
 
 import { syncFollowingNetcattyHosts } from './NetcattyConnection'
-import { terminalBusinessNetworkType, terminalNetworkRows, visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
+import { terminalBusinessNetworkType, terminalHardwareFields, terminalNetworkRows, visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
+import InfrastructureQuickConnect from './InfrastructureQuickConnect'
+import { VendorBrandValue } from './VendorBrandIcon'
 
 
 
@@ -85,73 +88,76 @@ export function LogTimeline({ logs = [] }) {
 
 
 
-const terminalOperatingSystemTypes = ['Windows 11', 'Windows 10', 'Windows', '银河麒麟', '统信 UOS', 'openEuler', '龙蜥 Anolis OS', '中科方德', 'Ubuntu', 'Debian', 'CentOS', 'Rocky Linux', 'Red Hat Enterprise Linux', 'AlmaLinux', 'Linux', 'Unix', '其他', '未知']
+const terminalOperatingSystemTypes = ['Windows 11', 'Windows 10', 'Windows', '银河麒麟', '统信 UOS', 'openEuler', '龙蜥 Anolis OS', '中科方德', 'Ubuntu', 'Debian', 'CentOS', 'Rocky Linux', 'Red Hat Enterprise Linux', 'AlmaLinux', 'Linux', 'Unix', '其他', '未知', '不适用']
 
 
+
+const TERMINAL_TABS = buildDeviceWorkspaceTabs('terminal', true)
+
+function TerminalIPAM({ asset, relations, onNavigate }) {
+  const cloud = isCloudDevice(asset.device_type)
+  const ips = [asset.ip, ...(cloud ? [asset.terminal_ip] : [])].filter((ip) => ip && !/外网/.test(ip))
+  if (!ips.length) return <p className="text-xs text-muted-foreground">暂无可纳管的专网 IP</p>
+  return ips.map((ip) => {
+    const entry = relations?.ips?.find((item) => item.ip === ip)
+    return <div key={ip} className="flex items-center justify-between py-1 text-xs">
+      <span className="font-mono text-foreground">{ip}</span>
+      <span className="text-muted-foreground">{entry ? `${entry.subnet} (${entry.status})` : '未纳入 IPAM'}</span>
+      {entry ? <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onNavigate?.({ tableKey: 'ip_pool', id: entry.id, title: entry.ip, subtitle: entry.subnet })}>查看</Button> : null}
+    </div>
+  })
+}
 
 function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged, onNavigate }) {
   const loader = useCallback(async () => {
     const [detail, relations] = await Promise.all([api.asset(id), api.assetRelations(id)])
     return { ...detail, relations }
   }, [id])
-
   const query = useQuery(loader)
+  const [tab, setTab] = useState(TERMINAL_TABS.defaultTab)
+  useEffect(() => { setTab(TERMINAL_TABS.defaultTab) }, [id])
 
   if (query.error) return <AssetPanel open onClose={onClose} title="终端资产"><ErrorBanner message={query.error} onRetry={query.reload} /></AssetPanel>
   if (!query.data) return <AssetPanel open onClose={onClose} title="终端资产"><Spinner /></AssetPanel>
 
   const { asset, logs } = query.data
   const serial = terminalSerialProfile(asset)
-  const cloud = isCloudDevice(asset.device_type)
   const roomText = asset.room ? (String(asset.room).endsWith('室') ? String(asset.room) : `${asset.room}室`) : '未登记'
+  const ownerActions = <div className="flex gap-1"><ActionIcon label="调换使用人" onClick={() => onEdit('transfer', asset)}><ArrowLeftRight size={15} /></ActionIcon><ActionIcon label="维修换件" onClick={() => onEdit('maintenance', asset)}><Wrench size={15} /></ActionIcon></div>
 
-  return <AssetPanel open onClose={onClose} title={asset.asset_code || '未配置编码'} subtitle={asset.device_type} status={asset.status} icon={Monitor} onEdit={() => onEdit('edit', asset)}>
-    <AssetPanelSection title="使用与位置" icon={UserRound} action={<div className="flex gap-1"><ActionIcon label="调换使用人" onClick={() => onEdit('transfer', asset)}><ArrowLeftRight size={15} /></ActionIcon><ActionIcon label="维修换件" onClick={() => onEdit('maintenance', asset)}><Wrench size={15} /></ActionIcon></div>}>
-      <AssetPanelFields items={[
-        ["当前使用人", asset.user_name || '公用 / 闲置'],
-        ["部门", formatDepartmentName(asset.department) || '未分配部门'],
-        ["房间 / 位置", roomText]
-      ]} />
-    </AssetPanelSection>
-
-    <AssetPanelSection title="设备与网络" icon={Network}>
-      <AssetPanelFields items={[
-        ["资产编码", asset.asset_code || '-'],
-        ["设备类型", asset.device_type || '-'],
-        [serial.primaryLabel, serial.primaryValue || '-'],
-        ...(serial.secondaryValue ? [[serial.secondaryLabel, serial.secondaryValue]] : []),
-        ["操作系统", <OperatingSystemCell asset={asset} host={host} />],
-        ...terminalNetworkRows(asset).map(({ label, ip }) => [label, ip]),
-        ["网络类型", terminalBusinessNetworkType(asset)],
-        ...(asset.remark ? [["备注", asset.remark]] : []),
-        ["建档时间", asset.created_at || '-']
-      ]} />
-    </AssetPanelSection>
-
-    <AssetPanelSection title="IPAM 地址" icon={Network}>
-      {(() => {
-        const ips = [asset.ip, ...(cloud ? [asset.terminal_ip] : [])].filter((ip) => ip && ip !== '外网' && !/外网/.test(ip))
-        if (!ips.length) return <p className="text-xs text-muted-foreground">暂无可纳管的专网 IP</p>
-        return ips.map((ip) => {
-          const entry = query.data.relations?.ips?.find((item) => item.ip === ip)
-          return (
-            <div key={ip} className="flex items-center justify-between text-xs py-1">
-              <span className="font-mono text-foreground">{ip}</span>
-              <span className="text-muted-foreground">{entry ? `${entry.subnet} (${entry.status})` : '未纳入 IPAM'}</span>
-              {entry ? (
-                <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onNavigate?.({ tableKey: 'ip_pool', id: entry.id, title: entry.ip, subtitle: entry.subnet })}>
-                  查看
-                </Button>
-              ) : null}
-            </div>
-          )
-        })
-      })()}
-    </AssetPanelSection>
-
-    <AssetPanelSection title="设备照片" icon={ImageIcon}><DeviceImages kind="terminal" id={id} /></AssetPanelSection>
-    <AssetPanelSection title="凭证中心" icon={Network}><NetcattyLinks asset={{ ...asset, name: asset.asset_code }} assetType="terminal" assetId={id} embedded onChanged={onNetcattyChanged} /></AssetPanelSection>
-    <AssetPanelSection title="运维履历" icon={History}><LogTimeline logs={logs || []} /></AssetPanelSection>
+  return <AssetPanel open onClose={onClose} title={asset.asset_name || asset.asset_code || '未命名设备'} subtitle={[asset.asset_code, asset.device_type].filter(Boolean).join(' · ')} status={asset.status} icon={Monitor} onEdit={() => onEdit('edit', asset)} actions={ownerActions} tabs={<AssetDetailTabBar tabs={TERMINAL_TABS.tabs} value={tab} onChange={setTab} panelId="terminal-detail-content" dataSection="terminal-detail-tabs" />}>
+    <div id="terminal-detail-content" role="tabpanel" aria-labelledby={`terminal-detail-tabs-${tab}`} className="space-y-3">
+    {tab === 'hardware' ? <AssetPanelSection title="硬件信息" icon={Cpu}><AssetPanelFields items={[
+      ['设备名称', asset.asset_name || '-'],
+      ['资产编码', asset.asset_code || '-'],
+      ['设备类型', asset.device_type || '-'],
+      [serial.primaryLabel, serial.primaryValue || '-'],
+      ...(serial.secondaryValue ? [[serial.secondaryLabel, serial.secondaryValue]] : []),
+      ...terminalHardwareFields(asset.device_type).map(({ key, label }) => [label, key === 'vendor' ? <VendorBrandValue value={asset.vendor} /> : asset[key]]),
+      ['设备状态', asset.status || '-'],
+      ['建档时间', asset.created_at || '-'],
+    ]} /></AssetPanelSection> : null}
+    {tab === 'network' ? <>
+      <AssetPanelSection title="网络配置" icon={Network}><AssetPanelFields items={[
+        ...terminalNetworkRows(asset).map(({ label, ip }) => [label, <span className="inline-flex items-center gap-1 font-mono">{ip}<InfrastructureQuickConnect asset={asset} address={ip} assetType="terminal" /></span>]),
+        ['网络类型', terminalBusinessNetworkType(asset)],
+      ]} /></AssetPanelSection>
+      <AssetPanelSection title="IPAM 地址" icon={Network}><TerminalIPAM asset={asset} relations={query.data.relations} onNavigate={onNavigate} /></AssetPanelSection>
+    </> : null}
+    {tab === 'usage' ? <AssetPanelSection title="使用与位置" icon={MapPin}><AssetPanelFields items={[
+      ['当前使用人', asset.user_name || '公用 / 闲置'],
+      ['部门', formatDepartmentName(asset.department) || '未分配部门'],
+      ['房间 / 位置', roomText],
+    ]} /></AssetPanelSection> : null}
+    {tab === 'system' ? <AssetPanelSection title="系统信息" icon={MonitorCog}><AssetPanelFields items={[
+      ['操作系统', <OperatingSystemCell asset={asset} host={host} />],
+      ['系统版本', asset.os_version || '-'],
+      ['备注', asset.remark || '-'],
+    ]} /></AssetPanelSection> : null}
+    {tab === 'photos' ? <AssetPanelSection title="设备照片" icon={ImageIcon}><DeviceImages kind="terminal" id={id} /></AssetPanelSection> : null}
+    {tab === 'records' ? <AssetPanelSection title="设备履历" icon={History}><LogTimeline logs={logs || []} /></AssetPanelSection> : null}
+    {tab === 'relations' ? <AssetPanelSection title="凭证中心" icon={KeyRound}><NetcattyLinks asset={{ ...asset, name: asset.asset_code }} assetType="terminal" assetId={id} embedded onChanged={onNetcattyChanged} /></AssetPanelSection> : null}
+    </div>
   </AssetPanel>
 }
 
@@ -193,7 +199,6 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   const [editor, setEditor] = useState(null)
 
-  const [tableRef, density] = useTableDensity()
 
   const [values, setValues] = useState({})
 
@@ -348,11 +353,13 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   ] : [
 
-		...textFields([['asset_name', '资产名称'], ['asset_code', '资产编码']]), { key: 'device_type', label: '设备类型', required: true, searchable: true, options: choices([...new Set([...d.categories.map((item) => item.name), values.device_type].filter(Boolean))]) },
+		{ key: 'asset_name', label: '设备名称', placeholder: '留空自动生成：项目-简称-流水号' }, { key: 'asset_code', label: '资产编码' }, { key: 'device_type', label: '设备类型', required: true, searchable: true, options: choices([...new Set([...d.categories.map((item) => item.name), values.device_type].filter(Boolean))]) },
 
     { key: 'box_sn', label: isCloudDevice(values.device_type) ? '终端主机 SN' : '设备 SN' },
 
     { key: 'display_sn', label: '显示器 SN', hidden: !isCloudDevice(values.device_type) },
+
+    ...terminalHardwareFields(values.device_type),
 
     { key: 'person_id', label: '从人员目录选择', numeric: true, options: peopleOptions, derive: (id) => { const person = d.people.find((p) => p.id === id); return { user_name: person?.name || '', department: person?.department || '' } } },
 
@@ -482,8 +489,8 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   const columns = [
     {
-      key: 'asset_code', label: '资产编码', width: 170, sticky: 'left', className: 'whitespace-nowrap',
-      render: (value, row) => <div className="min-w-0"><Button variant="link" title={value || '未配置编码'} className="h-auto max-w-full justify-start truncate p-0 text-left font-mono text-xs font-semibold text-foreground hover:underline" onClick={() => setDetailId(row.id)}>{value || '未配置编码'}</Button><p title={`${row.device_type || '未配置类型'} · ${terminalSerialProfile(row).primaryLabel}：${terminalSerialProfile(row).primaryValue || '未配置'}`} className="truncate text-[10px] text-muted-foreground">{row.device_type || '未配置类型'} · {terminalSerialProfile(row).primaryValue || '未配置 SN'}</p></div>,
+      key: 'asset_code', label: '设备名称 / 编号 / SN', width: 190, sticky: 'left', className: 'whitespace-nowrap',
+      render: (value, row) => <AssetNameCell title={row.asset_name || value || '未命名设备'} subtitle={`${value || '未配置编码'} · ${terminalSerialProfile(row).primaryValue || '未配置 SN'}`} onOpen={() => setDetailId(row.id)} />,
     },
     {
       key: 'device_type', label: '设备类型', width: 100, className: 'whitespace-nowrap text-xs',
@@ -499,7 +506,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     },
     {
       key: 'ip', label: 'IP 地址', width: 165, className: 'whitespace-nowrap',
-      render: (_, row) => { const addresses = terminalNetworkRows(row); return addresses.length ? <div className="space-y-0.5">{addresses.map((address) => <p key={address.key} className="truncate font-mono text-[11px]" title={`${address.label}：${address.ip}`}>{addresses.length > 1 ? `${address.key === 'business' ? '业务' : '终端'} ` : ''}{address.ip}</p>)}</div> : <span className="text-xs text-muted-foreground">未配置 IP</span> },
+      render: (_, row) => { const addresses = terminalNetworkRows(row); return addresses.length ? <div className="space-y-0.5">{addresses.map((address) => <div key={address.key} className="flex min-w-0 items-center gap-1"><span className="truncate font-mono text-[11px]" title={`${address.label}：${address.ip}`}>{addresses.length > 1 ? `${address.key === 'business' ? '业务' : '终端'} ` : ''}{address.ip}</span><InfrastructureQuickConnect asset={row} address={address.ip} assetType="terminal" /></div>)}</div> : <span className="text-xs text-muted-foreground">未配置 IP</span> },
     },
     {
       key: 'network_type', label: '网络类型', width: 105, className: 'whitespace-nowrap',
@@ -511,14 +518,24 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
   ]
 
   const columnByKey = Object.fromEntries(columns.map((column) => [column.key, column]))
-  const visibleColumns = visibleAssetColumnKeys('terminal', density).map((key) => columnByKey[key]).filter(Boolean)
+  const visibleColumns = visibleAssetColumnKeys('terminal').map((key) => columnByKey[key]).filter(Boolean)
   const unconfiguredOption = { value: UNCONFIGURED_FILTER_VALUE, label: '未配置' }
   const deviceTypeOptions = choices([
     ...new Set([...d.assetDeviceTypes, ...d.categories.map((item) => item.name)].filter(Boolean)),
     unconfiguredOption,
   ], '全部')
 
-  return <div ref={tableRef} className="flex min-h-0 flex-1 flex-col">
+  const editorBody = editor ? <>
+    {editor.mode === 'edit' ? <>
+      <AssetPanelSection title="基本信息" icon={Monitor}><Fields fields={fields.filter(({ key }) => ['asset_name', 'asset_code', 'device_type', 'box_sn', 'display_sn', 'status'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
+      {terminalHardwareFields(values.device_type).length ? <AssetPanelSection title="硬件信息" icon={Cpu}><Fields fields={terminalHardwareFields(values.device_type)} value={values} onChange={setValues} /></AssetPanelSection> : null}
+      <AssetPanelSection title="归属与位置" icon={MapPin}><Fields fields={fields.filter(({ key }) => ['person_id', 'user_name', 'department', 'room'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
+      <AssetPanelSection title="网络与系统" icon={Network}><Fields fields={fields.filter(({ key }) => ['ip', 'terminal_ip', 'net_type', 'os_type', 'os_version', 'remark'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
+      <AssetPanelSection title="凭证中心" icon={KeyRound}><NetcattyConnectionFields asset={{ name: values.asset_name || values.asset_code, ip: values.ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection>
+    </> : <AssetPanelSection title={editor.mode === 'transfer' ? '交接信息' : '维修记录'} icon={Monitor}><Fields fields={fields} value={values} onChange={setValues} /></AssetPanelSection>}
+  </> : null
+
+  return <div className="flex min-h-0 flex-1 flex-col">
 
     {headerActions && createPortal(<><AssetFilterPicker expanded={filtersExpanded} onExpandedChange={onFiltersExpandedChange} items={filterItems} visible={visibleFilters} onToggle={toggleFilter} /><AssetTransferMenu importTitle="导入终端资产" importer={api.importAssets} onImported={query.reload} exporter={() => api.exportAssets({ keyword, ...filters })} /></>, headerActions)}
 
@@ -563,19 +580,15 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
       </div>
     )}
 
-    <DataTable columns={visibleColumns} pinSelection rowClassName="h-[48px]" compact={false} rows={query.error ? [] : query.data?.list || []} loading={query.loading} selected={selected} onSelectedChange={setSelected} />
+    <DataTable columns={visibleColumns} pinSelection compact={false} rows={query.error ? [] : query.data?.list || []} loading={query.loading} selected={selected} onSelectedChange={setSelected} />
 
     <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(p, s) => { setPage(p); setPageSize(s) }} />
 
     {detailId && <AssetDetails onNavigate={onNavigate} key={`${detailId}-${detailRevision}`} id={detailId} host={linkedHostByAssetID.get(Number(detailId))} onClose={() => setDetailId(null)} onEdit={open} onNetcattyChanged={linkQuery.reload} />}
 
-    {editor && <AssetPanel open onClose={() => setEditor(null)} title={editor.mode === 'transfer' ? '调换使用人' : editor.mode === 'maintenance' ? '维修换件' : editor.record.id ? '编辑终端资产' : '新增终端资产'} subtitle={editor.record.asset_code} icon={Monitor} footer={<AssetPanelSave onCancel={() => setEditor(null)} onSave={save} busy={action.busy || netcatty.loading} />}>
-
-      <AssetPanelSection title={editor.mode === 'transfer' ? '交接信息' : editor.mode === 'maintenance' ? '维修记录' : '设备档案'} icon={Monitor}><Fields fields={fields} value={values} onChange={setValues} /></AssetPanelSection>
-
-      {editor.mode === 'edit' ? <AssetPanelSection title="凭证中心" icon={Network}><NetcattyConnectionFields asset={{ name: values.asset_code, ip: values.ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection> : null}
-
-    </AssetPanel>}
+    {editor && (editor.mode === 'edit' && !editor.record.id
+      ? <ModalForm open title="新增终端资产" onOpenChange={(value) => { if (!value) setEditor(null) }} onSubmit={save} busy={action.busy || netcatty.loading} wide><div className="space-y-3">{editorBody}</div></ModalForm>
+      : <AssetPanel open onClose={() => setEditor(null)} title={editor.mode === 'transfer' ? '调换使用人' : editor.mode === 'maintenance' ? '维修换件' : '编辑终端资产'} subtitle={editor.record.asset_code} icon={Monitor} footer={<AssetPanelSave onCancel={() => setEditor(null)} onSave={save} busy={action.busy || netcatty.loading} />}>{editorBody}</AssetPanel>)}
 
     {batchAction && (
       <ModalForm

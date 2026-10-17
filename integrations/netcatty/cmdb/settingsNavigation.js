@@ -1,0 +1,22 @@
+// One destination catalog serves host search and the native Cmdb panels.
+export const CMDB_SETTINGS_SEARCH_ENTRIES = [
+  ['terminal-categories', 'assets', '终端设备类型', '终端 分类 云桌面 设备简称'],
+  ['infrastructure-categories', 'assets', '基础设施设备类型', '服务器 网络设备 分类'],
+  ['application-categories', 'assets', '业务系统类型', '应用 软件 分类'],
+  ['naming', 'assets', '终端命名', '自动命名 设备简称 流水号 补全'],
+  ['network-types', 'assets', '网络类型', '业务网络 管理网络'],
+  ['models', 'assets', '型号库', '品牌 厂商 型号'],
+  ['rule', 'work', '工单编号规则', '固定前缀 分隔符 日期 流水号 重置 GD'],
+  ['work-order-categories', 'work', '工单类别', '工单 目录'],
+  ['work-order-types', 'work', '运维类型', '维护 目录'],
+  ['work-order-priorities', 'work', '优先级', '工单 目录'],
+  ['template-terminal', 'templates', '终端资产模板', '下载 导入 Excel'],
+  ['template-infrastructure', 'templates', '基础设施模板', '下载 导入 Excel'],
+  ['template-ip', 'templates', 'IP 地址模板', '下载 导入 地址池'],
+  ['project-name', 'project', '项目名称', '当前项目 保存'],
+  ['project-code', 'project', '项目编码', '当前项目 隔离 保存'],
+  ['attachment-path', 'project', '附件管理路径', '附件 目录 容量 可写 迁移 恢复默认'],
+  ['attachment-sync', 'project', '附件同步', 'S3 加密 补传'],
+  ['sync', 'sync', '同步 Cmdb 数据', '云同步 资产 组织 联系电话 IP 工单 履历'],
+  ['legacy', 'sync', '旧台账迁入', '旧台账 数据维护 历史 迁入 预览'],
+].map(([key, tab, label, keywords]) => ({ id: `cmdb-${key}`, tab, label, keywords: keywords.split(' ') }))

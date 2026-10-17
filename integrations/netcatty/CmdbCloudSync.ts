@@ -7,8 +7,6 @@ export const CMDB_CLOUD_SYNC_SETTINGS_EVENT = 'netcatty:cmdb-cloud-sync-settings
 
 export interface CmdbCloudSyncSettings {
   enabled: boolean;
-  includeContacts: boolean;
-  includeHistory: boolean;
   lastStatus?: 'success' | 'error';
   lastSyncedAt?: string;
   lastError?: string;
@@ -49,8 +47,6 @@ export async function runCmdbAttachmentCloudSyncHook(): Promise<unknown> {
 
 const defaults: CmdbCloudSyncSettings = {
   enabled: false,
-  includeContacts: false,
-  includeHistory: false,
 };
 
 let scheduledSync: ReturnType<typeof setTimeout> | undefined;
@@ -68,13 +64,17 @@ export function readCmdbCloudSyncSettings(): CmdbCloudSyncSettings {
     const raw = storage()?.getItem(CMDB_CLOUD_SYNC_STORAGE_KEY);
     if (!raw) return { ...defaults };
     const parsed = JSON.parse(raw) as Partial<CmdbCloudSyncSettings>;
-    return {
-      ...defaults,
-      ...parsed,
+    const settings: CmdbCloudSyncSettings = {
       enabled: parsed.enabled === true,
-      includeContacts: parsed.includeContacts === true,
-      includeHistory: parsed.includeHistory === true,
+      lastStatus: parsed.lastStatus,
+      lastSyncedAt: parsed.lastSyncedAt,
+      lastError: parsed.lastError,
     };
+    // Preserve opt-in and host status, retiring the old partial-scope switches.
+    if ('includeContacts' in parsed || 'includeHistory' in parsed) {
+      storage()?.setItem(CMDB_CLOUD_SYNC_STORAGE_KEY, JSON.stringify(settings));
+    }
+    return settings;
   } catch {
     return { ...defaults };
   }
@@ -143,8 +143,8 @@ export async function collectCmdbCloudSnapshot(
     path: '/api/cmdb/sync/export',
     method: 'POST',
     body: JSON.stringify({
-      include_contacts: settings.includeContacts,
-      include_history: settings.includeHistory,
+      include_contacts: true,
+      include_history: true,
     }),
   });
   return result as CmdbSyncSnapshot;

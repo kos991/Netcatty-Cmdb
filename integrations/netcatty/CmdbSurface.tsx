@@ -28,6 +28,7 @@ import {
   TooltipTrigger,
 } from '../ui/tooltip';
 import CmdbWorkspace from './CmdbWorkspace';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { NetcattyDirectoryProvider } from './NetcattyDirectory';
 import { assertNetcattyLinkReady } from './NetcattyConnection';
 import { MODULES, netcattyDirectorySummaries } from './state';
@@ -59,6 +60,18 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
   const vaultIdentities = useVaultSnapshotField('identities');
   const vaultActions = useVaultSnapshotActions();
   const [activeModule, setActiveModule] = useState('assets');
+  const [workspaceDirty, setWorkspaceDirty] = useState(false);
+  const [workspaceBusy, setWorkspaceBusy] = useState(false);
+  const handleWorkspaceDirtyChange = useCallback((dirty: boolean, busy = false) => {
+    setWorkspaceDirty(dirty);
+    setWorkspaceBusy(busy);
+  }, []);
+  const [pendingModule, setPendingModule] = useState<string | null>(null);
+  const changeModule = useCallback((module: string) => {
+    if (workspaceBusy || module === activeModule) return;
+    if (workspaceDirty) { setPendingModule(module); return; }
+    setActiveModule(module);
+  }, [activeModule, workspaceDirty, workspaceBusy]);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [storedSidebarCollapsed, setStoredSidebarCollapsed] = useStoredBoolean(
     STORAGE_KEY_VAULT_SIDEBAR_COLLAPSED,
@@ -248,7 +261,8 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
                         )}
                         aria-current={selected ? 'page' : undefined}
                         aria-label={item.label}
-                        onClick={() => setActiveModule(item.key)}
+                        disabled={workspaceBusy}
+                        onClick={() => changeModule(item.key)}
                       >
                         <Icon size={16} className="flex-shrink-0" aria-hidden="true" />
                         {!sidebarCollapsed && item.label}
@@ -281,11 +295,12 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
             data-section="cmdb-surface"
           >
             <NetcattyDirectoryProvider value={netcattyDirectory}>
-              <CmdbWorkspace activeModule={activeModule} onModuleChange={setActiveModule} />
+              <CmdbWorkspace activeModule={activeModule} onModuleChange={changeModule} onDirtyChange={handleWorkspaceDirtyChange} />
             </NetcattyDirectoryProvider>
           </main>
         </div>
       </div>
+      <ConfirmDialog open={pendingModule !== null} onOpenChange={(open) => { if (!open) setPendingModule(null); }} title="尚有未保存的设备修改" message="离开当前页面将放弃这些修改。可取消并保存后再切换。" confirmLabel="放弃修改并切换" busy={workspaceBusy} onConfirm={() => { if (workspaceBusy) return; if (pendingModule) { setWorkspaceDirty(false); setActiveModule(pendingModule); } setPendingModule(null); }} />
     </section>
   );
 });
