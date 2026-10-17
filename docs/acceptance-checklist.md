@@ -78,11 +78,11 @@ node scripts/start-acceptance-preview.cjs --seed
 
 | 步骤 | 期望 |
 | --- | --- |
-| 机柜与网络 → 设备机柜，机房选「验收主机房」 | 机柜下拉出现 A01、A02（各 42U） |
+| 机柜与网络 → 机柜，右侧目录选「验收主机房」的机柜 | 目录显示 A01、A02（各42U），管理区与设备属性同时保留 |
 | 选 A01 | 机柜图显示 4 台已上架设备：验收核心交换机 39–40U、验收接入交换机 36U、验收虚拟化物理服务器 21–22U、验收超融合一体机 10–13U；摘要「已用 9U · 空闲 33U · 已上架 4 台」 |
 | 选 A02 | 显示 验收下一代防火墙 30U、验收网络准入系统 28U、验收文件存储阵列 9–12U |
-| 桌面宽度 ≥1100px 的工具栏 | 新增机柜、设备机柜/地址池、机房、机柜、搜索在同一行；不出现撑满整行的机房输入框 |
-| 左右分区 | 左侧机柜约 60%、右侧属性约 40%；机柜宽不超过 520px，24px/U；右侧表单独立滚动、底部按钮固定；未上架/冲突摘要保留 |
+| 桌面工具栏 | 横向小图标“机柜／网络”二级导航和搜索；无重复新增管理按钮 |
+| 三栏常驻 | 窄机柜图最大400px、设备属性/照片、右侧机房机柜管理同时显示；1240px以下管理下置，720px以下单列，不隐藏或替换 |
 | 机柜与网络 → 地址池 | 有「验收内网业务地址池 192.168.10.0/24（内网）」和「验收专网地址池 10.20.30.0/24（专网）」；方格视图显示 192.168.10.201/202/203 已占用、.211 空闲 |
 | 点已占用地址 | 可看到占用对象（验收台式机/笔记本/业务系统），预留/分配/释放可用 |
 | 先录入服务器接口的附加业务 IP，由业务系统引用该地址，再新建覆盖该地址的网段（或为已有网段补 CIDR） | IPAM 归属仍为当前项目的基础设施，服务器可再次保存，原应用和新应用均可共享该业务 IP；不影响其他项目同 IP 的归属 |
@@ -146,4 +146,23 @@ Get-NetTCPConnection -LocalPort 18974 -State Listen | ForEach-Object { Stop-Proc
 - 实际验证：分支原样快照 `build/branch-primary-review` 的 `go test ./...` 全量通过；装配/宿主设置/更新入口12项通过；装配后模型、快照、附件同步和桥接192项通过；最后机柜与连接模型35项通过；正式入口lint及宿主构建通过。Vite仍提示宿主大分包，不作为本轮新增功能失败。
 - 独立API实测：旧承载投影按host_id查询及Excel导出成功；先服务器附加业务IP→应用→后建网段后，IP归基础设施且服务器仍能保存。真实Electron实测分支原界面及管理IP保存、保存期间侧栏禁用且仍留机柜页；截图 `build/branch-primary-evidence/rack-source-branch.png`。
 - 本轮不声称验证真实远程SSH、S3服务端、跨平台安装或完整人工验收矩阵；没有发布或替换正式安装客户端。分支已有版本1.3.1保持不变。
+
+
+## 七、已确认原型正式恢复（2026-10-17）
+
+分支优先合入不能删掉用户此前确认的原型设计。此前 `c25452a` 仅带入分支原有正式页面与HTML归档，缺少最新交互；本次在分支完整实现基础上恢复，不整树回退，也不剔除附件云同步和更新通道。
+
+| 已确认要求 | 本轮实际验证 | 证据 |
+| --- | --- | --- |
+| CPU／内存／磁盘紧凑组合、原文折叠 | 420px编辑侧栏三块控件为75／75／136px；CPU自定义、2.5PB U.2、1.5TB→1572864MB实际保存；RAID及未知混合原文保留 | `HardwareFields.jsx`、`hardwareFieldModel.test.js`、`build/prototype-restored-evidence/hardware.png` |
+| 三栏常驻管理、窄柜、流光 | 1568px三栏同显，1024px管理下置、720px顺排，无全页面横向溢出；流光背景实际变化，减弱动画为none | `RackOverview.jsx`、`RackLocationEditor.jsx`、`rack-management.css`、`build/prototype-restored-evidence/rack-final.png` |
+| 空U新增与已有上架 | 新建机房→29U空柜→29U新增服务器真实保存；另一已有2U设备在27U真实上架；41U缩柜拒绝、47U真实保存 | `RackMountDialog.jsx`、`RackView.jsx`、位置与资产真实API |
+| 横向二级页与IP非遮罩 | 机柜／网络独立组件；192.0.2.21选中格与右详情同时可见，无模态遮罩 | `IPAM.jsx`、`NetworkAddressWorkspace.jsx`、`build/prototype-restored-evidence/network.png` |
+| 访问地址在业务IP之前 | 实际显示完整https协议、8443端口、路径及查询参数，原业务IP保留 | `Systems.jsx`、`build/prototype-restored-evidence/systems.png` |
+| 照片5:1、凭证两列对齐 | 正背面照片卡片实际宽高比5.0004；凭证两列y坐标及高度一致 | `DeviceImages.jsx`、`NetcattyConnectionFields.jsx` |
+| SSH勾选回填、失败/取消不覆盖 | Netcatty真实主机配置→本机隔离SSH服务→执行Windows只读CIM命令；默认全部未选，仅勾选内存真实回填保存，CPU/磁盘原值不变；最终UTF8中文系统正确，取消回填保留CPU草稿 | `HardwareCollection.jsx`、`readHostHardware.js`、`readHostHardware.test.js` |
+
+- 本轮装配/设置/更新12项、模型/附件同步/快照/桥接203项通过；修正lint后硬件模型7项、读取解析3项通过，最终eslint无错误警告、宿主完整构建通过。宿主仍有原有分包体积提示。
+- 未改Go后端协议；沿用已验证分支后端与独立测试库，不触碰正式安装或业务数据。真实客户远程SSH、Linux远端、S3服务端和跨平台安装未在本轮验证。
+- 当前隔离测试构建 `build/netcatty-prototype-restored`，独立库 `build/prototype-restored-smoke.db`。不将旧测试窗口或旧dist当作新界面。
 

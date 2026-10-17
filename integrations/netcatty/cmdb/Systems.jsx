@@ -33,6 +33,18 @@ const loadTaxonomy = async () => {
   return { categories: categories.list || [] }
 }
 
+function LegacyServerPanel({ id, onClose, onOpenApplication }) {
+  const loader = useCallback(() => api.server(id), [id])
+  const query = useQuery(loader)
+  const server = query.data?.server
+  return <AssetPanel open onClose={onClose} title={server?.device_name || '历史承载服务器'} subtitle={server?.asset_code} status={server?.status} icon={Server}>
+    {query.error ? <ErrorBanner message={query.error} onRetry={query.reload} /> : !server ? <p className="text-xs text-muted-foreground">正在加载承载设备…</p> : <>
+      <AssetPanelSection title="实际承载设备" icon={Server}><AssetPanelFields items={[["设备名称", server.device_name], ['资产编号', server.asset_code], ['品牌型号', server.brand_model], ['序列号', server.serial_number], ['位置', server.location], ['机柜 U 位', server.rack_unit], ['CPU', server.cpu_info], ['内存', server.memory_info], ['磁盘', server.disk_info], ['管理 IP', server.mgmt_ip], ['业务 IP', server.biz_ip], ['操作系统', server.os_type], ['备注', server.remark]]} /></AssetPanelSection>
+      <AssetPanelSection title="承载业务系统" icon={Workflow}>{query.data.apps?.length ? <div className="space-y-1">{query.data.apps.map(item => <Button key={item.id} variant="link" className="block h-auto p-0 text-xs" onClick={() => onOpenApplication(item)}>{item.app_name || `业务系统 #${item.id}`}</Button>)}</div> : <EmptyState label="暂无关联业务系统" />}</AssetPanelSection>
+    </>}
+  </AssetPanel>
+}
+
 export default function Systems({ keyword, focusTarget, meta, command, leadingControl, headerActions, filtersExpanded = true, onFiltersExpandedChange, onPanelOpenChange, onNavigate }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -69,10 +81,11 @@ export default function Systems({ keyword, focusTarget, meta, command, leadingCo
   const [editor, setEditor] = useState(null)
   const [values, setValues] = useState({})
   const [detail, setDetail] = useState(null)
+  const [legacyServerId, setLegacyServerId] = useState(null)
   const [detailTab, setDetailTab] = useState('system')
   const [archiving, setArchiving] = useState(null)
-  useEffect(() => { setDetailTab('system') }, [detail?.id])
-  useEffect(() => { onPanelOpenChange?.(!!detail || !!editor) }, [detail, editor, onPanelOpenChange])
+  useEffect(() => { setDetailTab(detail?.initialTab || 'system') }, [detail?.id, detail?.initialTab])
+  useEffect(() => { onPanelOpenChange?.(!!detail || !!editor || !!legacyServerId) }, [detail, editor, legacyServerId, onPanelOpenChange])
   const handledCommandId = useRef(null)
   const action = useAction()
   const netcatty = useNetcattyConnectionEditor('application')
@@ -93,13 +106,15 @@ export default function Systems({ keyword, focusTarget, meta, command, leadingCo
   const detailLoader = useCallback(async () => {
     if (!detail) return null
     const { app, logs = [] } = await api.app(detail.id)
-    const host = app.cmdb_asset_id ? await api.infrastructureAsset(app.cmdb_asset_id) : null
+    const host = app.cmdb_asset_id ? await api.infrastructureAsset(app.cmdb_asset_id) : app.server_id ? await api.server(app.server_id) : null
     const ips = app.service_ip ? await api.ipEntries({ keyword: app.service_ip, page: 1, page_size: 20 }) : { list: [] }
-    return { app, logs, infrastructure: host?.asset || null, ipam: ips.list?.find(item => item.ip === app.service_ip) }
+    const legacyHost = host?.server
+    return { app, logs, infrastructure: host?.asset || (legacyHost ? { ...legacyHost, name: legacyHost.device_name, device_type: '历史承载服务器', legacy: true } : null), ipam: ips.list?.find(item => item.ip === app.service_ip) }
   }, [detail])
   const detailQuery = useQuery(detailLoader)
   const serverDirectory = (directory.data || []).filter((asset) => isApplicationHostInfrastructure(asset))
   useEffect(() => { setPage(1) }, [keyword])
+  useEffect(() => { if (focusTarget?.tableKey === 'servers') setLegacyServerId(focusTarget.id) }, [focusTarget])
   useEffect(() => { if (focusTarget?.tableKey === 'server_apps') setDetail(focusTarget) }, [focusTarget])
   const open = useCallback((record = {}) => { void beginNetcattyConnection(record.id || 0); setEditor({ record }); setValues({ status: '正常运行', app_type: categories[0]?.name || '', ...record }) }, [beginNetcattyConnection, categories])
   const refresh = useCallback(() => { query.reload(); appDirectory.reload(); directory.reload(); taxonomy.reload(); detailQuery.reload() }, [appDirectory, detailQuery, directory, query, taxonomy])
@@ -121,9 +136,10 @@ export default function Systems({ keyword, focusTarget, meta, command, leadingCo
     { key: 'app_type', label: '系统类型', width: 110, render: (value) => <span className="block truncate" title={value || '未配置'}>{value || '未配置'}</span> },
     { key: 'version', label: '版本', width: 100, render: (value) => <span className="block truncate" title={value || '未配置'}>{value || '未配置'}</span> },
     { key: 'owner', label: '负责人', width: 100, render: (value) => <span className="block truncate" title={value || '未配置'}>{value || '未配置'}</span> },
+    { key: 'access_url', label: '访问地址', width: 260, render: (value) => <span data-system-access-url className="block max-w-[360px] select-text whitespace-normal break-all font-mono text-xs">{value || '未配置'}</span> },
     { key: 'service_ip', label: '业务 IP', width: 160, render: (_, row) => { const network = applicationNetworkPresentation(row); return <div className="min-w-0 truncate font-mono text-xs" title={network.ip || '未关联业务 IP'}>{network.ip || '未关联业务 IP'}</div> } },
     { key: 'network_type', label: '网络类型', width: 100, render: (_, row) => { const network = applicationNetworkPresentation(row); return <span className="block truncate text-xs text-muted-foreground" title={network.networkType}>{network.networkType}</span> } },
-    { key: 'host', label: '承载设备', width: 145, render: (_, row) => row.cmdb_asset_id ? <Button variant="link" title={row.server_name || '查看承载设备'} className="h-auto max-w-full truncate p-0 text-xs" onClick={() => onNavigate?.({ tableKey: 'cmdb_assets', id: row.cmdb_asset_id })}>{row.server_name || '查看承载设备'}</Button> : '未关联' },
+    { key: 'host', label: '承载设备', width: 145, render: (_, row) => row.cmdb_asset_id ? <Button variant="link" title={row.server_name || '查看承载设备'} className="h-auto max-w-full truncate p-0 text-xs" onClick={() => onNavigate?.({ tableKey: 'cmdb_assets', id: row.cmdb_asset_id })}>{row.server_name || '查看承载设备'}</Button> : row.server_id ? <Button variant="link" title={row.server_name || '查看历史承载服务器'} className="h-auto max-w-full truncate p-0 text-xs" onClick={() => setDetail({ tableKey: 'server_apps', id: row.id, initialTab: 'hosting' })}>{row.server_name || '历史承载服务器'}</Button> : '未关联' },
     { key: 'status', label: '状态', width: 85, sticky: 'right', render: (v) => <StatusPill tone={statusTone(v)}>{v || '未配置'}</StatusPill> },
     { key: 'actions', label: '操作', width: 75, sticky: 'right', render: (_, row) => <div className="flex"><ActionIcon label="编辑系统" onClick={() => open(row)}><Pencil size={15} /></ActionIcon><ActionIcon label="注销归档系统" onClick={() => setArchiving(row)}><Archive size={15} /></ActionIcon></div> },
   ]
@@ -162,11 +178,12 @@ export default function Systems({ keyword, focusTarget, meta, command, leadingCo
         {detailTab === 'system' ? <AssetPanelSection title="系统信息" icon={Settings2}><AssetPanelFields items={[['系统名称', app.app_name], ['资产编号', app.asset_code], ['系统类型', app.app_type], ['版本', app.version], ['供应商', app.provider], ['部署方式', app.deployment], ['中间件', app.middleware], ['数据库', app.database_info], ['状态', app.status]]} /></AssetPanelSection> : null}
         {detailTab === 'network' ? <AssetPanelSection title="网络配置" icon={Network}><AssetPanelFields items={[['业务 IP', app.service_ip ? <span className="inline-flex items-center gap-1 font-mono">{app.service_ip}<InfrastructureQuickConnect asset={app} address={app.service_ip} assetType="application" /></span> : '未配置'], ['网络类型', applicationNetworkPresentation(app).networkType], ['端口', app.port], ['访问入口', app.access_url], ['网络类型来源', detailQuery.data.ipam?.subnet || '未匹配地址池'], ['IPAM', app.service_ip ? detailQuery.data.ipam ? '已纳入' : '未纳入' : '无业务 IP']]} />{detailQuery.data.ipam ? <Button variant="link" onClick={() => onNavigate?.({ tableKey: 'ip_pool', id: detailQuery.data.ipam.id, title: detailQuery.data.ipam.ip, subtitle: detailQuery.data.ipam.subnet })}>查看 IPAM 地址</Button> : null}</AssetPanelSection> : null}
         {detailTab === 'usage' ? <AssetPanelSection title="使用与归属" icon={MapPin}><AssetPanelFields items={[['负责人', app.owner], ['所属部门', app.department], ['部署位置', app.deployment_location], ['说明', app.description], ['备注', app.remark]]} /></AssetPanelSection> : null}
-        {detailTab === 'hosting' ? <AssetPanelSection title="承载设备" icon={Server}>{detailQuery.data.infrastructure ? <><AssetPanelFields items={[['设备名称', detailQuery.data.infrastructure.name], ['资产编号', detailQuery.data.infrastructure.asset_code], ['设备类型', detailQuery.data.infrastructure.category_name || detailQuery.data.infrastructure.device_type]]} /><Button variant="link" onClick={() => onNavigate?.({ tableKey: 'cmdb_assets', id: detailQuery.data.infrastructure.id })}>查看承载设备</Button></> : <EmptyState label="未关联承载设备" />}</AssetPanelSection> : null}
+        {detailTab === 'hosting' ? <AssetPanelSection title="承载设备" icon={Server}>{detailQuery.data.infrastructure ? <><AssetPanelFields items={[['设备名称', detailQuery.data.infrastructure.name], ['资产编号', detailQuery.data.infrastructure.asset_code], ['设备类型', detailQuery.data.infrastructure.category_name || detailQuery.data.infrastructure.device_type], ...(detailQuery.data.infrastructure.legacy ? [['品牌型号', detailQuery.data.infrastructure.brand_model], ['管理 IP', detailQuery.data.infrastructure.mgmt_ip], ['业务 IP', detailQuery.data.infrastructure.biz_ip], ['位置', detailQuery.data.infrastructure.location], ['机柜 U 位', detailQuery.data.infrastructure.rack_unit], ['操作系统', detailQuery.data.infrastructure.os_type], ['状态', detailQuery.data.infrastructure.status]] : [])]} />{detailQuery.data.infrastructure.legacy ? <p className="text-xs text-muted-foreground">保留历史 server_id 实际承载关联；修改系统资料不会丢失该关联。</p> : <Button variant="link" onClick={() => onNavigate?.({ tableKey: 'cmdb_assets', id: detailQuery.data.infrastructure.id })}>查看承载设备</Button>}</> : <EmptyState label="未关联承载设备" />}</AssetPanelSection> : null}
         {detailTab === 'records' ? <AssetPanelSection title="运维履历" icon={History}><LogTimeline logs={detailQuery.data.logs} /></AssetPanelSection> : null}
         {detailTab === 'relations' ? <AssetPanelSection title="凭证中心" icon={KeyRound}><NetcattyLinks assetType="application" assetId={app.id} asset={{ name: app.app_name, ip: app.service_ip }} embedded /></AssetPanelSection> : null}
       </div>}
     </AssetPanel>}
+    {legacyServerId && <LegacyServerPanel id={legacyServerId} onClose={() => setLegacyServerId(null)} onOpenApplication={record => { setLegacyServerId(null); setDetail({ tableKey: 'server_apps', id: record.id }) }} />}
     {editor && (editor.record.id
       ? <AssetPanel open onClose={() => setEditor(null)} title="编辑业务系统" subtitle={editor.record.app_name} icon={Workflow} footer={<AssetPanelSave onCancel={() => setEditor(null)} onSave={save} busy={action.busy || netcatty.loading} />}>{editorBody}</AssetPanel>
       : <ModalForm open title="新增业务系统" onOpenChange={(value) => { if (!value) setEditor(null) }} onSubmit={save} busy={action.busy || netcatty.loading} wide><div className="space-y-3">{editorBody}</div></ModalForm>)}

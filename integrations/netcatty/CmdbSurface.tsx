@@ -35,6 +35,7 @@ import { MODULES, netcattyDirectorySummaries } from './state';
 import { buildSwitchCommand, normalizeSwitchVendor, parseSwitchOutput } from './switchConfig';
 import { createNetcattyVaultActions } from './netcattyVaultActions';
 import { readTelnetConfiguration } from './readTelnetConfiguration';
+import { readHostHardware } from './readHostHardware';
 
 const SIDEBAR_COLLAPSED_WIDTH = 56;
 const SIDEBAR_EXPANDED_WIDTH = 208;
@@ -101,6 +102,13 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
       },
       ...createNetcattyVaultActions(vaultActions, getVaultSnapshot),
       refreshDirectory: () => {},
+      readHardware: async (hostId: string, family: string, credentialId = '') => {
+        const snapshot = getVaultSnapshot();
+        const host = snapshot.hosts.find(item => item.id === hostId);
+        if (!host) throw new Error('关联的 Netcatty 主机不存在');
+        if (credentialId) assertNetcattyLinkReady({ host_id: hostId, credential_id: credentialId }, host, [...snapshot.identities, ...snapshot.keys]);
+        return readHostHardware(terminalBackend, host, snapshot, family);
+      },
       readSwitch: async (hostId: string, vendorName: string, credentialId = '') => {
         const snapshot = getVaultSnapshot();
         const host = snapshot.hosts.find((item) => item.id === hostId);

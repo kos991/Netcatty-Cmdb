@@ -43,6 +43,7 @@ import { useNetcattyDirectory } from './NetcattyDirectory'
 
 import { syncFollowingNetcattyHosts } from './NetcattyConnection'
 import { terminalBusinessNetworkType, terminalHardwareFields, terminalNetworkRows, visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
+import { hardwareField, useHardwareDrafts } from './HardwareFields'
 import InfrastructureQuickConnect from './InfrastructureQuickConnect'
 import { VendorBrandValue } from './VendorBrandIcon'
 
@@ -199,6 +200,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   const [editor, setEditor] = useState(null)
 
+  const hardwareDrafts = useHardwareDrafts(editor || 'new-terminal')
 
   const [values, setValues] = useState({})
 
@@ -359,7 +361,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
     { key: 'display_sn', label: '显示器 SN', hidden: !isCloudDevice(values.device_type) },
 
-    ...terminalHardwareFields(values.device_type),
+    ...(/台式|笔记本/.test(String(values.device_type || '')) && !isCloudDevice(values.device_type) ? [hardwareField('cpu_info', 'CPU 配置', hardwareDrafts), hardwareField('memory_mb', '内存', hardwareDrafts), hardwareField('disk_info', '硬盘 / 磁盘配置', hardwareDrafts)] : []),
 
     { key: 'person_id', label: '从人员目录选择', numeric: true, options: peopleOptions, derive: (id) => { const person = d.people.find((p) => p.id === id); return { user_name: person?.name || '', department: person?.department || '' } } },
 
@@ -528,7 +530,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
   const editorBody = editor ? <>
     {editor.mode === 'edit' ? <>
       <AssetPanelSection title="基本信息" icon={Monitor}><Fields fields={fields.filter(({ key }) => ['asset_name', 'asset_code', 'device_type', 'box_sn', 'display_sn', 'status'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
-      {terminalHardwareFields(values.device_type).length ? <AssetPanelSection title="硬件信息" icon={Cpu}><Fields fields={terminalHardwareFields(values.device_type)} value={values} onChange={setValues} /></AssetPanelSection> : null}
+      {fields.some(field => ['cpu_info', 'memory_mb', 'disk_info'].includes(field.key)) ? <AssetPanelSection title="硬件信息" icon={Cpu}><Fields fields={fields.filter(field => ['cpu_info', 'memory_mb', 'disk_info'].includes(field.key))} value={values} onChange={setValues} /></AssetPanelSection> : null}
       <AssetPanelSection title="归属与位置" icon={MapPin}><Fields fields={fields.filter(({ key }) => ['person_id', 'user_name', 'department', 'room'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
       <AssetPanelSection title="网络与系统" icon={Network}><Fields fields={fields.filter(({ key }) => ['ip', 'terminal_ip', 'net_type', 'os_type', 'os_version', 'remark'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
       <AssetPanelSection title="凭证中心" icon={KeyRound}><NetcattyConnectionFields asset={{ name: values.asset_name || values.asset_code, ip: values.ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection>

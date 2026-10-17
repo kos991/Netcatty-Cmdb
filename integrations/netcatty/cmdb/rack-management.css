@@ -1,0 +1,67 @@
+.rack-management-layout {
+  display: grid;
+  grid-template-columns: clamp(300px, 23vw, 400px) minmax(0, 1fr) clamp(310px, 24vw, 380px);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.rack-management-rack { max-width: 400px; }
+.rack-management-device { overflow: hidden; }
+.rack-management-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+.rack-management-directory {
+  flex: 0 1 190px;
+  min-height: 80px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.rack-device-selected {
+  outline: 2px solid hsl(var(--primary) / .7);
+  outline-offset: -2px;
+  z-index: 1;
+}
+.rack-device-selected::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  background: linear-gradient(110deg, hsl(var(--primary)), hsl(var(--primary) / .5), hsl(var(--primary) / .95), hsl(var(--primary) / .35), hsl(var(--primary)));
+  background-size: 300% 100%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: cmdb-rack-selection-flow 5s linear infinite;
+}
+@keyframes cmdb-rack-selection-flow {
+  from { background-position: 0% 50%; }
+  to { background-position: 300% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rack-device-selected::after { animation: none; background: hsl(var(--primary)); }
+}
+@media (min-width: 721px) and (max-width: 1240px) {
+  .rack-management-layout {
+    grid-template-columns: minmax(300px, 36%) minmax(0, 1fr);
+    grid-template-rows: 610px 520px;
+    overflow-y: auto;
+    align-content: start;
+  }
+  .rack-management-panel { grid-column: 1 / -1; border-left: 0; border-top: 1px solid hsl(var(--border)); }
+}
+@media (max-width: 720px) {
+  .rack-management-layout { display: flex; flex-direction: column; overflow-y: auto; }
+  .rack-management-rack { width: 100%; max-width: none; height: 610px; flex-shrink: 0; border-right: 0; border-bottom: 1px solid hsl(var(--border)); }
+  .rack-management-device { height: 720px; flex-shrink: 0; }
+  .rack-management-panel { height: 600px; flex-shrink: 0; border-left: 0; border-top: 1px solid hsl(var(--border)); }
+}

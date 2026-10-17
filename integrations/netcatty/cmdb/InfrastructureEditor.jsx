@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Building2, Cpu, Network, Plus, Server, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,8 @@ import { Field, SelectControl } from './ui'
 import NetcattyConnectionFields from './NetcattyConnectionFields'
 import DeviceImages from './DeviceImages'
 import VendorBrandInput from './VendorBrandInput'
+import HardwareCollection from './HardwareCollection'
+import { hardwareField, useHardwareDrafts } from './HardwareFields'
 
 const optionList = (items = [], blank = '未分配') => choices(items.map((item) => ({ value: item.id, label: item.name })), blank)
 
@@ -47,9 +49,12 @@ function NetworkInterfaces({ interfaces, zones, managementIP, onChange }) {
   </div>
 }
 
-export default function InfrastructureEditor({ open, onOpenChange, record, directory, busy, onSubmit, netcatty, photoDraft = {}, onPhotoDraftChange }) {
+export default function InfrastructureEditor({ open, onOpenChange, record, directory, busy, onSubmit, netcatty, photoDraft = {}, onPhotoDraftChange, onBusyChange }) {
+  const hardwareDrafts = useHardwareDrafts(`${open ? 'open' : 'closed'}:${record?.id || 'new-infrastructure'}`)
   const [values, setValues] = useState(record || {})
   const [photoBusy, setPhotoBusy] = useState(false)
+  const initializedSession = useRef('')
+  useEffect(() => { onBusyChange?.(photoBusy); return () => onBusyChange?.(false) }, [photoBusy, onBusyChange])
   const meta = directory?.meta || {}
   const people = directory?.people || []
   const deviceTypes = useMemo(() => directory?.deviceTypes || [], [directory?.deviceTypes])
@@ -58,9 +63,23 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
   const networkZones = useMemo(() => infrastructureNetworkZoneOptions(meta.net_zones || []), [meta.net_zones])
 
   useEffect(() => {
-    if (!open || !record) return
+    const session = `${open ? 'open' : 'closed'}:${record?.id || 'new'}`
+    if (!open || !record) {
+      initializedSession.current = ''
+      return
+    }
+    if (initializedSession.current === session) return
+    initializedSession.current = session
     setValues(prepareInfrastructureEditorValues(record, models))
   }, [open, record, models])
+  useEffect(() => {
+    if (!models.length) return
+    setValues(current => {
+      const matched = models.find(item => Number(item.id) === Number(current.model_id))
+      if (!matched || (current.vendor === matched.vendor && current.model === matched.model)) return current
+      return { ...current, vendor: matched.vendor, model: matched.model }
+    })
+  }, [models])
 
   const deviceTypeName = values.device_type || deviceTypes.find((item) => item.id === Number(values.category_id))?.name || ''
   const profile = infrastructureFieldProfile(deviceTypeName)
@@ -105,10 +124,10 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
     { key: 'height_u', label: '占用 U 数', type: 'number', min: 1 },
   ]
   const systemFields = [
-    { key: 'vcpu', label: 'vCPU（核）', type: 'number', min: 0, hidden: !profile.virtualCompute },
-    { key: 'cpu_info', label: 'CPU 配置', hidden: !profile.cpu },
-    { key: 'memory_mb', label: '内存（MB）', type: 'number', min: 0, hidden: !profile.memory },
-    { key: 'disk_info', label: '硬盘 / 磁盘配置', hidden: !profile.disk },
+    hardwareField('vcpu', 'vCPU（核）', hardwareDrafts, !profile.virtualCompute),
+    hardwareField('cpu_info', 'CPU 配置', hardwareDrafts, !profile.cpu),
+    hardwareField('memory_mb', '内存', hardwareDrafts, !profile.memory),
+    hardwareField('disk_info', '硬盘 / 磁盘配置', hardwareDrafts, !profile.disk),
     { key: 'os_type', label: '操作系统类型', hidden: !profile.os, searchable: true, options: choices([...new Set(['Windows Server', 'Windows', '银河麒麟', '统信 UOS', 'openEuler', '龙蜥 Anolis OS', '中科方德', 'Ubuntu', 'Debian', 'CentOS', 'Rocky Linux', 'Red Hat Enterprise Linux', 'AlmaLinux', 'Linux', 'Unix', 'VMware ESXi', 'Proxmox VE', 'Nutanix AHV', 'Microsoft Hyper-V', 'KVM', 'Citrix Hypervisor', '华为 FusionCompute', 'H3C UIS', '深信服 aCloud', 'SmartX', 'ZStack', 'OpenStack', 'VirtualBox', '其他', '未知', values.os_type].filter(Boolean))]) },
     { key: 'os_version', label: '操作系统版本', hidden: !profile.os },
   ]
@@ -118,7 +137,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
   const submit = () => {
     try {
       if (photoBusy) throw new Error('请等待照片处理完成')
-      validateFields(basicFields, values)
+      validateFields([...basicFields, ...systemFields], values)
       onSubmit(values)
     } catch (error) {
       toast.error(error.message)
@@ -141,7 +160,7 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
       <p className="text-[11px] text-muted-foreground">管理 IP 用于默认连接；多个业务、带外地址在接口中分别登记网络分区。</p>
       {profile.deviceMac ? <Field label="设备级 MAC 地址"><Input className="h-9 font-mono" value={values.mac || ''} onChange={(event) => setValues({ ...values, mac: event.target.value })} /></Field> : null}
       <NetworkInterfaces interfaces={values.interfaces || []} zones={networkZones} managementIP={values.mgmt_ip} onChange={(interfaces) => setValues({ ...values, interfaces })} />
-      {profile.systemSection ? <><h4 className="text-xs font-medium">{profile.systemSection}</h4><Fields fields={systemFields} value={values} onChange={setValues} /></> : null}
+      {profile.systemSection ? <><h4 className="text-xs font-medium">{profile.systemSection}</h4><Fields fields={systemFields} value={values} onChange={setValues} />{(profile.cpu || profile.virtualCompute) ? <HardwareCollection value={values} onChange={setValues} connection={netcatty.connection} /> : null}</> : null}
       <h4 className="text-xs font-medium">凭证中心</h4>
       <NetcattyConnectionFields asset={values} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} createHost={netcatty.createHost} createCredential={netcatty.createCredential} />
     </AssetPanelSection>

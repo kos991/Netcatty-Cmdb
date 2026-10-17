@@ -6,6 +6,8 @@ import { allPages, useDirectory } from './hooks'
 import { EmptyState, ErrorBanner } from './ui'
 import { buildRackLayout, DEFAULT_RACK_UNITS, rackKey, rackLocationName, UNKNOWN_ROOM } from './rackLayoutModel'
 import { deviceTypeLabel } from './deviceWorkspaceModel'
+import { supportsInfrastructurePhotos } from './state'
+import './rack-management.css'
 
 const UNIT_HEIGHT = 24
 const deviceTitle = (asset) => asset.name || asset.asset_code || `资产 #${asset.id}`
@@ -29,16 +31,17 @@ function RackDiagram({ layout, cabinetKey, selectedDeviceID, onSelectDevice, onS
     else if (bottom > container.scrollTop + container.clientHeight) container.scrollTop = Math.max(0, bottom - container.clientHeight)
   }, [cabinetKey, selectedID, layout])
 
-  return <div ref={scrollRef} className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto overscroll-contain pr-[5px] [scrollbar-width:thin]" style={{ minHeight: UNIT_HEIGHT * 6 }} data-section="device-rack-units" aria-label={`${layout.totalUnits}U 机柜图`}><div className="mx-auto w-full max-w-[520px] overflow-hidden rounded-[3px] border border-[#62676d] bg-[#edf0f1] dark:border-border dark:bg-muted/30">
+  return <div ref={scrollRef} className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto overscroll-contain pr-[5px] [scrollbar-width:thin]" style={{ minHeight: UNIT_HEIGHT * 6 }} data-section="device-rack-units" aria-label={`${layout.totalUnits}U 机柜图`}><div className="mx-auto w-full max-w-[400px] overflow-hidden rounded-[3px] border border-[#62676d] bg-[#edf0f1] dark:border-border dark:bg-muted/30">
     {layout.rows.map((row) => {
       const isSelected = row.type === 'device' && Number(row.asset.id) === selectedID
       const interactive = row.type === 'device' && (!!onSelectDevice || (!!onOpenAsset && (!preview || !isSelected)))
       return <div key={row.unit} className="flex w-full" style={{ height: row.height * UNIT_HEIGHT }}>
-        <div className="w-[42px] shrink-0 border-r border-[#d7dbdf] bg-[#f2f3f4] text-[#555e69] tabular-nums dark:border-border dark:bg-muted/25 dark:text-muted-foreground" aria-hidden="true">
+        <div className="w-[42px] shrink-0 border-r border-[#d7dbdf] bg-[#f2f3f4] text-[#555e69] tabular-nums dark:border-border dark:bg-muted/25 dark:text-muted-foreground">
           {Array.from({ length: row.height }, (_, index) => {
             const unit = row.unit - index
             const currentStart = selected?.start === unit
-            return <span key={unit} className={`flex items-center justify-center border-b border-[#d7dbdf] text-[10px] dark:border-border ${currentStart ? 'bg-primary/10 font-semibold text-primary' : ''}`} style={{ height: UNIT_HEIGHT }}>{unit}</span>
+            const labelClass = `flex w-full items-center justify-center border-b border-[#d7dbdf] text-[10px] dark:border-border ${currentStart ? 'bg-primary/10 font-semibold text-primary' : ''}`
+            return row.type === 'empty' && onSelectUnit ? <button key={unit} type="button" aria-label={`从 ${unit}U 新增或上架设备`} className={`${labelClass} hover:bg-primary/10 hover:text-primary`} style={{ height: UNIT_HEIGHT }} onClick={() => onSelectUnit(unit)}>{unit}</button> : <span key={unit} className={labelClass} style={{ height: UNIT_HEIGHT }} aria-hidden="true">{unit}</span>
           })}
         </div>
         {row.type === 'device' ? <button
@@ -48,7 +51,7 @@ function RackDiagram({ layout, cabinetKey, selectedDeviceID, onSelectDevice, onS
           disabled={!interactive}
           onClick={() => onSelectDevice ? onSelectDevice(row.asset.id) : onOpenAsset?.(row.asset.id)}
           title={[deviceTitle(row.asset), row.asset.asset_code, deviceSubtitle(row.asset), `${row.start}–${row.top}U（${row.height}U）`].filter(Boolean).join(' · ')}
-          className={`relative flex min-w-0 flex-1 items-center gap-2 overflow-hidden border-b border-b-white/20 border-l-[3px] px-2 text-left text-[11px] leading-[13px] text-white transition-colors disabled:opacity-100 ${isSelected ? 'border-l-[#b5e5bc] bg-[#176d29]' : 'border-l-transparent bg-[#1d8730] enabled:hover:bg-[#176d29]'} ${interactive ? '' : 'cursor-default'}`}
+          className={`relative flex min-w-0 flex-1 items-center gap-2 overflow-hidden border-b border-b-white/20 border-l-[3px] px-2 text-left text-[11px] leading-[13px] text-white transition-colors disabled:opacity-100 ${isSelected ? 'rack-device-selected border-l-transparent bg-[#176d29]' : 'border-l-transparent bg-[#1d8730] enabled:hover:bg-[#176d29]'} ${interactive ? '' : 'cursor-default'}`}
           data-asset-id={row.asset.id}
           data-selected={isSelected || undefined}
         ><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{row.height}U {deviceTitle(row.asset)}</span>{row.height > 1 ? <span className="block truncate text-[9px] leading-[10px] text-white/90">{row.asset.model || '未知型号'}</span> : null}</span><span className={`absolute right-1.5 top-[5px] h-1.5 w-1.5 rounded-full ${['在用', '正常', '运行中'].includes(row.asset.status) ? 'bg-[#9dcc75]' : 'bg-white/50'}`} title={row.asset.status || '未配置状态'} /></button>
@@ -71,7 +74,7 @@ export default function RackView({ asset, cabinet: selectedCabinet, devices: pro
     const location = (locations.list || []).find((item) => item.location_type !== 'room' && (item.location_type === 'cabinet'
       ? rackKey(item) === key
       : item.name === locationName)) || null
-    return { key, devices: rows.filter((item) => rackKey(item) === key), location }
+    return { key, devices: rows.filter((item) => supportsInfrastructurePhotos(item) && rackKey(item) === key), location }
   }, [provided, name, key, locationName])
   const query = useDirectory(loader)
   const loaded = query.data?.key === key ? query.data : null

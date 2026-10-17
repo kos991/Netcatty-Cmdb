@@ -1,16 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Pencil, Plus } from 'lucide-react'
+import { ChevronRight, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
-import { VaultHeaderSearch, VaultPageHeader } from '@/components/vault/VaultPageHeader'
 import { api } from './api'
 import { allPages, directoryChanged, useDirectory } from './hooks'
 import { EmptyState, ErrorBanner, SelectControl } from './ui'
 import RackView from './RackView'
 import RackDeviceEditor from './RackDeviceEditor'
 import RackLocationEditor from './RackLocationEditor'
+import RackMountDialog from './RackMountDialog'
+import './rack-management.css'
 import { requestJson } from './transport'
 import { supportsInfrastructurePhotos } from './state'
 import { buildRackLayout, defaultRack, rackAssignmentChanges, rackCabinets, rackKey, rackRooms, UNASSIGNED_CABINET } from './rackLayoutModel'
@@ -41,11 +41,12 @@ function MigrationDialog({ open, onOpenChange, preview, loading, error, result, 
   </DialogContent></Dialog>
 }
 
-function RoomDevices({ bucket, cabinets, onOpenAsset, onChanged, onBeforeChange }) {
+function RoomDevices({ bucket, cabinets, onOpenAsset, onChanged, onBeforeChange, onBusyChange }) {
   const [selected, setSelected] = useState([])
   const [cabinet, setCabinet] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  useEffect(() => { onBusyChange(busy); return () => onBusyChange(false) }, [busy, onBusyChange])
   const existing = cabinets.filter((item) => item.room === bucket.room && !item.unassigned)
   const toggle = (id, checked) => setSelected((ids) => checked ? [...new Set([...ids, id])] : ids.filter((value) => value !== id))
   const assign = async () => {
@@ -74,16 +75,16 @@ function RoomDevices({ bucket, cabinets, onOpenAsset, onChanged, onBeforeChange 
   </section>
 }
 
-export default function RackOverview({ keyword = '', onKeywordChange, onAddressView, onOpenAsset, focusTarget, onDirtyChange }) {
+export default function RackOverview({ keyword = '', onOpenAsset, focusTarget, onDirtyChange }) {
   const query = useDirectory(loadOverview)
   const [selection, setSelection] = useState({ key: '', deviceID: 0 })
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editorRevision, setEditorRevision] = useState(0)
-  const [placementRequest, setPlacementRequest] = useState(null)
-  const [directoryOpen, setDirectoryOpen] = useState(false)
-  const [locationMode, setLocationMode] = useState('')
-  const [locationMenuOpen, setLocationMenuOpen] = useState(false)
+  const [mountUnit, setMountUnit] = useState(null)
+  const [mountBusy, setMountBusy] = useState(false)
+  const [managementFocus, setManagementFocus] = useState(0)
+  const [managementBusy, setManagementBusy] = useState(false)
   const [locationDirty, setLocationDirty] = useState(false)
   const [migrationOpen, setMigrationOpen] = useState(false)
   const [migrationPreview, setMigrationPreview] = useState(null)
@@ -100,37 +101,40 @@ export default function RackOverview({ keyword = '', onKeywordChange, onAddressV
   const directoryRooms = useMemo(() => rackRooms(cabinets, keyword), [cabinets, keyword])
   const current = cabinets.find((item) => item.key === selection.key)
   const asset = current?.devices.find((item) => Number(item.id) === Number(selection.deviceID))
-  const roomCabinets = cabinets.filter((item) => item.room === current?.room)
   const layout = useMemo(() => buildRackLayout(current?.devices || [], current?.totalUnits || 42), [current])
   const changeDirty = useCallback((value) => setDirty(value), [])
-  useEffect(() => { onDirtyChange?.(dirty || locationDirty, saving || !!migrationBusy) }, [dirty, locationDirty, saving, migrationBusy, onDirtyChange])
+  useEffect(() => { onDirtyChange?.(dirty || locationDirty || mountUnit !== null, saving || managementBusy || mountBusy || !!migrationBusy) }, [dirty, locationDirty, mountUnit, saving, managementBusy, mountBusy, migrationBusy, onDirtyChange])
   useEffect(() => () => onDirtyChange?.(false, false), [onDirtyChange])
-  const mayLeave = useCallback(() => {
-    if (saving) return false
-    if (dirty || locationDirty) {
+  const mayLeaveDevice = useCallback(() => {
+    if (saving || managementBusy || mountBusy || migrationBusy || mountUnit !== null) return false
+    if (dirty) {
       if (!window.confirm('设备修改尚未保存，是否放弃修改并继续？')) return false
       changeDirty(false)
       setEditorRevision((value) => value + 1)
-      setLocationDirty(false)
-      setLocationMode('')
     }
-    setPlacementRequest(null)
     return true
-  }, [saving, dirty, locationDirty, changeDirty])
+  }, [saving, managementBusy, mountBusy, migrationBusy, mountUnit, dirty, changeDirty])
+  const mayLeave = useCallback(() => {
+    if (saving || managementBusy || mountBusy || migrationBusy || mountUnit !== null) return false
+    if (locationDirty && !window.confirm('机房 / 机柜修改尚未保存，是否放弃修改并继续？')) return false
+    return mayLeaveDevice()
+  }, [saving, managementBusy, mountBusy, migrationBusy, mountUnit, locationDirty, mayLeaveDevice])
   const selectCabinet = (item, deviceID) => {
-    if (!item || !mayLeave()) return
+    if (!item || item.key === selection.key || !mayLeave()) return
     setSelection({ key: item.key, deviceID: deviceID ?? item.devices[0]?.id ?? 0 })
-    setDirectoryOpen(false)
   }
   const selectDevice = (id) => {
-    if (Number(id) === Number(selection.deviceID) || !mayLeave()) return
+    if (Number(id) === Number(selection.deviceID) || !mayLeaveDevice()) return
     setSelection((value) => ({ ...value, deviceID: id }))
   }
   useEffect(() => {
     if (!query.data) return
     if (pendingSelection.current) {
-      if (!cabinets.some((item) => item.key === pendingSelection.current.key)) return
-      setSelection(pendingSelection.current)
+      if (query.data === pendingSelection.current.previousData) return
+      const requested = pendingSelection.current
+      const target = cabinets.find((item) => item.key === requested.key)
+      if (!target) return
+      setSelection({ key: target.key, deviceID: requested.deviceID || target.devices[0]?.id || 0 })
       pendingSelection.current = null
       return
     }
@@ -172,11 +176,13 @@ export default function RackOverview({ keyword = '', onKeywordChange, onAddressV
       if (target && mayLeave()) setSelection({ key: target.key, deviceID: target.devices[0]?.id || 0 })
     }
   }, [keyword, query.data, directoryRooms, selection.key, mayLeave])
-  const openLocation = (mode) => { if (mayLeave()) setLocationMode(mode) }
   const afterSaved = async (saved) => {
     changeDirty(false)
-    setPlacementRequest(null)
-    pendingSelection.current = { key: rackKey(saved), deviceID: saved.id }
+    pendingSelection.current = { key: rackKey(saved), deviceID: saved.id, previousData: query.data }
+    await query.reload()
+  }
+  const afterLocationSaved = async ({ room, name, preserveDevice }) => {
+    pendingSelection.current = { key: rackKey({ data_center: room, cabinet_name: name }), deviceID: preserveDevice ? selection.deviceID : 0, previousData: query.data }
     await query.reload()
   }
   const openMigration = async () => {
@@ -198,30 +204,24 @@ export default function RackOverview({ keyword = '', onKeywordChange, onAddressV
     } catch (error) { setMigrationError(error.message) }
     finally { setMigrationBusy('') }
   }
-  if (query.error) return <ErrorBanner message={query.error} onRetry={query.reload} />
+  if (query.error && !query.data) return <ErrorBanner message={query.error} onRetry={query.reload} />
   if (!query.data) return <p className="p-4 text-xs text-muted-foreground">正在汇总机房与机柜…</p>
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-card" data-section="rack-overview">
-    <VaultPageHeader dataSection="cmdb-rack-header" contentClassName="h-auto min-h-[54px] min-w-0 flex-wrap gap-2.5 px-3.5 py-[9px] min-[1100px]:flex-nowrap">
-      <Dropdown open={locationMenuOpen} onOpenChange={setLocationMenuOpen}><DropdownTrigger asChild><Button type="button" variant="secondary" className="h-[34px] shrink-0 gap-1.5 rounded-[7px] border border-border bg-muted px-2.5 text-xs font-medium text-foreground"><Plus size={15} />新增机柜<ChevronDown size={14} /></Button></DropdownTrigger><DropdownContent align="start" className="w-44 p-1">{[['new', '新建机柜'], ['room', '新建机房']].map(([mode, label]) => <button type="button" key={mode} className="flex h-9 w-full items-center rounded px-2 text-xs hover:bg-secondary" onClick={() => { setLocationMenuOpen(false); openLocation(mode) }}>{label}</button>)}</DropdownContent></Dropdown>
-      <div className="flex h-[34px] shrink-0 items-center rounded-md border border-border bg-muted/30 p-0.5" aria-label="机柜与网络视图"><Button type="button" variant="secondary" size="sm" className="h-7 px-3 text-xs" aria-pressed>设备机柜</Button><Button type="button" variant="ghost" size="sm" className="h-7 px-3 text-xs" aria-pressed={false} onClick={onAddressView}>地址池</Button></div>
-      <div className="relative w-[115px] min-w-0 shrink-0 [&>div]:h-[34px] [&>div>svg]:pr-2 [&_button]:hidden [&_input]:pl-[39px] [&_input]:pr-0"><span aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground">机房</span><SelectControl aria-label="当前机房" searchable value={current?.room || ''} onChange={(room) => selectCabinet(defaultRack(cabinets.filter((item) => item.room === room)))} options={rooms.map((item) => ({ value: item.key, label: item.name }))} className="w-[220px]" /></div>
-      <div className="relative w-[90px] min-w-0 shrink-0"><span aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground">机柜</span><SelectControl aria-label="当前机柜" value={current?.key || ''} onChange={(key) => { if (key === '__all_cabinets__') { if (mayLeave()) setDirectoryOpen(true) } else if (key === '__edit_cabinet__') openLocation('edit'); else selectCabinet(cabinets.find((item) => item.key === key)) }} options={[...roomCabinets.map((item) => ({ value: item.key, label: item.name || UNASSIGNED_CABINET })), ...(!current || current.unassigned ? [] : [{ value: '__edit_cabinet__', label: '编辑当前机柜' }]), { value: '__all_cabinets__', label: '全部机柜 / 批量分配 / 迁移' }]} className="h-[34px] w-full min-w-0 gap-1 pl-[39px] pr-2 [&>span:first-child]:truncate" /></div>
-      <VaultHeaderSearch data-rack-search value={keyword} onChange={(event) => onKeywordChange?.(event.target.value)} placeholder="搜索机房、机柜、设备或 IP" className="min-w-[140px] max-w-[520px] flex-[1_1_240px]" inputClassName="h-[34px] rounded-[7px] text-xs" />
-    </VaultPageHeader>
-    <main aria-label="机柜与设备" className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,3fr)_minmax(360px,2fr)] grid-rows-[minmax(0,1fr)] overflow-hidden max-[1100px]:grid-cols-[minmax(0,3fr)_minmax(330px,2fr)] max-[900px]:flex max-[900px]:flex-col max-[900px]:overflow-y-auto">
-      <section className="flex min-h-0 min-w-0 flex-col border-r border-border/60 px-5 pb-3 pt-4 max-[1100px]:p-3.5 max-[900px]:shrink-0 max-[900px]:border-b max-[900px]:border-r-0">
-        {current ? current.unassigned ? current.devices.length ? <RoomDevices key={current.key} bucket={current} cabinets={cabinets} onOpenAsset={selectDevice} onBeforeChange={mayLeave} onChanged={query.reload} /> : <EmptyState label="当前机房为空；可新建机柜，设备由基础设施页面录入" /> : <>
-          <div className="flex shrink-0 items-center justify-between gap-2"><h1 className="truncate text-sm font-semibold">{current.name} 机柜</h1><Button type="button" variant="outline" size="sm" className="h-[27px] shrink-0 gap-1.5 px-2 text-[11px] text-muted-foreground" aria-label="编辑机柜总 U 数" title="编辑机柜总 U 数" onClick={() => openLocation('capacity')}>{current.totalUnits}U<Pencil size={12} /></Button></div>
+    {query.error ? <ErrorBanner message={query.error} onRetry={query.reload} /> : null}
+    <main aria-label="机柜与设备" className="rack-management-layout">
+      <section className="rack-management-rack flex min-h-0 min-w-0 flex-col border-r border-border/60 px-3.5 pb-3 pt-4">
+        {current ? current.unassigned ? current.devices.length ? <RoomDevices key={current.key} bucket={current} cabinets={cabinets} onOpenAsset={selectDevice} onBeforeChange={mayLeaveDevice} onBusyChange={setMountBusy} onChanged={query.reload} /> : <EmptyState label="当前机房为空；可在右侧创建空机柜，再点击空 U 位新增设备" /> : <>
+          <div className="flex shrink-0 items-center justify-between gap-2"><h1 className="truncate text-sm font-semibold" title={`${current.roomLabel} / ${current.name}`}>{current.roomLabel} / {current.name}</h1><Button type="button" variant="outline" size="sm" className="h-[27px] shrink-0 gap-1.5 px-2 text-[11px] text-muted-foreground" aria-label="编辑机柜总 U 数" title="聚焦右侧机柜高度管理" disabled={saving || managementBusy || mountBusy} onClick={() => setManagementFocus((value) => value + 1)}>{current.totalUnits}U<Pencil size={12} /></Button></div>
           <p className="mt-[7px] shrink-0 text-xs text-muted-foreground">已用 {current.usedUnits}U · 空闲 {Math.max(0, current.totalUnits - current.usedUnits)}U · 已上架 {current.placedCount} 台</p>
           <div role="progressbar" aria-label="机柜 U 位使用量" aria-valuemin={0} aria-valuemax={current.totalUnits} aria-valuenow={current.usedUnits} className="mb-3.5 mt-[13px] h-1 shrink-0 overflow-hidden rounded bg-muted"><div className="h-full bg-primary" style={{ width: `${Math.min(100, current.usedUnits / current.totalUnits * 100)}%` }} /></div>
-          <RackView cabinet={current} devices={current.devices} selectedDeviceID={selection.deviceID} onSelectDevice={selectDevice} onSelectUnit={asset && !saving ? (unit) => setPlacementRequest({ deviceID: asset.id, room: current.room, name: current.name, unit }) : undefined} />
+          <RackView cabinet={current} devices={current.devices} selectedDeviceID={selection.deviceID} onSelectDevice={selectDevice} onSelectUnit={(unit) => { if (mayLeaveDevice()) setMountUnit(unit) }} />
           <details key={current.key} className="group mt-3 max-h-40 shrink-0 overflow-y-auto border-t border-border pt-[9px]" data-section="rack-unplaced-devices"><summary className="flex h-[27px] cursor-pointer list-none items-center gap-1.5 text-xs [&::-webkit-details-marker]:hidden"><ChevronRight size={13} className="shrink-0 text-muted-foreground transition-transform group-open:rotate-90" /><span>未上架 {layout.unplaced.length}</span><span className="mx-1.5 text-border">/</span><span className={layout.conflicts.length ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}>冲突 {layout.conflicts.length}</span><span className="ml-auto text-[11px] text-muted-foreground">查看设备</span></summary><div className="flex flex-wrap gap-2 pt-2">{[...layout.conflicts, ...layout.unplaced].map((item) => <Button key={item.id} type="button" variant={Number(item.id) === Number(selection.deviceID) ? 'secondary' : 'outline'} size="sm" className={`h-7 max-w-full text-[11px] ${layout.conflicts.includes(item) ? 'text-destructive' : ''}`} title={item.name || item.asset_code} onClick={() => selectDevice(item.id)}><span className="truncate">{item.name || item.asset_code || `#${item.id}`}</span>{layout.conflicts.includes(item) ? ' · 冲突' : ''}</Button>)}{!layout.unplaced.length && !layout.conflicts.length ? <span className="text-[11px] text-muted-foreground">所有设备均已上架，无位置冲突</span> : null}</div></details>
         </> : <EmptyState label="尚无机房与机柜；可直接新建空机房或机柜" />}
       </section>
-      <aside aria-label="设备属性与照片" className="flex min-h-0 min-w-0 flex-col max-[900px]:min-h-[620px] max-[900px]:shrink-0">{asset ? <RackDeviceEditor key={`${current.key}-${asset.id}-${editorRevision}`} asset={asset} cabinets={cabinets} rooms={rooms} meta={query.data.meta} deviceTypes={query.data.deviceTypes} placementRequest={placementRequest} onDirtyChange={changeDirty} onBusyChange={setSaving} onSaved={afterSaved} onOpenAsset={(id) => { if (mayLeave()) onOpenAsset?.(id) }} /> : <EmptyState label={current?.deviceCount ? '选择设备查看与编辑属性' : '当前机房 / 机柜暂无设备'} />}</aside>
+      <aside aria-label="设备属性与照片" className="rack-management-device flex min-h-0 min-w-0 flex-col">{asset ? <RackDeviceEditor key={`${current.key}-${asset.id}-${editorRevision}`} asset={asset} cabinets={cabinets} rooms={rooms} meta={query.data.meta} deviceTypes={query.data.deviceTypes} externalBusy={managementBusy || mountBusy || !!migrationBusy} managementDirty={locationDirty} onDirtyChange={changeDirty} onBusyChange={setSaving} onSaved={afterSaved} onOpenAsset={(id) => { if (mayLeave()) onOpenAsset?.(id) }} /> : <EmptyState label={current?.deviceCount ? '选择设备查看与编辑属性' : '当前机柜暂无设备；点击左侧空 U 位新增或选择已有设备上架'} />}</aside>
+      <RackLocationEditor cabinet={current} rooms={rooms} directoryRooms={directoryRooms} cabinets={cabinets} onSelectCabinet={selectCabinet} onMigration={openMigration} mutationBlocked={dirty || saving || mountUnit !== null || mountBusy || !!migrationBusy} focusRequest={managementFocus} onDirtyChange={setLocationDirty} onBusyChange={setManagementBusy} onSaved={afterLocationSaved} />
     </main>
-    <Dialog open={directoryOpen} onOpenChange={setDirectoryOpen}><DialogContent className="flex max-h-[84vh] flex-col sm:max-w-2xl" data-section="rack-directory-dialog"><DialogHeader><DialogTitle>全部机房与机柜</DialogTitle></DialogHeader><div className="min-h-0 space-y-3 overflow-y-auto">{directoryRooms.map((room) => <section key={room.key}><h3 className="mb-1 text-xs font-semibold">{room.name}</h3><div className="grid grid-cols-2 gap-2">{room.cabinets.map((item) => <button type="button" key={item.key} data-rack-cabinet={item.locationName || item.key} className="min-w-0 rounded-md border border-border p-2 text-left hover:bg-secondary" onClick={() => selectCabinet(item)}><strong className="block truncate text-xs" title={item.name || UNASSIGNED_CABINET}>{item.name || UNASSIGNED_CABINET}</strong><span className="text-[11px] text-muted-foreground">{item.deviceCount} 台{item.unassigned ? ' · 批量指定机柜' : ` · ${item.usedUnits}/${item.totalUnits}U`}{item.conflictCount ? ` · 冲突 ${item.conflictCount}` : ''}</span></button>)}</div></section>)}{!directoryRooms.length ? <EmptyState label="没有匹配的机房、机柜或设备" /> : null}</div><DialogFooter><Button data-rack-migration-preview variant="outline" onClick={openMigration}>迁移预览 / 回滚</Button><Button variant="outline" onClick={() => setDirectoryOpen(false)}>关闭</Button></DialogFooter></DialogContent></Dialog>
-    <RackLocationEditor mode={locationMode} cabinet={['edit', 'capacity'].includes(locationMode) ? current : null} room={current?.room || ''} rooms={rooms} cabinets={cabinets} onDirtyChange={setLocationDirty} onBusyChange={setSaving} onClose={() => setLocationMode('')} onSaved={({ room, name }) => { pendingSelection.current = { key: rackKey({ data_center: room, cabinet_name: name }), deviceID: ['edit', 'capacity'].includes(locationMode) ? selection.deviceID : 0 }; query.reload() }} />
+    {mountUnit !== null && current && !current.unassigned ? <RackMountDialog cabinet={current} unit={mountUnit} devices={cabinets.flatMap((item) => item.devices)} onBusyChange={setMountBusy} onClose={() => setMountUnit(null)} onSaved={afterSaved} /> : null}
     <MigrationDialog open={migrationOpen} onOpenChange={setMigrationOpen} preview={migrationPreview} loading={migrationLoading} error={migrationError} result={migrationResult} busy={migrationBusy} onApply={() => mutateMigration('apply')} onRollback={() => mutateMigration('rollback')} />
   </div>
 }

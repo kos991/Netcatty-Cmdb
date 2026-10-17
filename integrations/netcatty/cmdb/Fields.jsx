@@ -28,6 +28,7 @@ export function validateFields(fields, value) {
   for (const field of fields) {
     if (field.hidden) continue
     const fieldValue = field.custom ? value.custom_fields?.[field.key] : value[field.key]
+    if (field.validate) field.validate(fieldValue, value)
     if (field.required && (fieldValue === undefined || fieldValue === null || String(fieldValue).trim() === '' || (field.numeric && !fieldValue))) throw new Error(`请填写${field.label}`)
   }
 }

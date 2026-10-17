@@ -56,6 +56,7 @@ export default function DeviceImages({ kind, id, mainOnly = false, draftMode = f
 
   const save = async (side, data) => {
     setBusy(side)
+    onBusyChange?.(true)
     try {
       if (draftMode) onDraftChange((current) => ({ ...current, [`${side}_image`]: data }))
       else {
@@ -68,6 +69,7 @@ export default function DeviceImages({ kind, id, mainOnly = false, draftMode = f
       setError(failure.message || '保存设备照片失败')
     } finally {
       setBusy('')
+      onBusyChange?.(false)
     }
   }
 
@@ -85,14 +87,14 @@ export default function DeviceImages({ kind, id, mainOnly = false, draftMode = f
   if (loading) return <p className="text-xs text-muted-foreground">正在读取设备照片…</p>
   return <div className="space-y-2">
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-    <div className={`grid gap-3 ${mainOnly ? 'grid-cols-1' : 'grid-cols-2'}`}>
+    <div className="grid grid-cols-1 gap-3">
       {(mainOnly ? [['front', '设备图片']] : [['front', '正面'], ['back', '背面']]).map(([side, label]) => {
         const src = images[`${side}_image`]
         const imageLabel = mainOnly ? label : `${label}照片`
         return <div key={side} className="min-w-0 space-y-1.5">
           <div className="flex h-7 items-center justify-between gap-2"><span className="text-xs font-medium">{label}</span><div className="flex items-center"><ActionIcon label={`${src ? '替换' : '上传'}${imageLabel}`} disabled={!!busy} onClick={() => inputs[side].current?.click()}><ImagePlus size={14} /></ActionIcon>{src && <ActionIcon label={`移除${imageLabel}`} disabled={!!busy} danger onClick={() => save(side, '')}><Trash2 size={14} /></ActionIcon>}</div></div>
           <input ref={inputs[side]} type="file" accept="image/*" className="hidden" aria-label={`选择${imageLabel}`} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void choose(side, file) }} />
-          {src ? <button type="button" className={`grid ${mainOnly ? 'h-32' : 'aspect-[4/3]'} w-full place-items-center overflow-hidden rounded-md border border-border/70 bg-muted/20`} onClick={() => setPreview(side)} title={`查看${imageLabel}`}><img src={src} alt={imageLabel} className="h-full w-full object-contain" /></button> : <Button type="button" variant="outline" className={`${mainOnly ? 'h-32' : 'aspect-[4/3] h-auto'} w-full border-dashed text-xs text-muted-foreground`} disabled={!!busy} onClick={() => inputs[side].current?.click()}>{busy === side ? '保存中…' : '未上传'}</Button>}
+          {src ? <button type="button" className="grid aspect-[5/1] w-full place-items-center overflow-hidden rounded-md border border-border/70 bg-muted/20" onClick={() => setPreview(side)} title={`查看${imageLabel}`}><img src={src} alt={imageLabel} className="h-full w-full object-contain" /></button> : <Button type="button" variant="outline" className="aspect-[5/1] h-auto w-full border-dashed text-xs text-muted-foreground" disabled={!!busy} onClick={() => inputs[side].current?.click()}>{busy === side ? '保存中…' : '未上传'}</Button>}
         </div>
       })}
     </div>
