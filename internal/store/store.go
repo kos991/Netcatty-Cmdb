@@ -268,37 +268,3 @@ func (s *Store) InitSchema() error {
 	}
 	return nil
 }
-
-func (s *Store) IsSeeded() (bool, error) {
-	var val string
-	err := s.db.QueryRow("SELECT v FROM _meta WHERE k = 'seeded'").Scan(&val)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return val == "true", nil
-}
-
-func (s *Store) SetSeeded() error {
-	_, err := s.db.Exec("INSERT OR REPLACE INTO _meta (k, v) VALUES ('seeded', 'true')")
-	return err
-}
-
-func (s *Store) IsSeededV2() (bool, error) {
-	var val string
-	err := s.db.QueryRow("SELECT v FROM _meta WHERE k = 'seeded_v2'").Scan(&val)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return val == "true", nil
-}
-
-func (s *Store) SetSeededV2() error {
-	_, err := s.db.Exec("INSERT OR REPLACE INTO _meta (k, v) VALUES ('seeded_v2', 'true')")
-	return err
-}

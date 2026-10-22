@@ -1,5 +1,5 @@
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rules = [
@@ -25,6 +25,11 @@ export function scanTargets(targets) {
   const matches = [];
   for (const target of targets) {
     for (const file of collectFiles(target)) {
+      // 发布目录内出现数据库就直接失败，避免未知测试数据绕过内容特征扫描。
+      if (/\.(?:db|db-shm|db-wal|sqlite|sqlite3)$/i.test(basename(file))) {
+        matches.push(["database_file", file]);
+        continue;
+      }
       const contents = readFileSync(file);
       for (const [ruleName, value] of rules) {
         if (contents.includes(Buffer.from(value))) matches.push([ruleName, file]);

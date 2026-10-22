@@ -1,6 +1,6 @@
 # Netcatty-Cmdb 项目拓扑与逻辑
 
-> 版本 1.0.20261022 · 更新于 2026-10-22
+> 版本 1.0.202610221542 · 更新于 2026-10-22
 
 ---
 
@@ -11,7 +11,7 @@ Netcatty-Cmdb/
 ├── main.go                      # Go 入口：启动 HTTP 服务、注册路由
 ├── main_test.go                 # 入口测试（健康检查、启动参数）
 ├── go.mod / go.sum              # Go 依赖（modernc.org/sqlite、excelize）
-├── VERSION                      # 当前版本号（格式 1.0.YYYYMMDD）
+├── VERSION                      # 当前版本号（格式 1.0.YYYYMMDDHHmm）
 ├── AGENTS.md                    # 项目规则与约束（代码生成强制遵守）
 ├── 使用说明.md                   # 产品使用文档
 │
@@ -60,7 +60,6 @@ Netcatty-Cmdb/
 │       ├── cmdb_schema.go       # CMDB 表结构迁移（cmdb_assets 等）
 │       ├── config_schema.go     # 配置表结构迁移（cmdb_groups 等）
 │       ├── cmdb_migrate.go      # 旧表 → 新表数据迁移
-│       ├── seed.go              # 初始数据种子
 │       │
 │       │   ── 终端资产 ──
 │       ├── legacy_store.go      # 终端资产完整 CRUD（兼容层，74KB）

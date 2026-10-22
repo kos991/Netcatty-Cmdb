@@ -99,12 +99,13 @@
 
 ## 6.2 版本号演进规则
 
-- 当前版本：`1.0.20261022`；版本文件：`VERSION`（`netcatty/package.json` 同步）；README 版本位置：`README.md` 顶部“当前版本”。
-- 版本格式固定为 `1.0.YYYYMMDD`，按发布当天日期递增，同一天只发布一次；`scripts/check-version.mjs` 校验格式与一致性。
+- 当前版本：`1.0.202610221542`；版本文件：`VERSION`（`netcatty/package.json` 同步）；README 版本位置：`README.md` 顶部“当前版本”。
+- 版本格式固定为 `1.0.YYYYMMDDHHmm`，使用发布时的本地日期时间；同一天可多次发布；`scripts/check-version.mjs` 校验格式与一致性。
 - 用户没有明确要求发布时，默认在当前版本继续修改，不改 `VERSION`。
 - 每次修复或新功能都单独开分支、提交 PR 到 `main`，打 `fix` 或 `feature` 标签，CI 通过后合并；不直接推送 `main`。
-- 发布：通过 PR 改 `VERSION`，合并后在 `main` 上打 `v1.0.YYYYMMDD` tag。Release 只发布 Windows x64：NSIS 安装包（不发便携版）、自动升级元数据和离线 Cmdb 补丁包；说明按自上次发布以来合并的修复 PR 与功能 PR 自动汇总。
-- 上游 Netcatty 由 `upstream-sync.yml` 每天检查，有新版本时自动开 PR；必须在装配、lint、构建通过后人工合并，不自动合并或发布。离线补丁只能装在上游提交相同的客户端上。
+- 发布：通过 PR 改 `VERSION`，合并后在 `main` 上打 `v1.0.YYYYMMDDHHmm` tag。Release 只发布 Windows x64：完整安装包与离线补丁图形安装器（不发便携版、不发自动升级元数据）；宿主应用版本保持上游 Netcatty 版本，文件名用 Cmdb 版本；说明按自上次发布以来合并的修复 PR 与功能 PR 自动汇总。
+- 宿主“软件更新”只检查并提示上游 Netcatty 新版本，不得下载或安装上游官方安装包（会覆盖 Cmdb）。上游 Netcatty 由 `upstream-sync.yml` 每天检查，有新版本时自动开 PR；必须在装配、lint、构建通过后人工合并，不自动合并或发布。离线补丁只能装在上游提交相同的客户端上。
+- 安装包和补丁只写安装目录，不得修改 `%APPDATA%\netcatty` 中的连接、密钥、设置和 Cmdb 数据库；发布产物不得包含测试数据（`check-release-data.mjs` 扫描）。
 
 ## 6.3 修复报告规则
 

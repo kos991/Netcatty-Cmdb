@@ -5,7 +5,6 @@ import {
   patchSettingsApplicationTab,
   patchSettingsSystemTab,
   patchStartupUpdateAction,
-  patchUpdateRepositoryConfig,
 } from "./netcatty-update-integration.mjs";
 
 test("Cmdb 设置内容使用 Radix TabContent，切换其他设置时不会常驻覆盖", () => {
@@ -30,52 +29,46 @@ test("Cmdb 设置页复用原生面板并保留五个独立配置分区", () => 
   assert.match(source, /data-\[state=inactive\]:hidden/);
 });
 
-test("将 Netcatty 更新源指向 Cmdb 仓库", () => {
-  const source = `
-const GITHUB_API_URL = 'https://api.github.com/repos/binaricat/Netcatty/releases/latest';
-const RELEASES_PAGE_URL = 'https://github.com/binaricat/Netcatty/releases';
-publish: [{ provider: 'github', owner: 'binaricat', repo: 'Netcatty' }]
-`;
-
-  const result = patchUpdateRepositoryConfig(source);
-
-  assert.match(result, /kos991\/Netcatty-Cmdb/);
-  assert.doesNotMatch(result, /binaricat\/Netcatty/);
-});
-
-test("装配脚本使用更新源补丁", () => {
+test("装配器不改写上游更新源，宿主只检查上游官方发布", () => {
   const prepare = readFileSync(new URL("./prepare-netcatty.mjs", import.meta.url), "utf8");
-  assert.match(prepare, /patchUpdateRepositoryConfig/);
+  assert.doesNotMatch(prepare, /patchUpdateRepositoryConfig|Netcatty-Cmdb\/releases/);
 });
 
-test("应用页显示锁定的 Netcatty 版本而不是 Cmdb 集成包版本", () => {
+test("应用页去掉下载/重启徽章，只显示上游新版本号", () => {
   const source = `
-const REPO_URL = "https://github.com/binaricat/Netcatty";
+                {/* Update badge - reflects auto-download state */}
+                {updateState.latestRelease && (updateState.hasUpdate) && (
+                  <button
+                    onClick={() => startDownload()}
+                    className={cn(
+                      "a",
+                    )}
+                  >
+                    download
+                  </button>
+                )}
 <span>{appInfo.version ? appInfo.version : " "}</span>
 `;
-
-  const result = patchSettingsApplicationTab(source, "1.1.83");
-
-  assert.match(result, /appInfo\.version \? "1\.1\.83" : " "/);
-  assert.doesNotMatch(result, /appInfo\.version \? appInfo\.version : " "/);
+  const result = patchSettingsApplicationTab(source);
+  assert.doesNotMatch(result, /startDownload|installUpdate/);
+  assert.match(result, /settings\.update\.integratedNotice/);
+  assert.match(result, /appInfo\.version \? appInfo\.version : " "/);
 });
 
-test("更新页面包含版本、发布日期、说明和升级按钮", () => {
+test("系统页只保留检查更新，没有下载、重启或前往下载入口", () => {
   const source = `
 <SectionHeader title={t('settings.update.title')} anchorId="system-update" />
 旧更新区块
 <SectionHeader title={t("settings.autoLaunch.title")} />
 `;
   const result = patchSettingsSystemTab(source);
-  assert.match(result, /settings\.update\.latestVersion/);
-  assert.match(result, /settings\.update\.releaseDate/);
-  assert.match(result, /settings\.update\.releaseNotes/);
-  assert.match(result, /settings\.update\.upgradeTo/);
+  assert.match(result, /settings\.update\.checkForUpdates/);
+  assert.match(result, /settings\.update\.integratedNotice/);
+  assert.doesNotMatch(result, /startDownload|installUpdate|openReleasePage|restartNow|upgradeTo/);
 });
 
-test("启动通知直接提供升级操作", () => {
+test("启动通知只提示并打开设置，不提供下载", () => {
   const source = `
-    hasRuntimeTunnel, installUpdate, isVaultInitialized, keys, knownHosts, openSettingsWindow, portForwardingRules, proxyProfiles, sessions, setKeyboardInteractiveQueue,
       toast.info(
         t('update.available.message', { version }),
         {
@@ -88,8 +81,9 @@ test("启动通知直接提供升级操作", () => {
           actionLabel: t('update.viewInSettings'),
         }
       );
+  }, [enabled, updateState.hasUpdate, updateState.latestRelease, updateState.autoDownloadStatus, t, openSettingsWindow, dismissUpdate]);
 `;
   const result = patchStartupUpdateAction(source);
-  assert.match(result, /startDownload/);
-  assert.match(result, /update\.upgradeTo/);
+  assert.match(result, /openSettingsWindow/);
+  assert.doesNotMatch(result, /startDownload|dismissUpdate/);
 });

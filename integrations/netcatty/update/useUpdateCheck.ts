@@ -103,26 +103,10 @@ export function useUpdateCheck(options?: { autoUpdateEnabled?: boolean; enabled?
     if (bridge?.openExternal) void bridge.openExternal(url);
     else window.open(url, '_blank', 'noopener,noreferrer');
   }, [updateState.latestRelease]);
-  const installUpdate = useCallback(() => {
-    if (enabled) netcattyBridge.get()?.installUpdate?.();
-  }, [enabled]);
-  const startDownload = useCallback(async () => {
-    if (!enabled || updateState.autoDownloadStatus === 'downloading' || updateState.autoDownloadStatus === 'ready') return;
-    try {
-      const bridge = netcattyBridge.get();
-      if (!bridge?.downloadUpdate) throw new Error('桌面下载接口不可用。');
-      const result = await checkNow();
-      if (!result) return;
-      if (result.error) throw new Error(result.error);
-      if (!result.hasUpdate) return;
-      setUpdateState(prev => ({ ...prev, autoDownloadStatus: 'downloading', downloadPercent: 0, downloadError: null }));
-      const download = await bridge.downloadUpdate();
-      if (!download.success) throw new Error(download.error || '更新下载失败。');
-      setUpdateState(prev => ({ ...prev, autoDownloadStatus: 'ready', downloadPercent: 100 }));
-    } catch (error) {
-      setUpdateState(prev => ({ ...prev, autoDownloadStatus: 'error', downloadError: error instanceof Error ? error.message : String(error) }));
-    }
-  }, [enabled, updateState.autoDownloadStatus, checkNow]);
+  // 集成版只提示上游新版本：上游官方安装包不含 Cmdb，下载/安装会覆盖 Cmdb，因此不调用桌面下载与安装接口，
+  // 也不跳转上游下载页。保留两个函数供宿主组件调用，界面上的下载/安装入口由装配补丁移除。
+  const installUpdate = useCallback(() => {}, []);
+  const startDownload = useCallback(async () => {}, []);
 
   return { updateState, checkNow, openReleasePage, installUpdate, startDownload };
 }
