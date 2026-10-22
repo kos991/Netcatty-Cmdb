@@ -139,6 +139,14 @@ export async function collectCmdbCloudSnapshot(
 ): Promise<CmdbSyncSnapshot | undefined> {
   const settings = readCmdbCloudSyncSettings();
   if (!settings.enabled) return undefined;
+  // 每次宿主同步（含自动同步）都先补传待上传附件，附件状态写回后再导出快照，
+  // 这样另一台电脑拿到的工单附件记录已是“已同步”，可以从 S3 下载。
+  try {
+    const result = await runCmdbAttachmentCloudSyncHook() as { failed?: number; failures?: unknown } | undefined;
+    if (Number(result?.failed) > 0) console.warn('Cmdb 附件补传存在失败项:', result?.failures);
+  } catch (error) {
+    console.warn('Cmdb 附件补传失败:', error);
+  }
   const result = await request({
     path: '/api/cmdb/sync/export',
     method: 'POST',
@@ -148,6 +156,23 @@ export async function collectCmdbCloudSnapshot(
     }),
   });
   return result as CmdbSyncSnapshot;
+}
+
+/**
+ * 宿主“清空本地数据”时一并清空本机 Cmdb：服务端先备份数据库，再清空业务数据与本地附件，
+ * 不写删除记录、不改动云端；同时清掉同步状态，下次同步从云端下载。
+ */
+export async function wipeLocalCmdbData(
+  request: CmdbNativeRequester = nativeRequest,
+): Promise<{ backup_path?: string }> {
+  const result = await request({
+    path: '/api/cmdb/sync/local-wipe',
+    method: 'POST',
+    suppressCloudSync: true,
+    body: JSON.stringify({ confirm: 'wipe-local-cmdb' }),
+  }) as { backup_path?: string };
+  writeCmdbCloudSyncSettings({ lastStatus: undefined, lastSyncedAt: undefined, lastError: undefined });
+  return result;
 }
 
 export async function applyCmdbCloudSnapshot(

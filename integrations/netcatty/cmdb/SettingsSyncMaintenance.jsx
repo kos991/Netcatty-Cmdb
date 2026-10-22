@@ -41,7 +41,7 @@ export default function SettingsSyncMaintenance({ project }) {
         {result && <SettingRow label="上次迁入结果" description={`新增组织 ${result.org_inserted ?? 0}，新增终端资产 ${result.asset_inserted ?? 0}，新增基础设施 ${result.server_inserted ?? 0}，跳过已有记录 ${result.skipped ?? 0}`}><span className="text-xs text-muted-foreground">接口执行结果</span></SettingRow>}
       </SettingCard>
     </SettingsSection>
-    <ConfirmDialog open={confirmEnable} onOpenChange={setConfirmEnable} title="启用 Cmdb 云同步" message="资产、组织及联系电话、IP、工单和履历将统一进入 Netcatty 现有端到端加密同步载荷。工单附件仅在宿主已解锁且 S3 可用时加密补传；密码和密钥不会写入 Cmdb。同步执行与状态由宿主管理。" confirmLabel="启用" busy={action.busy} onConfirm={() => update(true)} />
+    <ConfirmDialog open={confirmEnable} onOpenChange={setConfirmEnable} title="启用 Cmdb 云同步" message="资产、组织及联系电话、IP、工单和履历将统一进入 Netcatty 现有端到端加密同步载荷。每次同步前，工单附件会在宿主已解锁且 S3 已连接时加密补传。另一台电脑首次同步时，如果本机 Cmdb 还没有数据，会自动接入云端项目并下载数据；本机已有数据时不会合并两个项目，会在此处提示。密码和密钥不会写入 Cmdb。" confirmLabel="启用" busy={action.busy} onConfirm={() => update(true)} />
     <Dialog open={preview} onOpenChange={(open) => { if (!action.busy) setPreview(open) }}>
       <DialogContent className="cmdb-theme-scope cmdb-record-shell cmdb-settings-dialog flex w-[min(600px,calc(100vw-32px))] max-h-[min(720px,calc(100vh-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
         <DialogHeader className="cmdb-record-header"><div className="min-w-0 pr-6"><DialogTitle>旧台账迁入预览</DialogTitle><p className="cmdb-settings-dialog-note">确认后按当前项目执行幂等迁入，已有映射的记录跳过。</p></div></DialogHeader>

@@ -819,8 +819,6 @@ update("application/app/AppSideEffects.tsx", (source) => replaceOnce(
     return handleSyncNow({ trigger: 'manual' });
   }, [handleSyncNow]);
 
-  const attachmentCloudSyncRunnerRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
-
   useEffect(() => {
     let disposed = false;
     let unregisterAttachmentCloudSync;
@@ -846,30 +844,19 @@ update("application/app/AppSideEffects.tsx", (source) => replaceOnce(
           cmdbSyncAttachments: (payload) => bridge.cmdbSyncAttachments(payload),
         },
       });
+      // 附件补传在 collectCmdbCloudSnapshot 中执行，覆盖手动同步与宿主自动同步。
       unregisterAttachmentCloudSync = cloudSync.registerCmdbAttachmentCloudSyncHook(sync.syncPending);
-      attachmentCloudSyncRunnerRef.current = () => cloudSync.runCmdbAttachmentCloudSyncHook();
     }).catch((error) => {
       console.warn('Cmdb 附件补传初始化失败:', error);
     });
     return () => {
       disposed = true;
       unregisterAttachmentCloudSync?.();
-      attachmentCloudSyncRunnerRef.current = () => Promise.resolve();
     };
   }, []);
 
   useEffect(() => {
-    const handleCmdbSyncRequest = () => {
-      // 附件状态必须先写回本地 Cmdb，再生成云同步快照，避免快照遗漏刚补传的状态。
-      void attachmentCloudSyncRunnerRef.current().then((result) => {
-        const syncResult = result as { failed?: number; failures?: unknown } | undefined;
-        if (Number(syncResult?.failed) > 0) console.warn('Cmdb 附件补传存在失败项:', syncResult?.failures);
-        return handleSyncNowManual();
-      }).catch((error) => {
-        console.warn('Cmdb 附件补传失败:', error);
-        return handleSyncNowManual();
-      });
-    };
+    const handleCmdbSyncRequest = () => { void handleSyncNowManual(); };
     window.addEventListener('netcatty:cmdb-cloud-sync-request', handleCmdbSyncRequest);
     const unsubscribe = netcattyBridge.get()?.onSettingsChanged?.((payload) => {
       if (payload?.key === 'netcatty.cmdb.cloudSync.request') handleCmdbSyncRequest();
@@ -882,6 +869,30 @@ update("application/app/AppSideEffects.tsx", (source) => replaceOnce(
 
   // Update check hook`,
   "application/app/AppSideEffects.tsx",
+));
+
+// 宿主“清空本地数据”只清 Vault 与端口转发；集成版同时清空本机 Cmdb（服务端先备份，不动云端）。
+update("components/settings/tabs/SettingsSyncTab.tsx", (source) => replaceOnce(
+  replaceOnce(
+    source,
+    'import { SettingsTabContent } from "../settings-ui";',
+    'import { SettingsTabContent } from "../settings-ui";\nimport { toast } from "../../ui/toast";',
+    "components/settings/tabs/SettingsSyncTab.tsx",
+  ),
+  "  const clearAllLocalData = useCallback(() => {\n    clearVaultData();\n    importPortForwardingRules([]);\n  }, [clearVaultData, importPortForwardingRules]);",
+  `  const clearAllLocalData = useCallback(() => {
+    clearVaultData();
+    importPortForwardingRules([]);
+    void import("../../../application/CmdbCloudSync")
+      .then(({ wipeLocalCmdbData }) => wipeLocalCmdbData())
+      .then((result) => {
+        toast.success(result?.backup_path ? \`本机 Cmdb 数据已清空，备份：\${result.backup_path}\` : "本机 Cmdb 数据已清空", "Cmdb");
+      })
+      .catch((error) => {
+        toast.error(\`本机 Cmdb 数据清空失败：\${error instanceof Error ? error.message : String(error)}\`, "Cmdb");
+      });
+  }, [clearVaultData, importPortForwardingRules]);`,
+  "components/settings/tabs/SettingsSyncTab.tsx",
 ));
 
 // AsidePanel remains the sole numeric-width and persistence owner; callers only observe its rendered width.
