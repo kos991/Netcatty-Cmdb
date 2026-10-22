@@ -231,16 +231,17 @@
           const icon = element('span', 'asset-terminal-icon');
           if (logo) icon.append(logo);
           const lines = element('span', 'asset-terminal-lines');
-          const primaryText = text(column.key === 'vendor_model' ? row.vendor : row.os);
+          const primaryText = text(column.key === 'vendor_model' ? row.vendor || row.model : row.os);
           const primary = element('span', 'asset-primary', primaryText);
           primary.title = primaryText;
           lines.append(primary);
-          if (column.key === 'vendor_model' && row.model) {
+          if (column.key === 'vendor_model' && row.vendor && row.model) {
             const model = element('span', 'asset-secondary', row.model);
             model.title = row.model;
             lines.append(model);
           }
-          stack.append(icon, lines);
+          if (column.key === 'os' || logo) stack.append(icon);
+          stack.append(lines);
           cell.append(stack);
         } else {
           const primary = element('span', 'asset-primary' + (/ip$/i.test(column.key) ? ' asset-ip' : ''), value);

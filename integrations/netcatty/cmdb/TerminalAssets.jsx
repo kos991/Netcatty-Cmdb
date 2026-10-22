@@ -144,7 +144,7 @@ function AssetDetails({ id, host, onEdit, onArchive, onClose, onNetcattyChanged,
       ['设备类型', asset.device_type || '-'],
       [serial.primaryLabel, serial.primaryValue || '-'],
       ...(serial.secondaryValue ? [[serial.secondaryLabel, serial.secondaryValue]] : []),
-      ...terminalBrandFields(asset.device_type).map(({ key, label }) => [label, key === 'vendor' ? <VendorBrandValue value={asset.vendor} model={asset.model} /> : asset[key]]),
+      ...terminalBrandFields(asset.device_type).map(({ key, label }) => [label, key === 'vendor' ? (asset.vendor ? <VendorBrandValue value={asset.vendor} /> : '未配置') : asset[key]]),
       ...terminalHardwareFields(asset.device_type).filter(({ key }) => !['vendor', 'model'].includes(key)).map(({ key, label }) => [label, asset[key]]),
       ['设备状态', asset.status || '-'],
       ['建档时间', asset.created_at || '-'],
@@ -519,20 +519,12 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   const columns = [
     {
-      key: 'asset_code', label: '设备名称 / 资产编码 / SN', headerTitle: '设备名称 / 资产编码 / SN', width: 220, sticky: 'left', className: 'whitespace-nowrap', headerClassName: 'cmdb-asset-identity-header',
-      render: (value, row) => {
+      key: 'asset_code', label: '设备名称 / SN', headerTitle: '设备名称 / SN', width: 220, sticky: 'left', className: 'whitespace-nowrap', headerClassName: 'cmdb-asset-identity-header',
+      render: (_, row) => {
         const name = (row.asset_name || '').trim()
-        const code = (value || '').trim()
-        const serial = terminalSerialProfile(row)
-        const boxSN = (serial.primaryValue || '').trim()
-        const displaySN = (serial.secondaryValue || '').trim()
-        const serialValue = boxSN || displaySN
-        const title = name || code || serialValue || '未命名设备'
-        // 首行已展示名称或编号时，副行不再重复编号；无名称时编号即首行，副行只保留 SN。
-        const lines = name
-          ? [code && code !== title ? code : '', serialValue].filter(Boolean)
-          : [serialValue].filter(Boolean)
-        const subtitle = lines.length ? lines.join(' · ') : '未配置 SN'
+        const serialValue = (row.box_sn || '').trim()
+        const title = name || '未命名设备'
+        const subtitle = serialValue || '未配置 SN'
         return <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
             <Button type="button" variant="link" title={title} className="h-auto min-w-0 max-w-full justify-start truncate whitespace-nowrap p-0 text-left text-xs font-semibold" onClick={() => setDetailId(row.id)}>{title}</Button>

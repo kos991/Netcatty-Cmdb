@@ -29,7 +29,7 @@ try {
   await page.getByText('Cmdb', { exact: true }).first().click()
   await page.reload()
   await page.getByText('Cmdb', { exact: true }).first().click()
-  const search = page.getByPlaceholder('搜索名称、资产编号、SN、IP 或使用人')
+  const search = page.getByPlaceholder('搜索设备名称、资产编码、SN、IP 或使用人')
   await search.fill(demoCode)
   await search.press('Enter')
   const row = page.locator('tr').filter({ has: page.getByRole('button', { name: demoCode, exact: true }) })

@@ -98,8 +98,8 @@ export function VendorBrandValue({ value = '', model = '', className = '', compa
   return <div className={`flex min-w-0 items-center gap-2 ${className}`} title={text || undefined}>
     <VendorBrandIcon value={value} context={{ model }} />
     {stacked ? <div className="min-w-0 leading-[1.45]">
-      <p className="truncate" title={brand || undefined}>{brand || '-'}</p>
-      <p className="mt-0.5 truncate text-[10px] text-muted-foreground" title={modelText || undefined}>{modelText || '-'}</p>
+      {brand ? <p className="truncate" title={brand}>{brand}</p> : null}
+      <p className={`truncate ${brand ? 'mt-0.5 text-[10px] text-muted-foreground' : 'text-xs'}`} title={modelText || undefined}>{modelText || (brand ? '未配置型号' : '未配置')}</p>
     </div> : <span className="truncate">{(compact ? shortModelLabel(brand, modelText) : text) || '-'}</span>}
   </div>
 }
