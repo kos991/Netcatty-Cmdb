@@ -72,11 +72,11 @@ test('只有台式机和笔记本提供可保存的计算硬件字段', () => {
   for (const type of ['打印机', '网络打印机', '云桌面', '云盒', '']) assert.deepEqual(terminalHardwareFields(type), [])
 })
 
-test('打印机只提供品牌与型号，不提供计算硬件', () => {
-  for (const type of ['打印机', '网络打印机']) {
+test('所有实体终端提供品牌与型号，计算硬件仍按设备类型显示', () => {
+  for (const type of ['台式机', '笔记本', '打印机', '网络打印机', '云桌面', '云桌面终端', '云桌面盒子', '云盒', '盒子', '一体机', '自定义实体终端']) {
     assert.deepEqual(terminalBrandFields(type).map(({ key }) => key), ['vendor', 'model'])
   }
-  assert.deepEqual(terminalBrandFields('云桌面'), [])
+  for (const type of ['云桌面', '云桌面盒子', '云盒', '盒子', '打印机']) assert.deepEqual(terminalHardwareFields(type), [])
   assert.deepEqual(terminalBrandFields(''), [])
 })
 

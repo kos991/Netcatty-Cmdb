@@ -593,7 +593,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
         <AssetPanelSection title="网络与系统" icon={Network}><Fields fields={fields.filter(({ key }) => ['ip', 'terminal_ip', 'net_type', 'os_type', 'os_version', 'remark'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
       </AssetFormPanel>
       <AssetFormPanel active={formTab === 'hardware'} section="hardware">
-        <AssetPanelSection title="硬件信息" icon={Cpu}>{fields.some(field => ['vendor', 'model', 'cpu_info', 'memory_mb', 'disk_info'].includes(field.key)) ? <Fields fields={fields.filter(field => ['vendor', 'model', 'cpu_info', 'memory_mb', 'disk_info'].includes(field.key))} value={values} onChange={setValues} /> : <p className="text-xs text-muted-foreground">当前设备类型没有专属硬件录入项；切换为台式机、笔记本或打印机后可填写品牌与型号。</p>}</AssetPanelSection>
+        <AssetPanelSection title="硬件信息" icon={Cpu}>{fields.some(field => ['vendor', 'model', 'cpu_info', 'memory_mb', 'disk_info'].includes(field.key)) ? <Fields fields={fields.filter(field => ['vendor', 'model', 'cpu_info', 'memory_mb', 'disk_info'].includes(field.key))} value={values} onChange={setValues} /> : <p className="text-xs text-muted-foreground">选择设备类型后可填写品牌与型号；CPU、内存和磁盘按适用设备类型显示。</p>}</AssetPanelSection>
       </AssetFormPanel>
       <AssetFormPanel active={formTab === 'credentials'} section="credentials">
         <AssetPanelSection title="凭证中心" icon={KeyRound}><NetcattyConnectionFields asset={{ name: values.asset_name || values.asset_code, ip: values.ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection>

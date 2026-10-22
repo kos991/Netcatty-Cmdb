@@ -94,11 +94,9 @@ export function terminalHardwareFields(deviceType) {
   return /台式|笔记本/.test(clean(deviceType)) && !isCloudDevice(deviceType) ? TERMINAL_HARDWARE_FIELDS : []
 }
 
-// 打印机与电脑共用品牌/型号（原型要求），但不提供 CPU、内存、磁盘。
+// 所有实体终端共用品牌/型号；计算硬件仍由 terminalHardwareFields 按设备类型决定。
 export function terminalBrandFields(deviceType) {
-  const type = clean(deviceType)
-  const branded = (/台式|笔记本/.test(type) && !isCloudDevice(type)) || /打印机/.test(type)
-  return branded ? TERMINAL_HARDWARE_FIELDS.filter(({ key }) => key === 'vendor' || key === 'model') : []
+  return clean(deviceType) ? TERMINAL_HARDWARE_FIELDS.filter(({ key }) => key === 'vendor' || key === 'model') : []
 }
 
 export function terminalBusinessNetworkType(asset = {}) {

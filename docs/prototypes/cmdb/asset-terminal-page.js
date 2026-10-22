@@ -1,7 +1,7 @@
 (() => {
   const cloud = (row) => /云桌面|云盒|盒子/.test(row.type || '');
   const computer = (row) => /台式|笔记本/.test(row.type || '');
-  const branded = (row) => computer(row) || /打印机/.test(row.type || '');
+  const branded = (row) => Boolean(String(row.type || '').trim());
   const printerBrands = ['奔图 PANTUM', '立思辰', '联想', '得力', '映美', '惠普', '佳能', '爱普生', '兄弟', '富士胶片', '理光', '京瓷'];
   const vendorOptions = () => [...new Set([
     ...(window.cmdbSettingsPreviewCatalogs?.models?.entries || []).map((entry) => entry.vendor),
@@ -55,7 +55,7 @@
     groups: [
       { title: '设备档案', fields: [
         { key: 'name', label: '设备名称' }, { key: 'code', label: '资产编号' },
-        { key: 'type', label: '设备类型', kind: 'select', options: ['云桌面', '云盒', '台式机', '笔记本', '打印机'], required: true },
+        { key: 'type', label: '设备类型', kind: 'select', options: ['云桌面', '云桌面盒子', '云盒', '台式机', '笔记本', '一体机', '打印机'], required: true },
         { key: 'sn', label: '设备 SN', when: (row) => !cloud(row) },
         { key: 'sn', label: '终端主机 SN', when: cloud }, { key: 'display_sn', label: '显示器 SN', when: cloud },
         { key: 'status', label: '设备状态', kind: 'select', options: ['使用', '闲置', '维修中', '已注销'] },
@@ -72,8 +72,8 @@
         { key: 'ip', label: '设备 IP', when: (row) => !cloud(row) }, { key: 'ip', label: '业务 / 虚拟机 IP', when: cloud },
         { key: 'physical_ip', label: '终端物理 IP', when: cloud },
         { key: 'network', label: 'IP 网络类型', kind: 'select', options: ['专网', '内网', '外网', '未配置'] },
-        { key: 'os', label: '操作系统', kind: 'select', options: ['统信 UOS', '银河麒麟', 'Windows 11', 'Windows 10', '不适用'] },
-        { key: 'os_version', label: '系统版本' }, { key: 'remark', label: '备注', kind: 'textarea' },
+        { key: 'os', label: '操作系统类型', kind: 'select', options: ['统信 UOS', '银河麒麟', 'Windows 11', 'Windows 10', '不适用'] },
+        { key: 'os_version', label: '操作系统版本' }, { key: 'remark', label: '备注', kind: 'textarea' },
       ] },
     ],
     operations: [
