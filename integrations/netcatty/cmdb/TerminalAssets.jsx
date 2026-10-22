@@ -2,13 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { createPortal } from 'react-dom'
 
-import { Archive, ArrowLeftRight, Cpu, History, Image as ImageIcon, KeyRound, MapPin, Monitor, MonitorCog, MoreHorizontal, Network, Pencil, RotateCcw, Wrench } from 'lucide-react'
+import { Archive, ArrowLeftRight, Cpu, History, Image as ImageIcon, KeyRound, MapPin, Monitor, MonitorCog, Network, RotateCcw, Wrench } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
-import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 
 import { Spinner } from '@/components/ui/spinner'
 
@@ -20,9 +19,10 @@ import { choices, Fields, textFields, validateFields } from './Fields'
 
 import { formatDepartmentName, isCloudDevice, normalizeAsset, nowText, terminalSerialProfile } from './state'
 
-import { ActionIcon, AssetNameCell, DataTable, EmptyState, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
+import { ActionIcon, DataTable, EmptyState, ErrorBanner, ModalForm, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
 
 import AssetTransferMenu from './AssetTransferMenu'
+import AssetRowActions from './AssetRowActions'
 
 import NetcattyConnectionFields, { useNetcattyConnectionEditor } from './NetcattyConnectionFields'
 
@@ -30,7 +30,9 @@ import NetcattyLinks from './NetcattyLinks'
 
 import DeviceImages from './DeviceImages'
 
-import { AssetPanel, AssetPanelFields, AssetPanelSave, AssetPanelSection } from './AssetPanel'
+import { AssetPanel, AssetPanelFields, AssetPanelSave, AssetPanelSection, useAssetPanelLayout } from './AssetPanel'
+import { AssetDraftDiscardDialog, AssetFormPanel, AssetFormTabs, useAssetDraftGuard } from './AssetFormTabs'
+import AssetCreateDialog from './AssetCreateDialog'
 
 import OperatingSystemCell from './OperatingSystemCell'
 
@@ -42,10 +44,11 @@ import { AssetDetailTabBar } from './AssetDetailTabs'
 import { useNetcattyDirectory } from './NetcattyDirectory'
 
 import { syncFollowingNetcattyHosts } from './NetcattyConnection'
-import { terminalBusinessNetworkType, terminalHardwareFields, terminalNetworkRows, visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
+import { networkTypeColor, terminalBrandFields, terminalBusinessNetworkType, terminalHardwareFields, terminalNetworkRows, visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
 import { hardwareField, useHardwareDrafts } from './HardwareFields'
 import InfrastructureQuickConnect from './InfrastructureQuickConnect'
 import { VendorBrandValue } from './VendorBrandIcon'
+import VendorBrandInput from './VendorBrandInput'
 
 
 
@@ -59,7 +62,7 @@ const loadDirectory = async () => {
     categories: categories.list || [],
     departments: meta.departments || [],
     rooms: meta.rooms || [],
-    networkTypes: [...new Set([...(networkTypes.list || []).map((item) => item.name), ...(meta.asset_network_types || [])])],
+    networkTypes: (networkTypes.list || []),
     assetUsers: meta.asset_users || [],
     assetDeviceTypes: meta.asset_device_types || [],
     assetOSTypes: meta.asset_os_types || [],
@@ -94,6 +97,13 @@ const terminalOperatingSystemTypes = ['Windows 11', 'Windows 10', 'Windows', '�
 
 
 const TERMINAL_TABS = buildDeviceWorkspaceTabs('terminal', true)
+const TERMINAL_FORM_TABS = [
+  { key: 'basic', label: '基本信息' },
+  { key: 'ownership', label: '归属与位置' },
+  { key: 'network', label: '网络与系统' },
+  { key: 'hardware', label: '硬件信息' },
+  { key: 'credentials', label: '凭证中心' },
+]
 
 function TerminalIPAM({ asset, relations, onNavigate }) {
   const cloud = isCloudDevice(asset.device_type)
@@ -109,7 +119,7 @@ function TerminalIPAM({ asset, relations, onNavigate }) {
   })
 }
 
-function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged, onNavigate }) {
+function AssetDetails({ id, host, onEdit, onArchive, onClose, onNetcattyChanged, onNavigate, expanded, onExpandedChange, onWidthChange }) {
   const loader = useCallback(async () => {
     const [detail, relations] = await Promise.all([api.asset(id), api.assetRelations(id)])
     return { ...detail, relations }
@@ -118,23 +128,24 @@ function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged, onNavigate
   const [tab, setTab] = useState(TERMINAL_TABS.defaultTab)
   useEffect(() => { setTab(TERMINAL_TABS.defaultTab) }, [id])
 
-  if (query.error) return <AssetPanel open onClose={onClose} title="终端资产"><ErrorBanner message={query.error} onRetry={query.reload} /></AssetPanel>
-  if (!query.data) return <AssetPanel open onClose={onClose} title="终端资产"><Spinner /></AssetPanel>
+  if (query.error) return <AssetPanel open expanded={expanded} onExpandedChange={onExpandedChange} onWidthChange={onWidthChange} onClose={onClose} title="终端资产"><ErrorBanner message={query.error} onRetry={query.reload} /></AssetPanel>
+  if (!query.data) return <AssetPanel open expanded={expanded} onExpandedChange={onExpandedChange} onWidthChange={onWidthChange} onClose={onClose} title="终端资产"><Spinner /></AssetPanel>
 
   const { asset, logs } = query.data
   const serial = terminalSerialProfile(asset)
   const roomText = asset.room ? (String(asset.room).endsWith('室') ? String(asset.room) : `${asset.room}室`) : '未登记'
-  const ownerActions = <div className="flex gap-1"><ActionIcon label="调换使用人" onClick={() => onEdit('transfer', asset)}><ArrowLeftRight size={15} /></ActionIcon><ActionIcon label="维修换件" onClick={() => onEdit('maintenance', asset)}><Wrench size={15} /></ActionIcon></div>
+  const ownerActions = <><ActionIcon label="调换使用人" onClick={() => onEdit('transfer', asset)}><ArrowLeftRight size={15} /></ActionIcon><ActionIcon label="维修换件" onClick={() => onEdit('maintenance', asset)}><Wrench size={15} /></ActionIcon><ActionIcon label="注销归档" onClick={() => onArchive(asset)}><Archive size={15} /></ActionIcon></>
 
-  return <AssetPanel open onClose={onClose} title={asset.asset_name || asset.asset_code || '未命名设备'} subtitle={[asset.asset_code, asset.device_type].filter(Boolean).join(' · ')} status={asset.status} icon={Monitor} onEdit={() => onEdit('edit', asset)} actions={ownerActions} tabs={<AssetDetailTabBar tabs={TERMINAL_TABS.tabs} value={tab} onChange={setTab} panelId="terminal-detail-content" dataSection="terminal-detail-tabs" />}>
+  return <AssetPanel open expanded={expanded} onExpandedChange={onExpandedChange} onWidthChange={onWidthChange} onClose={onClose} title={asset.asset_name || asset.asset_code || '未命名设备'} subtitle={[asset.asset_code, asset.device_type].filter(Boolean).join(' · ')} status={asset.status} icon={Monitor} onEdit={() => onEdit('edit', asset)} actions={ownerActions} tabs={<AssetDetailTabBar tabs={TERMINAL_TABS.tabs} value={tab} onChange={setTab} panelId="terminal-detail-content" dataSection="terminal-detail-tabs" />}>
     <div id="terminal-detail-content" role="tabpanel" aria-labelledby={`terminal-detail-tabs-${tab}`} className="space-y-3">
     {tab === 'hardware' ? <AssetPanelSection title="硬件信息" icon={Cpu}><AssetPanelFields items={[
       ['设备名称', asset.asset_name || '-'],
-      ['资产编码', asset.asset_code || '-'],
+      ['资产编号', asset.asset_code || '未配置'],
       ['设备类型', asset.device_type || '-'],
       [serial.primaryLabel, serial.primaryValue || '-'],
       ...(serial.secondaryValue ? [[serial.secondaryLabel, serial.secondaryValue]] : []),
-      ...terminalHardwareFields(asset.device_type).map(({ key, label }) => [label, key === 'vendor' ? <VendorBrandValue value={asset.vendor} /> : asset[key]]),
+      ...terminalBrandFields(asset.device_type).map(({ key, label }) => [label, key === 'vendor' ? <VendorBrandValue value={asset.vendor} model={asset.model} /> : asset[key]]),
+      ...terminalHardwareFields(asset.device_type).filter(({ key }) => !['vendor', 'model'].includes(key)).map(({ key, label }) => [label, asset[key]]),
       ['设备状态', asset.status || '-'],
       ['建档时间', asset.created_at || '-'],
     ]} /></AssetPanelSection> : null}
@@ -162,25 +173,6 @@ function AssetDetails({ id, host, onEdit, onClose, onNetcattyChanged, onNavigate
   </AssetPanel>
 }
 
-function TerminalRowActions({ onDetail, onEdit, onTransfer, onMaintenance, onArchive }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  return (
-    <div className="flex items-center gap-0.5">
-      <ActionIcon label="编辑" onClick={onEdit}><Pencil size={14} /></ActionIcon>
-      <ActionIcon label="调换使用人" onClick={onTransfer}><ArrowLeftRight size={14} /></ActionIcon>
-      <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
-        <DropdownTrigger asChild>
-          <ActionIcon label="更多操作"><MoreHorizontal size={14} /></ActionIcon>
-        </DropdownTrigger>
-        <DropdownContent align="end" className="w-36">
-          <button type="button" className="flex h-8 w-full items-center gap-2 rounded px-2 text-xs hover:bg-secondary" onClick={() => { setMenuOpen(false); onDetail() }}><History size={14} />详情与履历</button>
-          <button type="button" className="flex h-8 w-full items-center gap-2 rounded px-2 text-xs hover:bg-secondary" onClick={() => { setMenuOpen(false); onMaintenance() }}><Wrench size={14} />维修换件</button>
-          <button type="button" className="flex h-8 w-full items-center gap-2 rounded px-2 text-xs text-destructive hover:bg-secondary" onClick={() => { setMenuOpen(false); onArchive() }}><Archive size={14} />注销归档</button>
-        </DropdownContent>
-      </Dropdown>
-    </div>
-  )
-}
 
 export default function TerminalAssets({ keyword = '', focusTarget, command, leadingControl, headerActions, filtersExpanded = true, onFiltersExpandedChange, onPanelOpenChange, onNavigate }) {
 
@@ -199,8 +191,9 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
   const [detailRevision, setDetailRevision] = useState(0)
 
   const [editor, setEditor] = useState(null)
-
-  const hardwareDrafts = useHardwareDrafts(editor || 'new-terminal')
+  const [editorBaseline, setEditorBaseline] = useState(null)
+  const [formTab, setFormTab] = useState('basic')
+  const [panelExpanded, setPanelExpanded] = useState(false)
 
   const [values, setValues] = useState({})
 
@@ -211,7 +204,11 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   const [autoDetectError, setAutoDetectError] = useState('')
 
-  useEffect(() => { onPanelOpenChange?.(!!detailId || !!editor) }, [detailId, editor, onPanelOpenChange])
+  useEffect(() => { setPanelExpanded(false) }, [detailId, editor])
+  const hasSidePanel = !!detailId || !!editor && (editor.mode !== 'edit' || !!editor.record.id)
+  const panelLayout = useAssetPanelLayout(hasSidePanel, panelExpanded, onPanelOpenChange)
+  const closeEditor = useCallback(() => { setEditor(null); setEditorBaseline(null) }, [])
+  const draftGuard = useAssetDraftGuard(editorBaseline, values, closeEditor)
 
   const handledCommandId = useRef(null)
 
@@ -297,22 +294,51 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   useEffect(() => { setPage(1) }, [keyword])
 
-  useEffect(() => { if (focusTarget?.tableKey === 'assets') setDetailId(focusTarget.id) }, [focusTarget])
+  const [focusedRowID, setFocusedRowID] = useState(null)
+  useEffect(() => {
+    if (focusTarget?.tableKey !== 'assets') return undefined
+    setDetailId(focusTarget.id)
+    setFocusedRowID(focusTarget.id)
+    // 目标可能不在当前筛选或分页内：清空条件后逐页查找。
+    setFilters({ device_type: '', dept: '', user_name: '', room: '', net_type: '', os_type: '', status: '', include_archived: '' })
+    setPage(1)
+    const timer = setTimeout(() => setFocusedRowID(null), 8000)
+    return () => clearTimeout(timer)
+  }, [focusTarget])
+  useEffect(() => {
+    if (focusedRowID == null) return undefined
+    const list = query.data?.list || []
+    if (!list.length) return undefined
+    if (list.some((row) => String(row.id) === String(focusedRowID))) {
+      const frame = requestAnimationFrame(() => {
+        document.querySelector(`[data-row-key="${focusedRowID}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
+      return () => cancelAnimationFrame(frame)
+    }
+    // 目标不在当前页：一次取全量定位真实页码，避免逐页翻动。
+    let active = true
+    const locate = async () => {
+      const total = query.data?.total || 0
+      const response = await api.assets({ page: 1, page_size: Math.max(total, pageSize) })
+      if (!active) return
+      const index = (response.list || []).findIndex((row) => String(row.id) === String(focusedRowID))
+      if (index >= 0) setPage(Math.floor(index / pageSize) + 1)
+    }
+    void locate().catch(() => {})
+    return () => { active = false }
+  }, [focusedRowID, query.data, page, pageSize])
 
   const filter = (key, value) => { setFilters((old) => ({ ...old, [key]: value })); setPage(1) }
 
   const open = useCallback((mode, record = {}) => {
-
     if (mode === 'edit') void beginNetcattyConnection(record.id || 0)
-
-    setEditor({ mode, record })
-
-    setValues(mode === 'transfer' ? { to_room: record.room, date: nowText(), operator: '资产管理员' }
-
+    const next = mode === 'transfer' ? { to_room: record.room, date: nowText(), operator: '资产管理员' }
       : mode === 'maintenance' ? { part_type: 'box', maintenance_type: isCloudDevice(record.device_type) ? '更换终端主机' : '更换设备', old_sn: record.box_sn, new_status: record.status, mark_old_as: '故障待修入库', date: nowText(), operator: '运维技术员' }
-
-		: { asset_name: '', device_type: '', status: '在用', net_type: '', ...record })
-
+        : { asset_name: '', device_type: '', status: '在用', net_type: '', ...record }
+    setEditor({ mode, record })
+    setEditorBaseline(next)
+    setValues(next)
+    setFormTab('basic')
   }, [beginNetcattyConnection])
 
   useEffect(() => {
@@ -337,6 +363,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
     : [{ value: 'box', label: '设备' }, { value: 'other', label: '整机维修排障' }]
 
+  const hardwareDrafts = useHardwareDrafts(`${editor ? 'open' : 'closed'}:${editor?.record?.id || 'new-terminal'}`)
   const fields = editor?.mode === 'transfer' ? [
 
     { key: 'to_person_id', label: '新使用人', required: true, numeric: true, options: peopleOptions, derive: (id) => ({ to_department: d.people.find((p) => p.id === id)?.department || '' }) },
@@ -355,13 +382,14 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   ] : [
 
-		{ key: 'asset_name', label: '设备名称', placeholder: '留空自动生成：项目-简称-流水号' }, { key: 'asset_code', label: '资产编码' }, { key: 'device_type', label: '设备类型', required: true, searchable: true, options: choices([...new Set([...d.categories.map((item) => item.name), values.device_type].filter(Boolean))]) },
+    { key: 'asset_name', label: '设备名称', placeholder: '留空自动生成：项目-简称-流水号' }, { key: 'asset_code', label: '资产编号' }, { key: 'device_type', label: '设备类型', required: true, searchable: true, options: choices([...new Set([...d.categories.map((item) => item.name), values.device_type].filter(Boolean))]) },
 
     { key: 'box_sn', label: isCloudDevice(values.device_type) ? '终端主机 SN' : '设备 SN' },
 
     { key: 'display_sn', label: '显示器 SN', hidden: !isCloudDevice(values.device_type) },
 
     ...(/台式|笔记本/.test(String(values.device_type || '')) && !isCloudDevice(values.device_type) ? [hardwareField('cpu_info', 'CPU 配置', hardwareDrafts), hardwareField('memory_mb', '内存', hardwareDrafts), hardwareField('disk_info', '硬盘 / 磁盘配置', hardwareDrafts)] : []),
+    ...terminalBrandFields(values.device_type).map(({ key, label }) => ({ key, label, render: key === 'vendor' ? ({ current, onChange, props }) => <VendorBrandInput {...props} value={current} onChange={onChange} /> : undefined })),
 
     { key: 'person_id', label: '从人员目录选择', numeric: true, options: peopleOptions, derive: (id) => { const person = d.people.find((p) => p.id === id); return { user_name: person?.name || '', department: person?.department || '' } } },
 
@@ -369,7 +397,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
     { key: 'terminal_ip', label: '终端物理 IP', hidden: !isCloudDevice(values.device_type) },
 
-    { key: 'net_type', label: 'IP 网络类型', options: choices([...new Set([...d.networkTypes, values.net_type].filter(Boolean))]) },
+    { key: 'net_type', label: 'IP 网络类型', options: choices([...new Set([...d.networkTypes.map((item) => item.name), values.net_type].filter(Boolean))]) },
 
     { key: 'os_type', label: '操作系统类型', searchable: true, options: choices([...new Set([...terminalOperatingSystemTypes, values.os_type].filter(Boolean))]) },
 
@@ -407,7 +435,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
     }
 
-    setEditor(null); query.reload(); linkQuery.reload(); directoryChanged(); setDetailRevision((x) => x + 1)
+    closeEditor(); query.reload(); linkQuery.reload(); directoryChanged(); setDetailRevision((x) => x + 1)
 
   }, '已保存并记录履历')
 
@@ -491,32 +519,56 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   const columns = [
     {
-      key: 'asset_code', label: '设备名称 / 编号 / SN', width: 190, sticky: 'left', className: 'whitespace-nowrap',
-      render: (value, row) => <AssetNameCell title={row.asset_name || value || '未命名设备'} subtitle={`${value || '未配置编码'} · ${terminalSerialProfile(row).primaryValue || '未配置 SN'}`} onOpen={() => setDetailId(row.id)} />,
+      key: 'asset_code', label: '名称 / 编码 / SN', headerTitle: '设备名称 / 资产编号 / 设备SN', width: 190, sticky: 'left', className: 'whitespace-nowrap', headerClassName: 'cmdb-asset-identity-header',
+      render: (value, row) => {
+        const name = (row.asset_name || '').trim()
+        const code = (value || '').trim()
+        const serial = terminalSerialProfile(row)
+        const boxSN = (serial.primaryValue || '').trim()
+        const displaySN = (serial.secondaryValue || '').trim()
+        const serialValue = boxSN || displaySN
+        const title = name || code || serialValue || '未命名设备'
+        // 首行已展示名称或编号时，副行不再重复编号；无名称时编号即首行，副行只保留 SN。
+        const lines = name
+          ? [code && code !== title ? code : '', serialValue].filter(Boolean)
+          : [serialValue].filter(Boolean)
+        const subtitle = lines.length ? lines.join(' · ') : '未配置 SN'
+        return <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Button type="button" variant="link" title={title} className="h-auto min-w-0 max-w-full justify-start truncate whitespace-nowrap p-0 text-left text-xs font-semibold" onClick={() => setDetailId(row.id)}>{title}</Button>
+            <span className="h-2 w-2 shrink-0 rounded-full border border-border/70" style={{ backgroundColor: networkTypeColor(terminalBusinessNetworkType(row), d.networkTypes) }} title={`网络类型：${terminalBusinessNetworkType(row)}`} aria-label={`网络类型：${terminalBusinessNetworkType(row)}`} />
+          </div>
+          {subtitle ? <p title={subtitle} className="mt-1 truncate text-[10px] leading-[1.45] text-muted-foreground">{subtitle}</p> : null}
+        </div>
+      },
     },
     {
-      key: 'device_type', label: '设备类型', width: 100, className: 'whitespace-nowrap text-xs',
+      key: 'device_type', label: '设备类型', width: 90, className: 'whitespace-nowrap text-xs',
       render: (value) => value || '未配置',
     },
     {
-      key: 'owner_department', label: '使用人 / 部门', width: 135, className: 'whitespace-nowrap',
-      render: (_, row) => <div className="space-y-0.5 text-xs"><div>{row.user_name || '未分配使用人'}</div><div className="text-[11px] text-muted-foreground">{formatDepartmentName(row.department) || '未配置部门'}</div></div>,
+      key: 'vendor_model', label: '品牌 / 型号', width: 140, className: 'whitespace-nowrap',
+      render: (_, row) => <div className="min-w-0 truncate text-xs"><VendorBrandValue value={row.vendor} model={row.model} compact /></div>,
+    },
+    {
+      key: 'owner_department', label: '使用人 / 部门', width: 140, className: 'whitespace-nowrap',
+      render: (_, row) => <div className="min-w-0 text-xs"><div className="truncate" title={row.user_name || '未分配使用人'}>{row.user_name || '未分配使用人'}</div><div className="mt-1 truncate text-[10px] leading-[1.45] text-muted-foreground" title={formatDepartmentName(row.department) || '未配置部门'}>{formatDepartmentName(row.department) || '未配置部门'}</div></div>,
     },
     {
       key: 'room', label: '房间 / 位置', width: 90, className: 'whitespace-nowrap text-xs',
-      render: (value) => value || '未配置',
+      render: (value) => <span className="block truncate" title={value || '未配置'}>{value || '未配置'}</span>,
     },
     {
-      key: 'ip', label: 'IP 地址', width: 165, className: 'whitespace-nowrap',
+      key: 'ip', label: 'IP 地址', width: 145, className: 'whitespace-nowrap',
       render: (_, row) => { const addresses = terminalNetworkRows(row); return addresses.length ? <div className="space-y-0.5">{addresses.map((address) => <div key={address.key} className="flex min-w-0 items-center gap-1"><span className="truncate font-mono text-[11px]" title={`${address.label}：${address.ip}`}>{addresses.length > 1 ? `${address.key === 'business' ? '业务' : '终端'} ` : ''}{address.ip}</span><InfrastructureQuickConnect asset={row} address={address.ip} assetType="terminal" /></div>)}</div> : <span className="text-xs text-muted-foreground">未配置 IP</span> },
     },
     {
-      key: 'network_type', label: '网络类型', width: 105, className: 'whitespace-nowrap',
+      key: 'network_type', label: '网络类型', width: 85, className: 'whitespace-nowrap',
       render: (_, row) => <span className="block truncate text-xs text-muted-foreground">{terminalBusinessNetworkType(row)}</span>,
     },
-    { key: 'operating_system', label: '操作系统', width: 135, className: 'whitespace-nowrap', render: (_, row) => <OperatingSystemCell asset={row} host={linkedHostByAssetID.get(Number(row.id))} /> },
-    { key: 'status', label: '设备状态', width: 92, sticky: 'right', className: 'whitespace-nowrap', render: (value) => <StatusPill tone={value === '闲置' ? 'warning' : statusTone(value)}>{value || '未配置'}</StatusPill> },
-    { key: 'actions', label: '操作', width: 116, sticky: 'right', className: 'whitespace-nowrap', render: (_, row) => <TerminalRowActions onDetail={() => setDetailId(row.id)} onEdit={() => open('edit', row)} onTransfer={() => open('transfer', row)} onMaintenance={() => open('maintenance', row)} onArchive={() => setArchive(row)} /> },
+    { key: 'operating_system', label: '操作系统', width: 110, className: 'whitespace-nowrap', render: (_, row) => <OperatingSystemCell asset={row} host={linkedHostByAssetID.get(Number(row.id))} /> },
+    { key: 'status', label: '设备状态', width: 80, sticky: 'right', className: 'whitespace-nowrap', render: (value) => <StatusPill tone={value === '闲置' ? 'warning' : statusTone(value)}>{value || '未配置'}</StatusPill> },
+    { key: 'actions', label: '操作', width: 80, sticky: 'right', className: 'whitespace-nowrap', render: (_, row) => <AssetRowActions name={row.asset_name || row.asset_code || ''} onDetail={() => setDetailId(row.id)} onEdit={() => open('edit', row)} onTransfer={() => open('transfer', row)} onMaintenance={() => open('maintenance', row)} onArchive={() => setArchive(row)} /> },
   ]
 
   const columnByKey = Object.fromEntries(columns.map((column) => [column.key, column]))
@@ -527,21 +579,33 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     unconfiguredOption,
   ], '全部')
 
+  const editorMode = editor?.mode
+  const editorTabs = editorMode === 'edit' ? TERMINAL_FORM_TABS : [{ key: 'basic', label: editorMode === 'transfer' ? '交接信息' : '维修记录' }]
   const editorBody = editor ? <>
-    {editor.mode === 'edit' ? <>
-      <AssetPanelSection title="基本信息" icon={Monitor}><Fields fields={fields.filter(({ key }) => ['asset_name', 'asset_code', 'device_type', 'box_sn', 'display_sn', 'status'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
-      {fields.some(field => ['cpu_info', 'memory_mb', 'disk_info'].includes(field.key)) ? <AssetPanelSection title="硬件信息" icon={Cpu}><Fields fields={fields.filter(field => ['cpu_info', 'memory_mb', 'disk_info'].includes(field.key))} value={values} onChange={setValues} /></AssetPanelSection> : null}
-      <AssetPanelSection title="归属与位置" icon={MapPin}><Fields fields={fields.filter(({ key }) => ['person_id', 'user_name', 'department', 'room'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
-      <AssetPanelSection title="网络与系统" icon={Network}><Fields fields={fields.filter(({ key }) => ['ip', 'terminal_ip', 'net_type', 'os_type', 'os_version', 'remark'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
-      <AssetPanelSection title="凭证中心" icon={KeyRound}><NetcattyConnectionFields asset={{ name: values.asset_name || values.asset_code, ip: values.ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection>
-    </> : <AssetPanelSection title={editor.mode === 'transfer' ? '交接信息' : '维修记录'} icon={Monitor}><Fields fields={fields} value={values} onChange={setValues} /></AssetPanelSection>}
+    {editorMode === 'edit' ? <>
+      <AssetFormPanel active={formTab === 'basic'} section="basic">
+        <AssetPanelSection title="基本信息" icon={Monitor}><Fields fields={fields.filter(({ key }) => ['asset_name', 'asset_code', 'device_type', 'box_sn', 'display_sn', 'status'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
+      </AssetFormPanel>
+      <AssetFormPanel active={formTab === 'ownership'} section="ownership">
+        <AssetPanelSection title="归属与位置" icon={MapPin}><Fields fields={fields.filter(({ key }) => ['person_id', 'user_name', 'department', 'room'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
+      </AssetFormPanel>
+      <AssetFormPanel active={formTab === 'network'} section="network">
+        <AssetPanelSection title="网络与系统" icon={Network}><Fields fields={fields.filter(({ key }) => ['ip', 'terminal_ip', 'net_type', 'os_type', 'os_version', 'remark'].includes(key))} value={values} onChange={setValues} /></AssetPanelSection>
+      </AssetFormPanel>
+      <AssetFormPanel active={formTab === 'hardware'} section="hardware">
+        <AssetPanelSection title="硬件信息" icon={Cpu}>{fields.some(field => ['vendor', 'model', 'cpu_info', 'memory_mb', 'disk_info'].includes(field.key)) ? <Fields fields={fields.filter(field => ['vendor', 'model', 'cpu_info', 'memory_mb', 'disk_info'].includes(field.key))} value={values} onChange={setValues} /> : <p className="text-xs text-muted-foreground">当前设备类型没有专属硬件录入项；切换为台式机、笔记本或打印机后可填写品牌与型号。</p>}</AssetPanelSection>
+      </AssetFormPanel>
+      <AssetFormPanel active={formTab === 'credentials'} section="credentials">
+        <AssetPanelSection title="凭证中心" icon={KeyRound}><NetcattyConnectionFields asset={{ name: values.asset_name || values.asset_code, ip: values.ip }} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} /></AssetPanelSection>
+      </AssetFormPanel>
+    </> : <AssetFormPanel active section="basic"><AssetPanelSection title={editorMode === 'transfer' ? '交接信息' : '维修记录'} icon={Monitor}><Fields fields={fields} value={values} onChange={setValues} /></AssetPanelSection></AssetFormPanel>}
   </> : null
 
-  return <div className="flex min-h-0 flex-1 flex-col">
+  return <div className="cmdb-asset-page flex min-h-0 min-w-0 flex-1 flex-col">
 
     {headerActions && createPortal(<><AssetFilterPicker expanded={filtersExpanded} onExpandedChange={onFiltersExpandedChange} items={filterItems} visible={visibleFilters} onToggle={toggleFilter} /><AssetTransferMenu importTitle="导入终端资产" importer={api.importAssets} onImported={query.reload} exporter={() => api.exportAssets({ keyword, ...filters })} /></>, headerActions)}
 
-    <Toolbar hidden={!filtersExpanded}>
+    <Toolbar className="cmdb-asset-toolbar" hidden={!filtersExpanded}>
 
       {leadingControl}
 
@@ -553,7 +617,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
       {visibleFilters.includes('room') && <SelectControl prefix="位置" value={filters.room} onChange={(v) => filter('room', v)} options={choices([...d.rooms, unconfiguredOption], '全部')} className="w-36" />}
 
-      {visibleFilters.includes('net_type') && <SelectControl prefix="网络" value={filters.net_type} onChange={(v) => filter('net_type', v)} options={choices([...d.networkTypes, unconfiguredOption], '全部')} className="w-36" />}
+      {visibleFilters.includes('net_type') && <SelectControl prefix="网络" value={filters.net_type} onChange={(v) => filter('net_type', v)} options={choices([...d.networkTypes.map((item) => item.name), unconfiguredOption], '全部')} className="w-36" />}
 
       {visibleFilters.includes('os_type') && <SelectControl prefix="操作系统" value={filters.os_type} onChange={(v) => filter('os_type', v)} options={choices([...new Set([...terminalOperatingSystemTypes, ...d.assetOSTypes])].concat([unconfiguredOption]), '全部')} className="w-40" />}
 
@@ -582,15 +646,20 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
       </div>
     )}
 
-    <DataTable columns={visibleColumns} pinSelection compact={false} rows={query.error ? [] : query.data?.list || []} loading={query.loading} selected={selected} onSelectedChange={setSelected} />
+    <DataTable columns={visibleColumns} pinSelection assetLayout rows={query.error ? [] : query.data?.list || []} loading={query.loading} selected={selected} onSelectedChange={setSelected} highlightKey={focusedRowID} />
 
-    <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(p, s) => { setPage(p); setPageSize(s) }} />
-
-    {detailId && <AssetDetails onNavigate={onNavigate} key={`${detailId}-${detailRevision}`} id={detailId} host={linkedHostByAssetID.get(Number(detailId))} onClose={() => setDetailId(null)} onEdit={open} onNetcattyChanged={linkQuery.reload} />}
+    <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/70 px-4 py-2 text-xs text-muted-foreground">
+      <span>{`共 ${query.data?.total || 0} 条 · 第 ${page} / ${Math.max(1, Math.ceil((query.data?.total || 0) / pageSize))} 页`}</span>
+      <div className="flex items-center gap-2">
+        <SelectControl value={pageSize} onChange={(value) => { setPage(1); setPageSize(Number(value)) }} options={[10, 20, 50, 100].map((value) => ({ value, label: `${value} 条 / 页` }))} className="w-[108px] min-w-0" />
+        <Button type="button" variant="outline" className="h-[30px] px-3 text-xs" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</Button>
+        <Button type="button" variant="outline" className="h-[30px] px-3 text-xs" disabled={page >= Math.max(1, Math.ceil((query.data?.total || 0) / pageSize))} onClick={() => setPage(page + 1)}>下一页</Button>
+      </div>
+    </footer>
 
     {editor && (editor.mode === 'edit' && !editor.record.id
-      ? <ModalForm open title="新增终端资产" onOpenChange={(value) => { if (!value) setEditor(null) }} onSubmit={save} busy={action.busy || netcatty.loading} wide><div className="space-y-3">{editorBody}</div></ModalForm>
-      : <AssetPanel open onClose={() => setEditor(null)} title={editor.mode === 'transfer' ? '调换使用人' : editor.mode === 'maintenance' ? '维修换件' : '编辑终端资产'} subtitle={editor.record.asset_code} icon={Monitor} footer={<AssetPanelSave onCancel={() => setEditor(null)} onSave={save} busy={action.busy || netcatty.loading} />}>{editorBody}</AssetPanel>)}
+      ? <AssetCreateDialog open title="新增终端资产" onOpenChange={(value) => { if (!value) draftGuard.requestClose() }} busy={action.busy || netcatty.loading} icon={Monitor} tabs={editorTabs} tab={formTab} onTabChange={setFormTab} footer={<AssetPanelSave onCancel={draftGuard.requestClose} onSave={save} busy={action.busy || netcatty.loading} />}>{editorBody}</AssetCreateDialog>
+      : <AssetPanel open expanded={panelExpanded} onExpandedChange={setPanelExpanded} onWidthChange={panelLayout.onWidthChange} onClose={draftGuard.requestClose} title={editor.mode === 'transfer' ? '调换使用人' : editor.mode === 'maintenance' ? '维修换件' : '编辑终端资产'} subtitle={editor.record.asset_code} icon={Monitor} tabs={<AssetFormTabs tabs={editorTabs} value={formTab} onChange={setFormTab} dataSection="terminal-form-tabs" />} footer={<AssetPanelSave onCancel={draftGuard.requestClose} onSave={save} busy={action.busy || netcatty.loading} />}>{editorBody}</AssetPanel>)}
 
     {batchAction && (
       <ModalForm
@@ -610,7 +679,9 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     )}
 
     <ConfirmDialog open={!!archive} onOpenChange={(v) => { if (!v) setArchive(null) }} title="注销归档资产" message="资产资料和履历将保留，可通过“含已注销”查回。" confirmLabel="注销归档" destructive busy={action.busy} onConfirm={() => action.run(async () => { await api.archiveAsset(archive.id); setArchive(null); query.reload(); directoryChanged() }, '已注销归档')} />
+    <AssetDraftDiscardDialog guard={draftGuard} busy={action.busy} />
 
+  {detailId && !editor && <AssetDetails expanded={panelExpanded} onExpandedChange={setPanelExpanded} onWidthChange={panelLayout.onWidthChange} onNavigate={onNavigate} key={`${detailId}-${detailRevision}`} id={detailId} host={linkedHostByAssetID.get(Number(detailId))} onClose={() => setDetailId(null)} onEdit={open} onArchive={setArchive} onNetcattyChanged={linkQuery.reload} />}
   </div>
 
 }

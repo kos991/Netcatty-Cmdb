@@ -73,11 +73,14 @@
     const fields = $('ip-detail-fields');
     fields.replaceChildren();
     for (const [label, value] of [['IP 地址', entry.ip], ['地址池', pool.name], ['网络类型', pool.category], ['状态', statusText[entry.status]], ['占用对象', entry.owner || '未关联'], ['位置', entry.owner ? '示例位置' : '—']]) {
+      const field = document.createElement('div');
+      field.className = 'field' + (['地址池', '占用对象', '位置'].includes(label) ? ' full' : '');
       const term = document.createElement('dt');
       const detail = document.createElement('dd');
       term.textContent = label;
       detail.textContent = value;
-      fields.append(term, detail);
+      field.append(term, detail);
+      fields.append(field);
     }
     const actions = $('ip-detail-actions');
     actions.replaceChildren();
@@ -156,13 +159,42 @@
     $('pool-next').disabled = ipPage === pages;
     document.querySelectorAll('[data-ip-layout]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.ipLayout === ipLayout)));
   }
-  function fillPoolEditor(create) {
-    const pool = create ? { category: '内网' } : pools[activePool];
-    $('pool-editor-title').textContent = create ? '新增地址池 · 原型预览' : '编辑当前地址池 · ' + pool.name;
+  let editorCreate = false;
+  let editorIndex = 0;
+  function renderEditorDirectory() {
+    const needle = $('pool-editor-find').value.trim().toLowerCase();
+    const root = $('pool-editor-list');
+    root.replaceChildren();
+    pools.forEach((pool, index) => {
+      if (!(pool.name + pool.cidr).toLowerCase().includes(needle)) return;
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'pool-editor-item';
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(!editorCreate && index === editorIndex));
+      const cidr = document.createElement('span');
+      cidr.textContent = pool.cidr;
+      item.append(document.createTextNode(pool.name), cidr);
+      item.addEventListener('click', () => fillPoolEditor(false, index));
+      root.append(item);
+    });
+    if (!root.children.length) {
+      const empty = document.createElement('p');
+      empty.className = 'dialog-note';
+      empty.textContent = '没有匹配地址池';
+      root.append(empty);
+    }
+  }
+  function fillPoolEditor(create, index = activePool) {
+    editorCreate = Boolean(create);
+    editorIndex = index;
+    const pool = editorCreate ? { category: '内网' } : pools[editorIndex];
+    $('pool-editor-title').textContent = editorCreate ? '新增地址池 · 原型预览' : '编辑地址池 · ' + pool.name;
     for (const key of ['name', 'category', 'cidr', 'gateway', 'vlan', 'vni', 'purpose']) $('pool-' + key).value = pool[key] || '';
-    $('pool-editor-scope').textContent = create ? '新建表单不会继承当前地址池资料。原型不保存业务数据。' : '这里只编辑当前选中的地址池；切换地址池请使用顶部选择器，不再重复提供“维护其他地址池”。';
+    $('pool-editor-scope').textContent = editorCreate ? '新建表单为空白，不继承当前地址池；原型不保存业务数据。' : '左侧可搜索并切换任意地址池，右侧编辑当前所选；原型不保存业务数据。';
+    renderEditorDirectory();
     document.querySelectorAll('details').forEach((detail) => detail.open = false);
-    $('pool-editor').showModal();
+    if (!$('pool-editor').open) $('pool-editor').showModal();
   }
   document.querySelectorAll('[data-ip-layout]').forEach((button) => button.addEventListener('click', () => {
     ipLayout = button.dataset.ipLayout;
@@ -181,7 +213,12 @@
   });
   window.addEventListener('resize', () => requestAnimationFrame(() => locateSelected()));
   document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => $(button.dataset.close).close()));
-  document.querySelectorAll('[data-pool-editor]').forEach((button) => button.addEventListener('click', () => fillPoolEditor(button.dataset.poolEditor === 'new')));
+  document.querySelectorAll('[data-pool-editor]').forEach((button) => button.addEventListener('click', () => {
+    const mode = button.dataset.poolEditor;
+    fillPoolEditor(mode === 'new', activePool);
+  }));
+  $('pool-editor-find').addEventListener('input', renderEditorDirectory);
+  $('pool-selector-edit').addEventListener('click', () => fillPoolEditor(false, activePool));
   $('pool-add-ip').addEventListener('click', () => { $('new-ip-address').value = ''; $('new-ip-note').value = ''; $('pool-ip-editor').showModal(); });
   document.querySelectorAll('details').forEach((detail) => detail.addEventListener('toggle', () => {
     if (detail.open && !detail.classList.contains('fold')) document.querySelectorAll('details[open]').forEach((other) => { if (other !== detail && !other.classList.contains('fold')) other.open = false; });

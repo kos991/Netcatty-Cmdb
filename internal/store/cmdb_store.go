@@ -418,15 +418,6 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 			where = append(where, "("+strings.Join(checks, " OR ")+")")
 		}
 	}
-	if netType := strings.TrimSpace(q.NetType); netType != "" && netType != "全部" {
-		interfaceZone := `EXISTS (SELECT 1 FROM cmdb_asset_interfaces i WHERE i.asset_id=a.id AND (IFNULL(i.network_zone,'') = ? OR IFNULL(i.net_zone,'') = ?))`
-		if netType == CmdbAssetUnconfiguredFilter {
-			where = append(where, `IFNULL(a.net_type,'') = '' AND NOT EXISTS (SELECT 1 FROM cmdb_asset_interfaces i WHERE i.asset_id=a.id AND (IFNULL(i.network_zone,'') <> '' OR IFNULL(i.net_zone,'') <> ''))`)
-		} else {
-			where = append(where, "(IFNULL(a.net_type,'') = ? OR "+interfaceZone+")")
-			args = append(args, netType, netType, netType)
-		}
-	}
 	if v := strings.TrimSpace(q.MgmtIP); v != "" && v != "全部" {
 		where = append(where, "(IFNULL(a.mgmt_ip,'') LIKE ? OR IFNULL(a.manage_ip,'') LIKE ?)")
 		args = append(args, "%"+v+"%", "%"+v+"%")
@@ -564,6 +555,22 @@ func (s *Store) QueryCmdbAssetsForProject(scope ProjectScope, q CmdbAssetQuery) 
 	if q.PageSize < 1 || q.PageSize > 500 {
 		q.PageSize = 10
 	}
+	if netType := strings.TrimSpace(q.NetType); netType != "" && netType != "全部" {
+		list, err := s.AllCmdbAssetsForProject(scope, q)
+		if err != nil {
+			return nil, 0, err
+		}
+		total := len(list)
+		start := (q.Page - 1) * q.PageSize
+		if start >= total {
+			return []CmdbAsset{}, total, nil
+		}
+		end := start + q.PageSize
+		if end > total {
+			end = total
+		}
+		return list[start:end], total, nil
+	}
 
 	whereClause, args := s.buildCmdbWhereForProject(scope, q)
 
@@ -668,21 +675,76 @@ func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope
 	if len(assets) == 0 {
 		return nil
 	}
-	// 业务 IP 优先，其次管理 IP；先取 IP 台账登记的网段类别，再按已定义网段 CIDR 最长前缀匹配。
+	// 只使用业务字段或接口中明确标记 business 的地址，不借用管理/带外地址。
 	candidates := make([][]string, len(assets))
 	wanted := make(map[string]struct{})
 	for index := range assets {
-		for _, raw := range []string{assets[index].BizIP, assets[index].MgmtIP, assets[index].ManageIP} {
+		assets[index].BusinessNetworkType = ""
+		addCandidate := func(raw string) {
 			ip := strings.TrimSpace(raw)
 			if ip == "" {
-				continue
+				return
 			}
 			candidates[index] = append(candidates[index], ip)
 			wanted[ip] = struct{}{}
 		}
+		addCandidate(assets[index].BizIP)
+		for _, iface := range assets[index].Interfaces {
+			var addresses []cmdbInterfaceAddress
+			if err := json.Unmarshal([]byte(interfaceAdditionalIPs(iface)), &addresses); err != nil {
+				return fmt.Errorf("接口 %s 的附加地址格式无效: %w", iface.Name, err)
+			}
+			for _, address := range addresses {
+				business := false
+				switch purpose := address.Purpose.(type) {
+				case string:
+					business = purpose == "business"
+				case []interface{}:
+					for _, value := range purpose {
+						if value == "business" {
+							business = true
+						}
+					}
+				}
+				if business {
+					addCandidate(address.IP)
+				}
+			}
+		}
 	}
+	ips := make([]string, 0, len(wanted))
+	for ip := range wanted {
+		ips = append(ips, ip)
+	}
+	networkTypes, err := s.networkTypesForIPsForProject(scope, ips)
+	if err != nil {
+		return err
+	}
+	for index := range assets {
+		for _, ip := range candidates[index] {
+			if category := networkTypes[ip]; category != "" {
+				assets[index].BusinessNetworkType = category
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// networkTypesForIPsForProject 是三类资产共用的 IPAM 网络来源，重叠 CIDR 取最长前缀。
+func (s *Store) networkTypesForIPsForProject(scope ProjectScope, ips []string) (map[string]string, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
+	wanted := make(map[string]struct{}, len(ips))
+	for _, raw := range ips {
+		if ip := strings.TrimSpace(raw); net.ParseIP(ip) != nil {
+			wanted[ip] = struct{}{}
+		}
+	}
+	out := make(map[string]string, len(wanted))
 	if len(wanted) == 0 {
-		return nil
+		return out, nil
 	}
 	placeholders := make([]string, 0, len(wanted))
 	args := make([]interface{}, 0, len(wanted)+1)
@@ -695,14 +757,14 @@ func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope
 		JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet
 		WHERE ip.project_id=? AND ip.ip IN (`+strings.Join(placeholders, ",")+") ORDER BY ip.id", args...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	registered := make(map[string]string, len(wanted))
 	for rows.Next() {
 		var ip, category string
 		if err := rows.Scan(&ip, &category); err != nil {
 			rows.Close()
-			return err
+			return nil, err
 		}
 		if _, seen := registered[ip]; !seen && category != "" {
 			registered[ip] = category
@@ -710,10 +772,10 @@ func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return err
+		return nil, err
 	}
 	if err := rows.Close(); err != nil {
-		return err
+		return nil, err
 	}
 
 	type subnetCategory struct {
@@ -722,14 +784,14 @@ func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope
 	}
 	subnetRows, err := s.db.Query(`SELECT IFNULL(cidr,''), IFNULL(prefix,''), IFNULL(category,'') FROM ip_subnets WHERE project_id=? ORDER BY sort_order, id`, scope.ProjectID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var subnets []subnetCategory
 	for subnetRows.Next() {
 		var cidr, prefix, category string
 		if err := subnetRows.Scan(&cidr, &prefix, &category); err != nil {
 			subnetRows.Close()
-			return err
+			return nil, err
 		}
 		cidr = strings.TrimSpace(cidr)
 		if cidr == "" && strings.TrimSpace(prefix) != "" {
@@ -741,15 +803,13 @@ func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope
 	}
 	if err := subnetRows.Err(); err != nil {
 		subnetRows.Close()
-		return err
+		return nil, err
 	}
 	if err := subnetRows.Close(); err != nil {
-		return err
+		return nil, err
 	}
 	categoryForIP := func(raw string) string {
-		if category := registered[raw]; category != "" {
-			return category
-		}
+		// CIDR 最长前缀优先于旧 IP 台账归属，避免重叠网段被较大地址池遮蔽。
 		ip := net.ParseIP(raw)
 		if ip == nil {
 			return ""
@@ -763,20 +823,15 @@ func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope
 				best, bestBits = subnet.category, bits
 			}
 		}
-		return best
-	}
-	for index := range assets {
-		if assets[index].BusinessNetworkType != "" {
-			continue
+		if best != "" {
+			return best
 		}
-		for _, ip := range candidates[index] {
-			if category := categoryForIP(ip); category != "" {
-				assets[index].BusinessNetworkType = category
-				break
-			}
-		}
+		return registered[raw]
 	}
-	return nil
+	for ip := range wanted {
+		out[ip] = categoryForIP(ip)
+	}
+	return out, nil
 }
 
 // GetCmdbAsset 读取单个资产及其全部网络接口。

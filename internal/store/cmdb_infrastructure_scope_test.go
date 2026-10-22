@@ -41,8 +41,8 @@ func TestQueryCmdbAssetsInfrastructureScopeKeepsChineseDeviceTypes(t *testing.T)
 		want[id] = true
 	}
 	// 终端分类不进入基础设施列表。
-	terminalCategory, err := s.CreateCmdbTaxonomyForProject(scope, "terminal-categories", "云桌面终端", 0, 1)
-	if err != nil {
+	var terminalCategory int64
+	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_categories WHERE project_id=? AND asset_scope='terminal' AND name='云桌面终端'`, scope.ProjectID).Scan(&terminalCategory); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateCmdbAssetManualForProject(scope, &CmdbAsset{Name: "云桌面终端", CategoryID: terminalCategory}); err != nil {

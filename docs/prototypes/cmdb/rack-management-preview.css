@@ -62,6 +62,32 @@
 .rack-prototype-dialog .rack-unit-actions, .rack-prototype-dialog .rack-photo-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
 .rack-prototype-dialog .rack-mount-choice { display: block; margin-top: 16px; }
 #rack-unit-feedback { color: var(--muted); line-height: 1.7; }
+/* Record typography follows the shared shell; the cabinet diagram keeps its U scale. */
+#rack-content .record-inline { position: static; width: auto; max-width: none; height: auto; border: 0; border-radius: 0; box-shadow: none; }
+#rack-content #rack-manager { border-left: 1px solid var(--border); }
+#rack-content .editor-head.record-header, #rack-manager .rack-manager-head.record-header { display: block; }
+#rack-content .editor-head h2, #rack-manager .rack-manager-head h2 { overflow-wrap: anywhere; }
+#rack-content .editor-head .panel-heading { align-items: flex-start; }
+#rack-content .editor-head .panel-heading h2 { min-width: 0; white-space: normal; }
+#rack-content .editor-head button { flex-shrink: 0; }
+#rack-content .record-section { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#rack-content .editor-body .record-section + .record-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+#rack-content .record-section > .section-title { font-size: 13px; margin: 0 0 14px; }
+#rack-content .record-shell .field label { font-size: 12px; }
+#rack-content .record-shell .field input, #rack-content .record-shell .field select { height: 34px; font-size: 13px; }
+#rack-content .editor-head button, #rack-content .editor-footer button, #rack-content .image-actions button, #rack-manager .rack-management-actions button, #rack-manager .rack-management-form > button { height: 34px; font-size: 13px; }
+#rack-content .position-hint, #rack-content .image-actions { font-size: 12px; }
+#rack-manager .rack-manager-body.record-body { padding: 0; }
+#rack-manager .rack-management-form.record-section { padding: 16px 14px; }
+#rack-manager .rack-management-actions button { padding-inline: 8px; font-size: 12px; }
+#rack-manager .rack-directory button { min-height: 34px; font-size: 13px; overflow-wrap: anywhere; }
+#rack-manager .record-fields .rack-capacity-controls input[type='range'] { height: 34px; padding: 0; border: 0; background: transparent; }
+#rack-manager .record-fields .rack-capacity-controls input[type='number'] { width: 84px; flex: none; }
+:is(#rack-unit-actions, #rack-device-info, #rack-photo-editor).record-dialog::backdrop { background: #25314435; }
+.rack-prototype-dialog.record-shell .field { font-size: 12px; }
+.rack-prototype-dialog.record-shell .field select { height: 34px; font-size: 13px; }
+.rack-prototype-dialog.record-shell .record-header .icon { width: 34px; height: 34px; }
+.rack-prototype-dialog.record-shell .rack-unit-actions button, .rack-prototype-dialog.record-shell .rack-photo-actions button { height: 34px; font-size: 13px; }
 @media (prefers-reduced-motion: reduce) {
   #rack-grid > .device.selected::after { animation: none; background: #a4d7ff; }
   #rack-content .rack-scroll { scroll-behavior: auto; }
@@ -74,7 +100,7 @@
   #rack-content .rack-scroll { flex: 1; height: auto; min-height: 0; }
   #rack-content .editor-body { overflow: auto; }
   #rack-content .editor-footer { position: static; }
-  #rack-manager { grid-column: 1 / -1; height: 520px; border-left: 0; border-top: 1px solid var(--border); }
+  #rack-content #rack-manager { grid-column: 1 / -1; height: 520px; border-left: 0; border-top: 1px solid var(--border); }
 }
 @media (max-width: 720px) {
   #rack-toolbar { flex-wrap: wrap; }
@@ -82,5 +108,5 @@
   #rack-content .rack-panel { width: 100%; }
   #rack-content .rack-frame { margin-inline: auto; }
   #rack-content .editor-head, #rack-content .editor-body { padding-left: 14px; padding-right: 14px; }
-  #rack-manager { height: 600px; flex: none; border-left: 0; border-top: 1px solid var(--border); }
+  #rack-content #rack-manager { height: 600px; flex: none; border-left: 0; border-top: 1px solid var(--border); }
 }

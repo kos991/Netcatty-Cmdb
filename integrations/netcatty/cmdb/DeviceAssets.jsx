@@ -3,11 +3,12 @@ import { ArrowRight, ChevronDown, Monitor, Network, Plus, Workflow, X } from 'lu
 import { Button } from '@/components/ui/button'
 import { Dropdown, DropdownContent, DropdownTrigger } from '@/components/ui/dropdown'
 import { Spinner } from '@/components/ui/spinner'
-import { VaultHeaderSearch, VaultPageHeader, vaultHeaderSecondaryButtonClass } from '@/components/vault/VaultPageHeader'
+import { VaultHeaderSearch, VaultPageHeader } from '@/components/vault/VaultPageHeader'
 import { api } from './api'
 import { useAction } from './hooks'
 import { resolveSearchTarget } from './state'
 import { SelectControl } from './ui'
+import './device-assets.css'
 
 const TerminalAssets = lazy(() => import('./TerminalAssets'))
 const Infrastructure = lazy(() => import('./Infrastructure'))
@@ -37,8 +38,9 @@ export default function DeviceAssets({ focusTarget, onNavigate, meta }) {
   const createAsset = (targetTab) => { setTab(targetTab); issueCommand('create', targetTab) }
   const viewControl = <div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">资产类别</span><SelectControl aria-label="资产类别" value={tab} onChange={setTab} options={assetViews} className="w-[104px] min-w-0" /></div>
   const filterBarProps = { filtersExpanded, onFiltersExpandedChange: setFiltersExpanded }
-  return <div className="relative flex h-full min-h-0 flex-col" data-asset-panel-open={panel.open}><div className="flex min-h-0 flex-1 flex-col"><VaultPageHeader dataSection="cmdb-device-assets-header" contentClassName="h-auto min-h-14 flex-wrap gap-2 min-[900px]:flex-nowrap">
-    <Dropdown><DropdownTrigger asChild><Button data-device-assets-add type="button" variant="secondary" className={`${vaultHeaderSecondaryButtonClass} h-9 shrink-0 px-3 text-xs`}><Plus size={14} />新增{assetViews.find(view => view.value === tab)?.label}<ChevronDown size={12} /></Button></DropdownTrigger><DropdownContent align="start" sideOffset={8} className="w-44">
+  // 详情浮层以整个工作区定位，工具栏和列表使用同一面板宽度让位。
+  return <div className="cmdb-device-assets relative flex h-full min-h-0 min-w-0 flex-col" style={{ '--cmdb-workspace-panel-width': panel.open ? (panel.width === 'full' ? '100%' : `${panel.width}px`) : '0px' }} data-asset-panel-open={panel.open} data-asset-panel-width={panel.open ? panel.width : 0}><div className="cmdb-device-assets-content flex min-h-0 min-w-0 flex-1 flex-col"><VaultPageHeader dataSection="cmdb-device-assets-header" contentClassName="h-auto min-h-14 flex-wrap gap-2 min-[900px]:flex-nowrap">
+    <Dropdown><DropdownTrigger asChild><Button data-device-assets-add type="button" className="cmdb-primary-action h-[34px] shrink-0 px-3 text-xs"><Plus size={14} />新增{assetViews.find(view => view.value === tab)?.label}<ChevronDown size={12} /></Button></DropdownTrigger><DropdownContent align="start" sideOffset={8} className="w-44">
       {[["terminals", "终端资产", Monitor], ["infrastructure", "基础设施", Network], ["systems", "业务系统", Workflow]].map(([key, label, Icon]) => <button type="button" key={key} onClick={() => createAsset(key)} className="flex h-10 w-full items-center gap-3 rounded px-3 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"><Icon size={16} className="text-primary" /><span>新增{label}</span></button>)}
     </DropdownContent></Dropdown>
     {viewControl}

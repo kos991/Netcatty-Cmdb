@@ -1,64 +1,38 @@
 name: Release
 
+# 发布只由 main 上合并后的 v1.0.YYYYMMDD tag 触发，只产出 Windows 集成客户端。
+# 发布说明按自上个 tag 以来合并的 PR 自动汇总（修复 / 新功能），见 .github/release.yml。
 on:
   push:
-    branches: [ci/native-settings-test-20261009]
     tags: ["v*"]
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  server-binaries:
-    name: CMDB server binaries
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Verify release version
-        run: node scripts/check-version.mjs --tag "${GITHUB_REF_NAME}"
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Test backend
-        run: go test -count=1 ./...
-      - name: Build server binaries
-        run: |
-          mkdir -p release-assets
-          version="${GITHUB_REF_NAME}"
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "release-assets/cmdb-server-${version}-windows-amd64.exe" .
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "release-assets/cmdb-server-${version}-linux-amd64" .
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "release-assets/cmdb-server-${version}-linux-arm64" .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "release-assets/cmdb-server-${version}-darwin-amd64" .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "release-assets/cmdb-server-${version}-darwin-arm64" .
-          cd release-assets
-          sha256sum * > SHA256SUMS.txt
-      - name: Check CMDB server release data
-        run: node scripts/check-release-data.mjs release-assets
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cmdb-server-binaries
-          path: release-assets/*
-          if-no-files-found: error
-
   netcatty-windows:
     name: Integrated Netcatty for Windows
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Verify release version and main ancestry
+        shell: pwsh
+        run: |
+          node scripts/check-version.mjs --tag "$env:GITHUB_REF_NAME"
+          git merge-base --is-ancestor "$env:GITHUB_SHA" origin/main
+          if ($LASTEXITCODE -ne 0) { throw "发布 tag 必须指向已合并到 main 的提交" }
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Test backend
+        run: go test -count=1 ./...
       - name: Set up MSVC developer command prompt
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -67,7 +41,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force build | Out-Null
-          go build -trimpath -ldflags="-s -w" -o build/cmdb-server.exe .
+          # 版本只来自真实发布 tag，供设置页 Cmdb 版本入口显示。
+          go build -trimpath -ldflags="-s -w -X main.version=$env:GITHUB_REF_NAME" -o build/cmdb-server.exe .
           node scripts/check-release-data.mjs build/cmdb-server.exe
       - name: Checkout and integrate Netcatty
         shell: pwsh
@@ -86,18 +61,7 @@ jobs:
           node scripts/fetch-mosh-binaries.cjs --host
           node scripts/fetch-et-binaries.cjs --host
           Pop-Location
-      - name: Build Netcatty CMDB test overlay
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/ci/native-settings-test-20261009'
-        shell: pwsh
-        working-directory: build/netcatty
-        env:
-          NETCATTY_CMDB_SERVER_SOURCE: ${{ github.workspace }}\build\cmdb-server.exe
-        run: |
-          npm.cmd run build
-          node ..\..\scripts\check-release-data.mjs ..\cmdb-server.exe .
-          npx.cmd electron-builder --config electron-builder.config.cjs --win --x64 --dir --publish=never
-      - name: Build Netcatty CMDB release installers and update metadata
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      - name: Build Windows installers and update metadata
         shell: pwsh
         working-directory: build/netcatty
         env:
@@ -109,41 +73,35 @@ jobs:
       - name: Check Netcatty release data
         shell: pwsh
         run: node scripts/check-release-data.mjs build/netcatty/release
-      - name: Upload test overlay
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/ci/native-settings-test-20261009'
-        uses: actions/upload-artifact@v4
-        with:
-          name: netcatty-cmdb-windows-test-overlay
-          path: |
-            build/netcatty/release/win-unpacked/resources/app.asar
-            build/netcatty/release/win-unpacked/resources/cmdb/cmdb-server.exe
-          if-no-files-found: error
-      - name: Upload release installers
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v4
+      - name: Generate checksums
+        shell: pwsh
+        working-directory: build/netcatty/release
+        run: |
+          Get-ChildItem -File | Where-Object { $_.Name -match '\.(exe|blockmap)$' -or $_.Name -eq 'latest.yml' } |
+            ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+            Set-Content -Encoding utf8 SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
         with:
           name: netcatty-cmdb-windows
           path: |
             build/netcatty/release/*.exe
-            build/netcatty/release/latest.yml
             build/netcatty/release/*.blockmap
+            build/netcatty/release/latest.yml
+            build/netcatty/release/SHA256SUMS.txt
           if-no-files-found: error
 
   publish:
     name: Publish GitHub release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [server-binaries, netcatty-windows]
+    needs: [netcatty-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
-      - name: Generate release checksums
-        working-directory: release-assets
-        run: find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:

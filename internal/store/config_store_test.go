@@ -169,7 +169,7 @@ func TestConfigCatalogProjectIsolation(t *testing.T) {
 		itemA ConfigItem
 		itemB ConfigItem
 	}{
-		{kind: ConfigKindDeviceTypes, itemA: ConfigItem{Name: "交换机"}, itemB: ConfigItem{Name: "交换机"}},
+		{kind: ConfigKindDeviceTypes, itemA: ConfigItem{Name: "法院交换机"}, itemB: ConfigItem{Name: "法院交换机"}},
 		{kind: ConfigKindSoftware, itemA: ConfigItem{Name: "终端安全软件", Vendor: "厂商甲", Version: "1.0"}, itemB: ConfigItem{Name: "终端安全软件", Vendor: "厂商乙", Version: "2.0"}},
 		{kind: ConfigKindLocations, itemA: ConfigItem{Name: "数据机房"}, itemB: ConfigItem{Name: "数据机房"}},
 		{kind: ConfigKindStatuses, itemA: ConfigItem{Name: "在用"}, itemB: ConfigItem{Name: "在用"}},

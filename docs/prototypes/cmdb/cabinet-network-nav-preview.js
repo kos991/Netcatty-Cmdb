@@ -7,7 +7,7 @@
   const parent = document.createElement('a');
   parent.href = 'rack-layout-preview.html';
   parent.className = 'cabinet-network-entry';
-  parent.innerHTML = '<svg aria-hidden="true"><use href="#network"/></svg>';
+  parent.innerHTML = '<svg aria-hidden="true"><use href="#router"/></svg>';
   parent.setAttribute('aria-label', '机柜与网络');
   parent.title = '机柜与网络';
   if (active) parent.classList.add('selected');

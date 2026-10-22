@@ -170,9 +170,7 @@ func TestCmdbSnapshotIncludesAttachmentEncryptionMetadata(t *testing.T) {
 	}
 
 	target, targetScope := openSnapshotTestStore(t)
-	if _, err := target.db.Exec(`UPDATE cmdb_projects SET sync_id=? WHERE id=?`, snapshot.ProjectSyncID, targetScope.ProjectID); err != nil {
-		t.Fatal(err)
-	}
+	alignSnapshotProject(t, target, targetScope, snapshot.ProjectSyncID)
 	if _, err := target.ApplyCmdbSnapshot(targetScope, snapshot); err != nil {
 		t.Fatalf("附件元数据快照无法在异机数据库还原: %v", err)
 	}
@@ -230,6 +228,22 @@ func TestCmdbProjectTablesAutomaticallyAdvanceRevisionAndWriteTombstones(t *test
 func alignSnapshotProject(t *testing.T, st *Store, scope ProjectScope, projectSyncID string) {
 	t.Helper()
 	if _, err := st.db.Exec(`UPDATE cmdb_projects SET sync_id=? WHERE id=?`, projectSyncID, scope.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	// 新项目的内置分类按项目同步标识稳定命名；本测试直接改项目标识时需同步重算分类标识。
+	if _, err := st.db.Exec(`INSERT OR REPLACE INTO _meta(k,v) VALUES('cmdb_sync_apply','test-project-alignment')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range defaultAssetCategories {
+		for _, name := range group.names {
+			if _, err := st.db.Exec(`UPDATE cmdb_device_categories SET sync_id=?
+				WHERE project_id=? AND asset_scope=? AND name=?`,
+				defaultAssetCategorySyncID(projectSyncID, group.scope, name), scope.ProjectID, group.scope, name); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := st.db.Exec(`DELETE FROM _meta WHERE k='cmdb_sync_apply'`); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -138,11 +138,49 @@
     $('person-affiliation-preview').textContent = `归属预览：${names.join(' / ') || '未分配'}`;
   }
 
+  let editorBaseline = '';
+  let returnToPersonDetail = false;
+  const personFormSnapshot = () => JSON.stringify([...$('person-form').elements].filter((field) => field.name).map((field) => [field.name, field.value]));
+
+  function selectPersonEditorTab(key) {
+    document.querySelectorAll('[data-person-editor-tab]').forEach((tab) => {
+      const selected = tab.dataset.personEditorTab === key;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      $(tab.getAttribute('aria-controls')).hidden = !selected;
+    });
+    $('person-form').querySelector('.record-body').scrollTop = 0;
+  }
+
+  function setPersonEditorExpanded(expanded) {
+    $('person-editor').classList.toggle('expanded', expanded);
+    const button = $('person-editor-expand');
+    const label = expanded ? '还原人员表单' : '展开人员表单';
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-pressed', String(expanded));
+    button.title = label;
+    button.innerHTML = icon(expanded ? 'minimize' : 'maximize');
+  }
+
+  function closePersonEditor() {
+    if (personFormSnapshot() !== editorBaseline && !window.confirm('放弃本次填写的人员草稿？关闭后不会保存这些输入。')) return;
+    $('person-editor').close();
+    if (returnToPersonDetail) {
+      $('person-detail').showModal();
+      $('person-detail-edit').focus();
+    }
+    returnToPersonDetail = false;
+  }
+
   function openPersonEditor(person = null) {
-    if ($('person-detail').open) $('person-detail').close();
+    returnToPersonDetail = $('person-detail').open;
+    if (returnToPersonDetail) $('person-detail').close();
+    $('person-detail-more').open = false;
+    $('person-editor').dataset.mode = person ? 'edit' : 'create';
     $('person-form').reset();
     $('person-form').dataset.recordId = person ? String(person.id) : '';
-    $('person-editor-title').textContent = person ? `编辑人员 · ${person.name}（原型）` : '新增人员（原型）';
+    $('person-editor-title').textContent = person ? `编辑人员 · ${person.name}` : '新增人员';
+    $('person-save').textContent = person ? '保存（离线不可用）' : '创建（离线不可用）';
     const fields = { 'person-name': 'name', 'person-code': 'person_code', 'person-title': 'title', 'person-phone': 'phone', 'person-status': 'status', 'person-remark': 'remark' };
     Object.entries(fields).forEach(([id, field]) => { $(id).value = person?.[field] || ''; });
     options($('person-organization'), childrenOf(0), person?.org_id);
@@ -153,8 +191,27 @@
     $('person-department').disabled = $('person-organization').value === '0';
     $('person-group').disabled = $('person-department').value === '0';
     updatePersonPath();
+    editorBaseline = personFormSnapshot();
+    selectPersonEditorTab('profile');
+    setPersonEditorExpanded(false);
     $('person-editor').showModal();
   }
+
+  $('person-editor-expand').addEventListener('click', () => setPersonEditorExpanded(!$('person-editor').classList.contains('expanded')));
+  $('person-editor').addEventListener('cancel', (event) => { event.preventDefault(); closePersonEditor(); });
+  document.querySelector('.person-editor-tabs').addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-person-editor-tab]');
+    if (tab) selectPersonEditorTab(tab.dataset.personEditorTab);
+  });
+  document.querySelector('.person-editor-tabs').addEventListener('keydown', (event) => {
+    const tabs = [...document.querySelectorAll('[data-person-editor-tab]')];
+    const index = tabs.indexOf(event.target);
+    if (index < 0 || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) + tabs.length) % tabs.length;
+    selectPersonEditorTab(tabs[next].dataset.personEditorTab);
+    tabs[next].focus();
+  });
 
   $('person-organization').addEventListener('change', () => {
     const id = Number($('person-organization').value);
@@ -185,21 +242,21 @@
     });
     const panel = $('person-detail-body');
     panel.setAttribute('aria-labelledby', `person-tab-${key}`);
-    const definition = (fields) => `<dl class="person-detail-values">${fields.map(([label, value]) => `<div><dt>${label}</dt><dd>${escape(value || '未分配')}</dd></div>`).join('')}</dl>`;
+    const definition = (fields) => `<dl class="person-detail-values record-fields">${fields.map(([label, value, full]) => `<div${full ? ' class="full"' : ''}><dt>${label}</dt><dd>${escape(value || '未分配')}</dd></div>`).join('')}</dl>`;
     const owned = assets.filter((asset) => asset.person_id === person.id);
     const titles = { profile: '人员资料', organization: '组织归属', assets: '名下资产', transfer: '资产交接' };
     let content = '';
     if (key === 'profile') {
-      content = `${definition([['姓名', person.name], ['工号', person.person_code], ['岗位', person.title], ['电话', person.phone], ['状态', person.status]])}<section class="person-detail-note"><h4>备注</h4><p>${escape(person.remark)}</p></section><div class="person-detail-danger"><button type="button" disabled>删除人员（原型禁用）</button></div>`;
+      content = `${definition([['姓名', person.name], ['工号', person.person_code], ['岗位', person.title, true], ['电话', person.phone], ['状态', person.status], ['组织', person.org_name, true], ['部门', person.department], ['分组', person.group_name]])}<section class="person-detail-note"><h4>备注</h4><p>${escape(person.remark)}</p></section>`;
     } else if (key === 'organization') {
       const path = pathOf(person.group_id || person.department_id || person.org_id).map((node) => node.name).join(' / ');
-      content = `${definition([['组织', person.org_name], ['部门', person.department], ['分组', person.group_name]])}<section class="person-detail-note"><h4>归属路径</h4><p>${escape(path || '未分配')}</p></section>`;
+      content = `${definition([['组织', person.org_name, true], ['部门', person.department], ['分组', person.group_name]])}<section class="person-detail-note"><h4>归属路径</h4><p>${escape(path || '未分配')}</p></section>`;
     } else if (key === 'assets') {
       content = `<p class="dialog-note">${owned.length} 项 · 虚构示例资产</p>${owned.length ? owned.map((asset) => `<article class="example-asset"><a href="device-assets-preview.html#terminal" title="打开终端资产示例列表，不代表此虚构资产的真实业务详情">${icon('monitor')} ${escape(asset.name)}</a><p>${escape(asset.code)} · ${escape(asset.type)} · ${escape(asset.status)}</p></article>`).join('') : '<p class="dialog-note">该示例人员没有名下示例资产。</p>'}<p class="dialog-note">资产链接仅打开设备资产终端原型；示例编码不对应真实业务记录。</p>`;
     } else {
       content = `<p class="dialog-note">当前名下 ${owned.length} 项示例资产。仅预览交接表单，不写入业务数据。</p><div class="asset-transfer-preview field"><label for="person-transfer-target">接收人（原型表单）</label><select id="person-transfer-target"><option value="">选择接收人</option>${people.filter((record) => record.id !== person.id).map((record) => `<option value="${record.id}"${String(record.id) === transferTarget ? ' selected' : ''}>${escape(record.name)} · ${escape(record.department || record.org_name || '未分配')}（示例）</option>`).join('')}</select><button type="button" disabled>交接资产（原型禁用）</button></div>`;
     }
-    panel.innerHTML = `<h3 class="person-detail-section-title">${titles[key]}</h3>${content}`;
+    panel.innerHTML = `<section class="record-section"><h3 class="person-detail-section-title${key === 'profile' ? ' record-redundant-title' : ''}">${titles[key]}</h3>${content}</section>`;
     panel.scrollTop = 0;
   }
   function setPersonExpanded(expanded) {
@@ -214,6 +271,7 @@
   function openPersonDetail(person) {
     state.detailId = person.id;
     transferTarget = '';
+    $('person-detail-more').open = false;
     $('person-detail-title').textContent = person.name;
     $('person-detail-code').textContent = `${person.person_code} · 示例人员`;
     $('person-detail-status').textContent = person.status;
@@ -236,6 +294,24 @@
     tabs[next].focus();
   });
   $('person-detail-expand').addEventListener('click', () => setPersonExpanded(!$('person-detail').classList.contains('expanded')));
+  // 左右分栏只切换正文单/双列，与展开（全宽）独立；与资产侧栏共用同一本机偏好。
+  const columnsKey = 'cmdb-prototype-asset-panel-columns';
+  let panelSingleColumn = (() => { try { return localStorage.getItem(columnsKey) === '1'; } catch { return false; } })();
+  const applyPanelColumns = () => {
+    document.querySelectorAll('[data-panel-columns]').forEach((button) => {
+      $(button.dataset.panelColumns).classList.toggle('single-column', panelSingleColumn);
+      const label = panelSingleColumn ? '正文改为左右双列' : '正文改为单列';
+      button.setAttribute('aria-label', label);
+      button.title = label;
+      button.setAttribute('aria-pressed', String(!panelSingleColumn));
+    });
+  };
+  document.querySelectorAll('[data-panel-columns]').forEach((button) => button.addEventListener('click', () => {
+    panelSingleColumn = !panelSingleColumn;
+    try { localStorage.setItem(columnsKey, panelSingleColumn ? '1' : '2'); } catch { /* 原型偏好写入失败时仅本次生效 */ }
+    applyPanelColumns();
+  }));
+  applyPanelColumns();
 
   function renderMaintenanceTree() {
     const visible = filteredTree(tree, $('maintenance-search').value);
@@ -365,7 +441,10 @@
   $('person-detail-edit').addEventListener('click', () => openPersonEditor(people.find((record) => record.id === state.detailId)));
   $('create-person').addEventListener('click', () => { $('people-create-menu').open = false; openPersonEditor(); });
   $('maintain-organizations').addEventListener('click', () => { $('people-create-menu').open = false; openMaintenance(); });
-  document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => $(button.dataset.close).close()));
+  document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => {
+    if (button.dataset.close === 'person-editor') closePersonEditor();
+    else $(button.dataset.close).close();
+  }));
   document.addEventListener('click', (event) => {
     document.querySelectorAll('details[open]').forEach((menu) => { if (!menu.contains(event.target)) menu.open = false; });
   });

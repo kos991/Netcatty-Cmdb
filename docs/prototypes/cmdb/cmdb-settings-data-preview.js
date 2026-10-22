@@ -53,11 +53,17 @@
       ],
     },
     network: {
-      title: '网络类型', kind: 'list', fields: basic,
+      title: '网络类型', kind: 'list',
+      fields: [
+        { key: 'name', label: '名称', required: true },
+        { key: 'color', label: '颜色', type: 'color', description: '#RRGGBB；留空使用默认灰。' },
+        { key: 'remark', label: '说明', type: 'textarea' },
+        { key: 'sort_order', label: '排序', type: 'number', min: 0 },
+      ],
       entries: [
-        { id: 4100, name: '专网', remark: '专用业务网络', sort_order: 10 },
-        { id: 4200, name: '外网', remark: '互联网访问网络', sort_order: 20 },
-        { id: 4300, name: '内网', remark: '内部办公网络', sort_order: 30 },
+        { id: 4100, name: '专网', color: '#2563EB', remark: '专用业务网络', sort_order: 10 },
+        { id: 4200, name: '外网', color: '#F59E0B', remark: '互联网访问网络', sort_order: 20 },
+        { id: 4300, name: '内网', color: '#10B981', remark: '内部办公网络', sort_order: 30 },
       ],
     },
     models: {
@@ -69,6 +75,8 @@
         { id: 5300, vendor: '锐捷', model: 'RG-S2910' },
         { id: 5400, vendor: 'Dell', model: 'PowerEdge R750' },
         { id: 5500, vendor: '联想', model: 'ThinkSystem SR650 V3' },
+        { id: 5600, vendor: '奔图 PANTUM', model: 'P2500' },
+        { id: 5700, vendor: '联想', model: 'LJ2205' },
       ],
     },
     categories: {

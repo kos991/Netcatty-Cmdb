@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS cmdb_network_types (
     sync_id TEXT,
     name TEXT NOT NULL,
     remark TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     revision INTEGER NOT NULL DEFAULT 1,
     created_at TEXT,
@@ -168,9 +169,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_order_rules_project
 `
 
 func (s *Store) InitConfigSchema() error {
-	if _, err := s.db.Exec(configSchema); err != nil {
-		return fmt.Errorf("init config schema: %w", err)
-	}
+  if _, err := s.db.Exec(configSchema); err != nil {
+    return fmt.Errorf("init config schema: %w", err)
+  }
+  if err := addMissingColumns(s.db, "cmdb_network_types", map[string]string{"color": "TEXT NOT NULL DEFAULT ''"}); err != nil {
+    return fmt.Errorf("add network type color column: %w", err)
+  }
 	if err := addMissingColumns(s.db, "cmdb_persons", map[string]string{
 		"org_id":        "INTEGER NOT NULL DEFAULT 0",
 		"department_id": "INTEGER NOT NULL DEFAULT 0",

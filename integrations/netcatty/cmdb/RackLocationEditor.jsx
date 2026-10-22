@@ -102,31 +102,31 @@ export default function RackLocationEditor({ cabinet, rooms, directoryRooms, cab
     } catch (saveError) { setError(saveError.message || '保存位置失败') }
     finally { setBusy(false) }
   }
-  return <aside ref={panelRef} aria-label="机房与机柜管理" className="rack-management-panel" data-section="rack-location-editor">
-    <header className="shrink-0 space-y-2 border-b border-border/60 p-3.5"><h2 className="text-sm font-semibold">机房与机柜管理</h2><div className="flex flex-wrap gap-1.5">
-      <Button type="button" variant={mode === 'room' ? 'secondary' : 'outline'} size="sm" className="h-7 px-2 text-[11px]" disabled={busy} onClick={() => changeMode('room')}>新建机房</Button>
-      <Button type="button" variant={mode === 'new' ? 'secondary' : 'outline'} size="sm" className="h-7 px-2 text-[11px]" disabled={busy} onClick={() => changeMode('new')}>新建空柜</Button>
-      <Button type="button" variant={mode === 'edit' ? 'secondary' : 'outline'} size="sm" className="h-7 px-2 text-[11px]" disabled={busy || !cabinet || cabinet.unassigned} onClick={() => changeMode('edit')}>编辑选中机柜</Button>
+  return <aside ref={panelRef} aria-label="机房与机柜管理" className="cmdb-record-shell rack-management-panel" data-section="rack-location-editor">
+    <header className="cmdb-record-header shrink-0 space-y-3"><h2 className="text-sm font-semibold">机房与机柜管理</h2><div className="flex flex-wrap gap-1.5">
+      <Button type="button" size="sm" className="cmdb-primary-action h-[34px] px-2 text-xs" aria-pressed={mode === 'room'} disabled={busy} onClick={() => changeMode('room')}>新建机房</Button>
+      <Button type="button" size="sm" className="cmdb-primary-action h-[34px] px-2 text-xs" aria-pressed={mode === 'new'} disabled={busy} onClick={() => changeMode('new')}>新建机柜</Button>
+      <Button type="button" variant={mode === 'edit' ? 'secondary' : 'outline'} size="sm" className="h-[34px] px-2 text-xs" disabled={busy || !cabinet || cabinet.unassigned} onClick={() => changeMode('edit')}>编辑选中机柜</Button>
     </div></header>
     <nav aria-label="机房与机柜目录" className="rack-management-directory space-y-2 border-b border-border/60 bg-muted/10 p-3.5">
-      {directoryRooms.map((room) => <section key={room.key}><button type="button" disabled={busy} className="mb-1 w-full truncate rounded px-2 py-1 text-left text-xs font-semibold hover:bg-secondary" title={room.name} onClick={() => onSelectCabinet(defaultRack(room.cabinets))}>{room.name}</button><div className="space-y-1">{room.cabinets.map((item) => <button type="button" key={item.key} disabled={busy} data-rack-cabinet={item.locationName || item.key} aria-current={item.key === cabinet?.key ? 'true' : undefined} className={`w-full rounded-md border px-2 py-1.5 text-left text-[11px] ${item.key === cabinet?.key ? 'border-primary/50 bg-primary/10 text-primary' : 'border-transparent hover:bg-secondary'}`} onClick={() => onSelectCabinet(item)}><span className="block truncate">{item.name || UNASSIGNED_CABINET}</span><span className="text-muted-foreground">{item.unassigned ? `${item.deviceCount} 台待分柜` : `${item.totalUnits}U · ${item.deviceCount} 台设备 · 已用 ${item.usedUnits}U`}</span></button>)}</div></section>)}
+      {directoryRooms.map((room) => <section key={room.key}><button type="button" disabled={busy} className="mb-1 w-full truncate rounded px-2 py-1 text-left text-xs font-semibold hover:bg-secondary" title={room.name} onClick={() => onSelectCabinet(defaultRack(room.cabinets))}>{room.name}</button><div className="space-y-1">{room.cabinets.map((item) => <button type="button" key={item.key} disabled={busy} data-rack-cabinet={item.locationName || item.key} aria-current={item.key === cabinet?.key ? 'true' : undefined} className={`w-full rounded-md border px-2 py-1.5 text-left text-[11px] ${item.key === cabinet?.key ? 'border-[var(--cmdb-accent)] bg-[color-mix(in_srgb,var(--cmdb-accent)_12%,transparent)] text-[var(--cmdb-accent)]' : 'border-transparent hover:bg-secondary'}`} onClick={() => onSelectCabinet(item)}><span className="block truncate">{item.name || UNASSIGNED_CABINET}</span><span className="text-muted-foreground">{item.unassigned ? `${item.deviceCount} 台待分柜` : `${item.totalUnits}U · ${item.deviceCount} 台设备 · 已用 ${item.usedUnits}U`}</span></button>)}</div></section>)}
       {!directoryRooms.length ? <EmptyState label="没有匹配的机房或机柜" /> : null}
     </nav>
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3.5 [scrollbar-width:thin]">
+    <div className="cmdb-record-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 py-4 [scrollbar-width:thin]">
       <form onSubmit={save} className="space-y-3">
-        <h3 className="text-xs font-semibold">{mode === 'room' ? '新建机房' : editing ? '编辑机柜' : '新建空机柜'}</h3>
+        <h3 className="text-[13px] font-semibold">{mode === 'room' ? '新建机房' : editing ? '编辑机柜' : '新建空机柜'}</h3>
         {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
         {status ? <p role="status" className="text-xs text-muted-foreground">{status}</p> : null}
-        <fieldset disabled={busy} className="space-y-3">
-          <Field label={mode === 'room' ? '机房名称' : '所属机房'} required={!!values.room || !editing}>
+        <fieldset disabled={busy} className="cmdb-record-fields">
+          <Field label={mode === 'room' ? '机房名称' : '所属机房'} required={!!values.room || !editing} className="col-span-2">
             {mode !== 'room' && rooms.some((item) => item.key) ? <SelectControl aria-label="选择已有机房" className="w-full" value={rooms.some((item) => item.key === values.room) ? values.room : ''} onChange={(value) => update('room', value)} options={[{ value: '', label: '选择机房或在下方填写' }, ...rooms.filter((item) => item.key).map((item) => ({ value: item.key, label: item.name }))]} /> : null}
-            <Input aria-label="机房名称" className="h-8 text-xs" value={values.room} onChange={(event) => update('room', event.target.value)} />
+            <Input aria-label="机房名称" className="h-[34px] text-[13px]" value={values.room} onChange={(event) => update('room', event.target.value)} />
           </Field>
-          {mode !== 'room' ? <><Field label="机柜名称" required><Input aria-label="机柜名称" className="h-8 text-xs" value={values.name} onChange={(event) => update('name', event.target.value)} /></Field>
-            <Field label="机柜总 U 数（1–60）" required><div className="flex items-center gap-3"><input aria-label="机柜高度滑块" type="range" min="1" max="60" step="1" value={Number(values.units) || 1} onChange={(event) => update('units', Number(event.target.value))} className="min-w-0 flex-1 accent-primary" /><Input ref={unitsRef} aria-label="机柜总 U 数" type="number" min="1" max="60" step="1" className="h-8 w-20 text-xs" value={values.units} onChange={(event) => update('units', event.target.value)} /></div></Field>
-            <p className="text-[11px] text-muted-foreground">这是机柜总高度，不是设备占用 U 数。{editing ? '保存同步关联设备的机房 / 机柜名称，保留现有 U 位；缩柜不能挤出已上架设备。' : '空机柜独立保存，无需先录入设备。'}</p></> : <p className="text-[11px] text-muted-foreground">独立保存机房，创建后可连续添加空机柜。</p>}
+          {mode !== 'room' ? <><Field label="机柜名称" required className="col-span-2"><Input aria-label="机柜名称" className="h-[34px] text-[13px]" value={values.name} onChange={(event) => update('name', event.target.value)} /></Field>
+            <Field label="机柜总 U 数（1–60）" required className="col-span-2"><div className="flex items-center gap-3"><input aria-label="机柜高度滑块" type="range" min="1" max="60" step="1" value={Number(values.units) || 1} onChange={(event) => update('units', Number(event.target.value))} className="h-[34px] min-w-0 flex-1 accent-primary" /><Input ref={unitsRef} aria-label="机柜总 U 数" type="number" min="1" max="60" step="1" className="h-[34px] w-20 text-[13px]" value={values.units} onChange={(event) => update('units', event.target.value)} /></div></Field>
+            <p className="col-span-2 text-[11px] text-muted-foreground">这是机柜总高度，不是设备占用 U 数。{editing ? '保存同步关联设备的机房 / 机柜名称，保留现有 U 位；缩柜不能挤出已上架设备。' : '空机柜独立保存，无需先录入设备。'}</p></> : <p className="col-span-2 text-[11px] text-muted-foreground">独立保存机房，创建后可连续添加空机柜。</p>}
         </fieldset>
-        <div className="flex flex-wrap gap-2"><Button type="submit" size="sm" disabled={busy || mutationBlocked || (editing && !dirty)}>{busy ? '保存中…' : mode === 'room' ? '创建机房' : editing ? '保存机柜' : '创建机柜'}</Button><Button type="button" variant="outline" size="sm" disabled={busy || !dirty} onClick={() => { setValues(baseline); setError('') }}>重置</Button></div>
+        <div className="flex flex-wrap gap-2"><Button type="submit" size="sm" className="cmdb-primary-action h-[34px] text-[13px]" disabled={busy || mutationBlocked || (editing && !dirty)}>{busy ? '保存中…' : mode === 'room' ? '创建机房' : editing ? '保存机柜' : '创建机柜'}</Button><Button type="button" variant="outline" size="sm" className="h-[34px] text-[13px]" disabled={busy || !dirty} onClick={() => { setValues(baseline); setError('') }}>重置</Button></div>
       </form>
       <div className="mt-4 border-t border-border/60 pt-3"><Button type="button" data-rack-migration-preview variant="ghost" size="sm" className="h-7 px-0 text-[11px] text-muted-foreground" disabled={busy} onClick={onMigration}>旧位置迁移预览 / 安全回滚</Button><p className="mt-1 text-[11px] text-muted-foreground">目录中选择「未分配机柜」可批量分配设备。</p></div>
     </div>

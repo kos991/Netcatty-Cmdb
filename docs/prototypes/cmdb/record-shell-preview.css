@@ -1,0 +1,188 @@
+/* Shared offline record surfaces: assets, people, IP and cabinet properties. */
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) {
+  /* 对照原生右栏：面板用浅灰蓝底色，信息卡片浮于其上，避免与主表格同为纯白。 */
+  color: var(--fg); background: #f6f8fb; border: 1px solid var(--border);
+  padding: 0; font-size: 13px; box-sizing: border-box; overflow: hidden;
+  container-type: inline-size;
+}
+:is(#asset-sheet, #person-detail, #person-editor[data-mode="edit"]) {
+  position: fixed; inset: 36px 10px 10px auto; margin: 0;
+  width: min(420px, calc(100vw - 20px)); max-width: calc(100vw - 20px);
+  height: calc(100dvh - 46px); max-height: calc(100dvh - 46px); border-radius: 8px;
+}
+#asset-sheet:not(.expanded) { width: min(var(--asset-detail-width, 420px), calc(100vw - 20px)); }
+#asset-sheet .asset-panel-resizer {
+  position: absolute; z-index: 25; top: 0; bottom: 0; left: 0; width: 7px;
+  cursor: col-resize; touch-action: none; border-radius: 7px 0 0 7px;
+}
+#asset-sheet .asset-panel-resizer::after { content: ''; position: absolute; inset: 0 auto 0 0; width: 2px; background: transparent; }
+#asset-sheet .asset-panel-resizer:hover::after,
+#asset-sheet .asset-panel-resizer:focus-visible::after,
+#asset-sheet.resizing .asset-panel-resizer::after { background: var(--accent); }
+#asset-sheet .asset-panel-resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#asset-sheet.resizing { user-select: none; cursor: col-resize; }
+/* 暗色下面板底与卡片底跟随主题变量，不写死浅色。 */
+:root[data-preview-theme="dark"] :is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) { background: var(--surface); }
+:root[data-preview-theme="dark"] :is(.record-body, #asset-sheet-body, #asset-create-body, #person-detail-body) { background: var(--bg); }
+#asset-sheet.expanded .asset-panel-resizer { display: none; }
+@media(max-width: 979px) { #asset-sheet .asset-panel-resizer { display: none; } }
+:is(#asset-create-dialog, #person-editor[data-mode="create"]) {
+  width: min(860px, calc(100vw - 32px)); max-width: calc(100vw - 32px);
+  height: min(680px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px);
+  margin: auto; border-radius: 10px;
+}
+:is(#asset-sheet, #asset-create-dialog, #person-detail, #person-editor).expanded {
+  position: fixed; inset: 36px 10px 10px 54px; margin: 0;
+  width: calc(100vw - 64px); max-width: calc(100vw - 64px);
+  height: calc(100dvh - 46px); max-height: calc(100dvh - 46px); border-radius: 8px;
+}
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor)[open] { display: flex; flex-direction: column; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor):not([open]):is(dialog) { display: none; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor)::backdrop { background: transparent; }
+:is(#asset-create-dialog, #person-editor[data-mode="create"])::backdrop { background: color-mix(in srgb, var(--fg) 18%, transparent); }
+:is(.record-header, #asset-sheet > .dialog-header, #asset-create-dialog > .dialog-header, #person-detail > .dialog-header, #person-editor > .dialog-header) {
+  display: flex; align-items: center; flex: none; gap: 8px; min-height: 62px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.record-header h2, :is(#asset-sheet, #asset-create-dialog, #person-detail, #person-editor) .dialog-header h2 {
+  margin: 0; font-size: 14px; font-weight: 600; line-height: 20px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+:is(.sheet-identity, .person-detail-summary, .create-dialog-identity) { min-width: 0; flex: 1; }
+:is(.sheet-title-row, .person-detail-heading) { display: flex; flex-wrap: nowrap; min-width: 0; gap: 7px; }
+:is(#asset-sheet-subtitle, #person-detail-code, .create-dialog-subtitle) { font-size: 11px; color: var(--muted); margin: 3px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.sheet-device-icon, .person-detail-icon) { width: 28px; height: 28px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); flex: none; }
+#asset-sheet-subtitle { display: flex; align-items: center; gap: 7px; }
+#asset-sheet-subtitle > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.record-redundant-title { display: none !important; }
+[data-redundant-title="true"] > .detail-section-heading:has(> .record-redundant-title:only-child) { display: none; }
+.record-more-actions { display: grid; min-width: 180px; padding: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 6px 18px color-mix(in srgb, var(--fg) 12%, transparent); }
+.record-more-actions button { width: 100%; justify-content: flex-start; border: 0; font-size: 12px; }
+.record-danger-action { color: var(--error, #c53d44); }
+:is(.sheet-header-actions, .sheet-actions) { display: flex; align-items: center; flex: none; gap: 1px; }
+/* 第二条栏：资产业务操作；标题栏只保留设备信息与放大/还原、左右分栏、关闭。 */
+#asset-detail-toolbar { display: flex; align-items: center; flex: none; gap: 1px; min-height: 40px; padding: 4px 10px; border-bottom: 1px solid var(--border); background: var(--surface); overflow-x: auto; scrollbar-width: thin; }
+#asset-detail-toolbar .icon { width: 27px; height: 28px; padding: 5px; }
+#asset-detail-toolbar[hidden] { display: none; }
+#asset-detail-toolbar .record-more .menu { top: 132px; }
+#asset-sheet header .sheet-header-actions .icon[aria-disabled="true"] { cursor: default; }
+#asset-sheet header .sheet-header-actions .icon[aria-disabled="true"]:hover { background: transparent; }
+:is(.sheet-header-actions, .sheet-actions) .icon { width: 27px; height: 28px; padding: 5px; }
+:is(.record-tabs, #asset-detail-tabs, .person-detail-tabs) {
+  display: flex; flex: none; align-items: center; height: 42px; min-height: 42px; gap: 3px;
+  padding: 5px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; overscroll-behavior-x: contain;
+}
+:is(.record-tabs, #asset-detail-tabs, .person-detail-tabs) [role="tab"] {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 5px;
+  width: auto; min-width: 55px; height: 29px; padding: 0 8px; border: 0; border-radius: 5px;
+  color: var(--muted); background: transparent; font-size: 12px; white-space: nowrap;
+}
+:is(.record-tabs, #asset-detail-tabs, .person-detail-tabs) [role="tab"][aria-selected="true"] { color: var(--fg); background: var(--muted-surface); font-weight: 600; }
+:is(.record-tabs, #asset-detail-tabs, .person-detail-tabs) svg { width: 14px; height: 14px; }
+#asset-detail-tabs[role="tablist"],
+.person-detail-tabs[role="tablist"],
+:is(#asset-sheet, #asset-create-dialog) .asset-form-tabs[role="tablist"],
+#person-editor .person-editor-tabs[role="tablist"] { gap: 2px; padding: 5px 8px; }
+#asset-detail-tabs [role="tab"],
+.person-detail-tabs [role="tab"],
+:is(#asset-sheet, #asset-create-dialog) .asset-form-tabs [role="tab"],
+#person-editor .person-editor-tabs [role="tab"] { width: 28px; min-width: 28px; height: 26px; padding: 0; gap: 0; }
+#asset-detail-tabs [role="tab"] .record-tab-label,
+.person-detail-tabs [role="tab"] .record-tab-label,
+:is(#asset-sheet, #asset-create-dialog) .asset-form-tabs [role="tab"] .record-tab-label,
+#person-editor .person-editor-tabs [role="tab"] .record-tab-label { display: none; }
+/* 侧栏足够宽时恢复图标+短文字，窄时保持纯图标。 */
+@container (min-width: 600px) {
+  #asset-detail-tabs [role="tab"],
+  .person-detail-tabs [role="tab"],
+  :is(#asset-sheet, #asset-create-dialog) .asset-form-tabs [role="tab"],
+  #person-editor .person-editor-tabs [role="tab"] { width: auto; min-width: 44px; height: 28px; padding: 0 8px; gap: 5px; }
+  #asset-detail-tabs [role="tab"] .record-tab-label,
+  .person-detail-tabs [role="tab"] .record-tab-label,
+  :is(#asset-sheet, #asset-create-dialog) .asset-form-tabs [role="tab"] .record-tab-label,
+  #person-editor .person-editor-tabs [role="tab"] .record-tab-label { display: inline; font-size: 11px; white-space: nowrap; }
+}
+#asset-detail-tabs [role="tab"][aria-selected="true"],
+.person-detail-tabs [role="tab"][aria-selected="true"],
+:is(#asset-sheet, #asset-create-dialog) .asset-form-tabs [role="tab"][aria-selected="true"],
+#person-editor .person-editor-tabs [role="tab"][aria-selected="true"] { font-weight: 400; }
+:is(.record-body, #asset-sheet-body, #asset-create-body, #person-detail-body) {
+  min-height: 0; min-width: 0; flex: 1; overflow: auto; padding: 16px;
+  scrollbar-width: thin; overscroll-behavior: contain; background: #f6f8fb;
+}
+/* 信息块为浮起的白色卡片，与灰蓝面板底形成层次。 */
+:is(#asset-sheet, #asset-create-dialog, #person-detail, #person-editor) :is(.asset-section, .detail-section, .create-form-section, .record-section) {
+  padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); margin: 0 0 12px; min-width: 0;
+}
+:is(#asset-sheet, #asset-create-dialog, #person-detail, #person-editor) .dialog-footer,
+.record-footer {
+  display: flex; align-items: center; justify-content: flex-end; flex: none; gap: 8px;
+  padding: 11px 16px; border-top: 1px solid var(--border); background: var(--surface);
+}
+:is(#asset-sheet, #asset-create-dialog, #person-editor) .dialog-footer button { flex: none; width: auto; min-width: 72px; height: 34px; font-size: 12px; }
+:is(#asset-sheet, #asset-create-dialog, #person-editor) .dialog-footer .primary { min-width: 96px; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) .dialog-note { font-size: 11px; line-height: 1.6; color: var(--muted); }
+:is(#asset-sheet, #asset-create-dialog, #person-detail, #person-editor) h3 { font-size: 13px; font-weight: 600; margin: 0 0 14px; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) :is(.fields, .record-fields) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) :is(.field, .record-fields > *) { min-width: 0; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) .full { grid-column: 1 / -1; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; line-height: 17px; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) .field :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%; min-width: 0; max-width: 100%; height: 34px; padding: 6px 9px; border: 1px solid var(--border);
+  border-radius: 5px; color: var(--fg); background: var(--bg); font: inherit; font-size: 13px;
+}
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) .field textarea { height: 76px; min-height: 60px; resize: vertical; line-height: 1.5; }
+:is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) :is(.asset-detail-values, .person-detail-values) { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px 14px; margin: 0; }
+:is(.record-shell, #asset-sheet, #person-detail) :is(.asset-detail-values, .person-detail-values) > div { min-width: 0; border: 0; padding: 0; }
+:is(.record-shell, #asset-sheet, #person-detail) dt { font-size: 12px; line-height: 17px; color: var(--muted); margin-bottom: 5px; }
+:is(.record-shell, #asset-sheet, #person-detail) dd { margin: 0; font-size: 13px; line-height: 20px; color: var(--fg); overflow-wrap: anywhere; }
+:is(.record-shell, #asset-sheet) .asset-credentials .asset-credential-grid .field { display: block; }
+:is(.record-shell, #asset-sheet) .asset-hardware-collection { padding-top: 16px; }
+.record-more { position: relative; }
+.record-more > summary { width: 27px; height: 28px; padding: 4px; border: 0; background: transparent; }
+.record-more .menu { position: fixed; left: auto; right: 24px; top: 92px; z-index: 20; }
+.record-preview-note { margin: 0 0 14px; font-size: 11px; line-height: 1.6; color: var(--muted); }
+@media(min-width: 980px) {
+  body:has(#asset-sheet[open]:not(.expanded)) .surface { margin-right: calc(var(--asset-detail-width, 420px) + 10px); }
+  body:has(#person-detail[open]:not(.expanded)) .surface,
+  body:has(#person-editor[data-mode="edit"][open]:not(.expanded)) .surface { margin-right: 430px; }
+}
+@container (min-width: 650px) {
+  .record-body > :is(.asset-section, .record-section), #asset-sheet-body > .asset-section { max-width: 980px; margin-left: auto; margin-right: auto; }
+}
+@media(max-width: 560px) {
+  :is(#asset-sheet, #person-detail, #person-editor[data-mode="edit"]), :is(#asset-sheet, #person-detail, #person-editor).expanded { inset: 36px 6px 6px; width: calc(100vw - 12px); max-width: calc(100vw - 12px); height: calc(100dvh - 42px); max-height: calc(100dvh - 42px); }
+  :is(#asset-create-dialog, #person-editor[data-mode="create"]) { width: calc(100vw - 12px); max-width: calc(100vw - 12px); height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+  :is(.record-shell, #asset-sheet, #asset-create-dialog, #person-detail, #person-editor) .fields { grid-template-columns: minmax(0,1fr); }
+}
+
+/* Offline record previews opt in; the default light palette remains in cmdb-preview.css. */
+:root[data-preview-theme="dark"] {
+  color-scheme: dark;
+  --bg: #171d27;
+  --surface: #202835;
+  --muted-surface: #2a3545;
+  --fg: #e3eaf4;
+  --muted: #a0afc3;
+  --border: #3b485b;
+  --accent: #65b4ff;
+  --accent-soft: #233e5b;
+  --success: #64d5ac;
+  --warning: #f0c16c;
+  --top: #141a23;
+  --rail: #1b2330;
+  --error: #ff8b94;
+}
+:root[data-preview-theme="dark"] :is(.rail button.selected, .rail a.selected, .toolbar .new-menu > summary:not(.primary):hover, .asset-table tbody tr:hover) { background: var(--muted-surface); }
+:root[data-preview-theme="dark"] :is(.asset-filters, .rack-frame, .slot, .ip-cell) { background: var(--bg); }
+:root[data-preview-theme="dark"] :is(.asset-table td, .rack-frame, .u-label) { border-color: var(--border); }
+:root[data-preview-theme="dark"] :is(.u-label, .asset-status.archived, .ip-cell.special, .pool-legend .special) { background: var(--muted-surface); color: var(--muted); }
+:root[data-preview-theme="dark"] .slot { border-color: var(--accent); }
+:root[data-preview-theme="dark"] :is(.asset-status, .person-status):not(.warning, .idle, .archived, .leave, .inactive) { color: var(--success); background: color-mix(in srgb, var(--success) 15%, var(--surface)); }
+:root[data-preview-theme="dark"] :is(.asset-status.warning, .person-status.leave, .ip-cell.reserved, .pool-legend .reserved) { color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, var(--surface)); }
+:root[data-preview-theme="dark"] :is(.asset-status.idle, .ip-cell.used, .pool-legend .used) { color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--surface)); }
+:root[data-preview-theme="dark"] :is(.ip-cell.abnormal, .pool-legend .abnormal) { color: var(--error); background: color-mix(in srgb, var(--error) 15%, var(--surface)); }
+:root[data-preview-theme="dark"] :is(.ip-cell.used, .pool-legend .used) { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+:root[data-preview-theme="dark"] :is(.ip-cell.reserved, .pool-legend .reserved) { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
+:root[data-preview-theme="dark"] :is(.ip-cell.abnormal, .pool-legend .abnormal) { border-color: color-mix(in srgb, var(--error) 45%, var(--border)); }

@@ -12,20 +12,27 @@
 .asset-table tbody tr:hover { background: #f7faff; }
 .asset-table .checkbox-cell { width: 32px; padding-left: 14px; padding-right: 2px; }
 .asset-table .action-cell { width: 80px; text-align: right; padding-right: 14px; }
-.asset-table .action-cell button { width: 26px; height: 27px; padding: 0; border: 0; background: transparent; color: var(--muted); }
-.asset-table .action-cell button:hover { background: var(--muted-surface); color: var(--fg); }
+.asset-table .action-cell .asset-row-actions { display: inline-flex; align-items: center; gap: 2px; width: auto; height: 27px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); font-size: 11px; }
+.asset-table .action-cell .asset-row-actions svg { width: 12px; height: 12px; color: var(--muted); }
+.asset-table .action-cell .asset-row-actions:hover { background: var(--muted-surface); }
+.asset-table th.asset-identity-header { overflow: visible; text-overflow: clip; white-space: nowrap; cursor: help; }
 .asset-primary { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.asset-primary { height: auto; text-align: left; justify-content: flex-start; background: transparent; padding: 0; border: 0; color: var(--fg); font-weight: 600; }
 button.asset-primary:hover { color: var(--accent); }
+.asset-name-row { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.asset-name-row .asset-primary { flex: 0 1 auto; min-width: 0; width: auto; }
+.asset-type-dot { flex: 0 0 8px; width: 8px; height: 8px; border: 1px solid var(--border); border-radius: 50%; }
 .asset-secondary { display: block; font-size: 10px; line-height: 1.45; margin-top: 4px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asset-ip { font-variant-numeric: tabular-nums; font-size: 11px; }
 .asset-access-address { display: block; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; word-break: normal; font-size: 11px; line-height: 1.55; user-select: text; cursor: text; }
 .asset-address-line { display: flex; align-items: center; flex-wrap: nowrap; gap: 4px; }
 .asset-address-value { min-width: 0; overflow-wrap: anywhere; font-size: 11px; font-variant-numeric: tabular-nums; }
+.asset-table .asset-address-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asset-netcatty-link { flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; color: var(--muted); background: transparent; }
 .asset-netcatty-link:hover { color: var(--accent); background: var(--accent-soft); }
 .asset-netcatty-link svg { width: 13px; height: 13px; }
 .asset-address-line.asset-secondary { display: flex; }
+.asset-netcatty-notice { display: block; margin: 4px 0 0; white-space: normal; overflow-wrap: anywhere; }
 .asset-status { display: inline-block; border-radius: 4px; padding: 3px 7px; color: #26734f; background: #eaf6ef; font-size: 11px; white-space: nowrap; }
 .asset-status.warning { color: #986b20; background: #fff5df; }
 .asset-status.archived { color: var(--muted); background: #edf0f3; }
@@ -50,9 +57,12 @@ button.asset-primary:hover { color: var(--accent); }
 .prototype-history { margin: 0; padding-left: 15px; color: var(--muted); font-size: 11px; line-height: 1.8; }
 .prototype-history strong { color: var(--fg); font-weight: 500; }
 .operation-dialog { width: min(450px, calc(100vw - 32px)); }
-.operations-menu { width: min(280px, calc(100vw - 32px)); }
-.operations-menu .dialog-body { display: grid; gap: 5px; padding: 8px; }
-.operations-menu .dialog-body button { border: 0; justify-content: flex-start; }
+.operations-menu { position: fixed; inset: auto; margin: 0; width: 144px; padding: 0; border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 6px 18px #0f172a24; z-index: 40; }
+.operations-menu .dialog-body { display: grid; gap: 0; padding: 4px; }
+.operations-menu .asset-actions-group + .asset-actions-group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
+.operations-menu .dialog-body button { width: 100%; height: 30px; border: 0; justify-content: flex-start; font-size: 12px; background: transparent; }
+.operations-menu .dialog-body button:hover { background: var(--muted-surface); }
+.operations-menu .dialog-body button.danger { color: var(--danger, #dc2626); }
 .asset-filter-picker > summary { height: 30px; font-size: 11px; background: transparent; }
 .asset-filter-picker .menu { max-height: 360px; overflow: auto; display: grid; gap: 2px; }
 .asset-filter-picker .filter-option { display: flex; align-items: center; padding: 7px 9px; white-space: nowrap; color: var(--fg); font-size: 12px; }
@@ -93,6 +103,10 @@ button.asset-primary:hover { color: var(--accent); }
 .detail-rack-scroll .device .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asset-sheet.expanded { width: 100vw; border-radius: 0; }
 .asset-sheet.expanded .asset-detail-values { grid-template-columns: repeat(4,minmax(0,1fr)); }
+/* 左右分栏只切换正文单/双列，与 expanded（全宽）独立。 */
+#asset-sheet.single-column :is(.asset-detail-values, .fields, .record-fields) { grid-template-columns: minmax(0, 1fr); }
+#asset-sheet.single-column :is(.asset-detail-values, .fields, .record-fields) > * { grid-column: 1 / -1; }
+.asset-sheet .sheet-header-actions [aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 @media(max-width: 1100px) { .asset-table td, .asset-table th { padding-left: 7px; padding-right: 7px; } .asset-table .checkbox-cell { padding-left: 10px; } .asset-table .action-cell { width: 64px; padding-right: 8px; } }
 @media(max-width: 900px) { .asset-filters .include-archived { margin-left: 0; } .asset-filters select { max-width: 160px; } .asset-table td { font-size: 11px; } .asset-table .action-cell { position: sticky; right: 0; background: var(--surface); } .assets-main { min-height: 520px; } }
 
@@ -113,6 +127,21 @@ button.asset-primary:hover { color: var(--accent); }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced[open] > summary::before { transform: rotate(90deg); }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced-body { display: grid; gap: 6px; padding-top: 6px; }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-control :is(input, select, textarea) { display: block; width: 100%; }
+/* 常用预设与 420px 窄栏：按字段容器宽度排版，与原生 cmdb-ui.css 规则一致。 */
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-field { container-type: inline-size; }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-presets-title { color: var(--muted); font-size: 11px; }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset { display: inline-flex; align-items: center; max-width: 100%; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 11px; }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset[data-active] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset > button { width: auto; height: 22px; min-width: 0; padding: 0 4px 0 8px; border: 0; background: transparent; color: inherit; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset > button + button { flex: none; padding: 0 7px 0 2px; color: var(--muted); }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset-save { width: auto; height: 22px; padding: 0 8px; border: 1px dashed var(--border); border-radius: 999px; background: transparent; color: var(--muted); font-size: 11px; }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset-save:disabled { opacity: .5; cursor: not-allowed; }
+@container (max-width: 300px) {
+  :is(.asset-sheet, .asset-create-dialog) [data-hardware-field="cpu_info"] .asset-hardware-parts { grid-template-columns: minmax(0, 1fr); }
+  :is(.asset-sheet, .asset-create-dialog) [data-hardware-field="disk_info"] .asset-hardware-parts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  :is(.asset-sheet, .asset-create-dialog) [data-hardware-field="disk_info"] [data-part="count"] { grid-column: 1 / -1; }
+}
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-raw { resize: vertical; min-height: 34px; line-height: 1.5; overflow-wrap: anywhere; }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-hint { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 0; overflow-wrap: anywhere; }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-replace { justify-self: start; height: auto; min-height: 30px; max-width: 100%; white-space: normal; font-size: 11px; }
@@ -141,3 +170,4 @@ button.asset-primary:hover { color: var(--accent); }
 .asset-sheet .asset-rack-current::after { content: ''; pointer-events: none; position: absolute; inset: 0; padding: 2px; background: linear-gradient(110deg, #6ca9df, #a4d7ff, #e2f3ff, #87c5f4, #6ca9df); background-size: 300% 100%; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: asset-device-flow 5s linear infinite; }
 @keyframes asset-device-flow { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
 @media (prefers-reduced-motion: reduce) { .asset-sheet .asset-rack-current::after { animation: none; background: #a4d7ff; } }
+

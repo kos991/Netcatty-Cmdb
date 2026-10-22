@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Building2, Cpu, Network, Plus, Server, Trash2 } from 'lucide-react'
+import { Building2, Cpu, KeyRound, Network, Plus, Server, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Spinner } from '@/components/ui/spinner'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { AssetPanel, AssetPanelSection } from './AssetPanel'
+import { AssetPanel, AssetPanelSave, AssetPanelSection } from './AssetPanel'
+import { AssetDraftDiscardDialog, AssetFormPanel, AssetFormTabs, useAssetDraftGuard } from './AssetFormTabs'
+import AssetCreateDialog from './AssetCreateDialog'
 import { toast } from '@/components/ui/toast'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { additionalEditorRows, prepareInfrastructureEditorValues, resolveInfrastructureModelID } from './infrastructureEditorModel'
@@ -49,11 +49,20 @@ function NetworkInterfaces({ interfaces, zones, managementIP, onChange }) {
   </div>
 }
 
-export default function InfrastructureEditor({ open, onOpenChange, record, directory, busy, onSubmit, netcatty, photoDraft = {}, onPhotoDraftChange, onBusyChange }) {
+const INFRASTRUCTURE_FORM_TABS = [
+  { key: 'basic', label: '基本信息' },
+  { key: 'ownership', label: '归属与位置' },
+  { key: 'network', label: '网络与系统' },
+  { key: 'credentials', label: '凭证中心' },
+]
+
+export default function InfrastructureEditor({ open, onOpenChange, expanded, onExpandedChange, onWidthChange, record, directory, busy, onSubmit, netcatty, photoDraft = {}, onPhotoDraftChange, onBusyChange }) {
   const hardwareDrafts = useHardwareDrafts(`${open ? 'open' : 'closed'}:${record?.id || 'new-infrastructure'}`)
   const [values, setValues] = useState(record || {})
+  const [formTab, setFormTab] = useState('basic')
+  const [baseline, setBaseline] = useState(record || {})
+  const draftGuard = useAssetDraftGuard(baseline, values, () => onOpenChange(false))
   const [photoBusy, setPhotoBusy] = useState(false)
-  const initializedSession = useRef('')
   useEffect(() => { onBusyChange?.(photoBusy); return () => onBusyChange?.(false) }, [photoBusy, onBusyChange])
   const meta = directory?.meta || {}
   const people = directory?.people || []
@@ -61,6 +70,8 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
   const models = useMemo(() => meta.models || [], [meta.models])
   const customFields = useMemo(() => directory?.customFields || [], [directory?.customFields])
   const networkZones = useMemo(() => infrastructureNetworkZoneOptions(meta.net_zones || []), [meta.net_zones])
+  const initializedSession = useRef('')
+
 
   useEffect(() => {
     const session = `${open ? 'open' : 'closed'}:${record?.id || 'new'}`
@@ -68,17 +79,21 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
       initializedSession.current = ''
       return
     }
-    if (initializedSession.current === session) return
     initializedSession.current = session
-    setValues(prepareInfrastructureEditorValues(record, models))
+    const prepared = prepareInfrastructureEditorValues(record, models)
+    setValues(prepared)
+    setBaseline(prepared)
+    setFormTab('basic')
   }, [open, record, models])
   useEffect(() => {
     if (!models.length) return
-    setValues(current => {
+    const sync = (current) => {
       const matched = models.find(item => Number(item.id) === Number(current.model_id))
       if (!matched || (current.vendor === matched.vendor && current.model === matched.model)) return current
       return { ...current, vendor: matched.vendor, model: matched.model }
-    })
+    }
+    setValues(sync)
+    setBaseline(sync)
   }, [models])
 
   const deviceTypeName = values.device_type || deviceTypes.find((item) => item.id === Number(values.category_id))?.name || ''
@@ -89,14 +104,14 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
   }, [photosSupported, photoDraft, onPhotoDraftChange])
   const basicFields = useMemo(() => [
     { key: 'name', label: '设备名称', required: true },
-    { key: 'asset_code', label: '资产标签编号（可选）' },
+    { key: 'asset_code', label: '资产编号' },
     { key: 'category_id', label: '设备类型', numeric: true, preserveZero: !!record?.id && !Number(values.category_id) && !!values.device_type, searchable: true, options: choices(infrastructureDeviceTypeOptions(deviceTypes, record?.id ? values : {}), '未分配'), derive: (id) => {
       const item = deviceTypes.find((entry) => entry.id === Number(id))
       const nextProfile = infrastructureFieldProfile(item?.name || '')
       return item ? { device_type: item.name, asset_class: nextProfile.kind === 'virtual' ? 'virtual' : 'physical' } : {}
     } },
-    { key: 'status', label: '状态', options: choices(meta.statuses || []) },
-    { key: 'sn', label: 'SN' },
+    { key: 'status', label: '设备状态', options: choices(meta.statuses || []) },
+    { key: 'sn', label: '设备 SN' },
     { key: 'model_id', label: '从型号库带入', hidden: !profile.brandModel || !models.length, numeric: true, searchable: true, options: choices(models.map((item) => ({ value: item.id, label: [item.vendor, item.model].filter(Boolean).join(' · ') })), '手工填写'), derive: (id) => {
       const matchedModel = models.find((item) => item.id === id)
       return matchedModel ? { vendor: matchedModel.vendor, model: matchedModel.model } : {}
@@ -143,29 +158,39 @@ export default function InfrastructureEditor({ open, onOpenChange, record, direc
       toast.error(error.message)
     }
   }
-  const footer = <div className="flex w-full gap-2"><Button type="button" variant="outline" className="h-9" onClick={() => onOpenChange(false)} disabled={busy}>取消</Button><Button type="submit" form="cmdb-infrastructure-editor" className="h-9 flex-1" disabled={busy || photoBusy}>{busy ? <Spinner className="mr-2" /> : null}保存</Button></div>
-  const content = <form id="cmdb-infrastructure-editor" onSubmit={(event) => { event.preventDefault(); submit() }} className="space-y-3">
-    <AssetPanelSection title="基本信息" icon={Cpu}>{!deviceTypes.length ? <p className="text-xs text-destructive">请先在配置中心维护设备类型。</p> : null}<Fields fields={extendedBasicFields} value={values} onChange={setValues} />{profile.brandModel ? <p className="text-[11px] text-muted-foreground">{Number(values.model_id) ? '品牌与型号已关联型号库。' : '品牌与型号可手工填写并保存。'}</p> : null}</AssetPanelSection>
-    <AssetPanelSection title="归属与位置" icon={Building2}>
-      <Fields fields={ownershipFields} value={values} onChange={setValues} />
-      {profile.kind !== 'virtual' ? <><h4 className="text-xs font-medium">安装位置</h4><p className="text-[11px] text-muted-foreground">机房与机柜分别填写；起始 U 位为 0 表示未上架。</p><Fields fields={locationFields} value={values} onChange={setValues} /></> : <p className="text-[11px] text-muted-foreground">虚拟资源无实体位置，不录入机柜位置或设备照片。</p>}
-      {photosSupported ? <DeviceImages kind="infrastructure" id={record.id} draftMode={!record.id || Object.keys(photoDraft).length > 0} draftImages={photoDraft} onDraftChange={onPhotoDraftChange} onBusyChange={setPhotoBusy} /> : null}
-    </AssetPanelSection>
-    <AssetPanelSection title="网络与系统" icon={Network}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="管理 IP"><Input className="h-9 font-mono" value={values.mgmt_ip || ''} onChange={(event) => setValues({ ...values, mgmt_ip: event.target.value })} /></Field>
-        <Field label="管理 IP 网络类型"><SelectControl className="w-full" value={values.net_type || ''} onChange={(value) => setValues({ ...values, net_type: value })} options={choices(networkZones, '未配置')} /></Field>
-        <Field label="业务 IP（兼容字段）"><Input className="h-9 font-mono" value={values.biz_ip || ''} onChange={(event) => setValues({ ...values, biz_ip: event.target.value })} /></Field>
-      </div>
-      <p className="text-[11px] text-muted-foreground">管理 IP 用于默认连接；多个业务、带外地址在接口中分别登记网络分区。</p>
-      {profile.deviceMac ? <Field label="设备级 MAC 地址"><Input className="h-9 font-mono" value={values.mac || ''} onChange={(event) => setValues({ ...values, mac: event.target.value })} /></Field> : null}
-      <NetworkInterfaces interfaces={values.interfaces || []} zones={networkZones} managementIP={values.mgmt_ip} onChange={(interfaces) => setValues({ ...values, interfaces })} />
-      {profile.systemSection ? <><h4 className="text-xs font-medium">{profile.systemSection}</h4><Fields fields={systemFields} value={values} onChange={setValues} />{(profile.cpu || profile.virtualCompute) ? <HardwareCollection value={values} onChange={setValues} connection={netcatty.connection} /> : null}</> : null}
-      <h4 className="text-xs font-medium">凭证中心</h4>
-      <NetcattyConnectionFields asset={values} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} createHost={netcatty.createHost} createCredential={netcatty.createCredential} />
-    </AssetPanelSection>
+  const footer = <AssetPanelSave onCancel={draftGuard.requestClose} onSave={submit} busy={busy || photoBusy} />
+  const body = <form id="cmdb-infrastructure-editor" onSubmit={(event) => { event.preventDefault(); submit() }}>
+    <AssetFormPanel active={formTab === 'basic'} section="basic">
+      <AssetPanelSection title="基本信息" icon={Cpu}>{!deviceTypes.length ? <p className="text-xs text-destructive">请先在配置中心维护设备类型。</p> : null}<Fields fields={extendedBasicFields} value={values} onChange={setValues} />{profile.brandModel ? <p className="text-[11px] text-muted-foreground">{Number(values.model_id) ? '品牌与型号已关联型号库。' : '品牌与型号可手工填写并保存。'}</p> : null}</AssetPanelSection>
+    </AssetFormPanel>
+    <AssetFormPanel active={formTab === 'ownership'} section="ownership">
+      <AssetPanelSection title="归属与位置" icon={Building2}>
+        <Fields fields={ownershipFields} value={values} onChange={setValues} />
+        {profile.kind !== 'virtual' ? <><h4 className="text-xs font-medium">安装位置</h4><p className="text-[11px] text-muted-foreground">机房与机柜分别填写；起始 U 位为 0 表示未上架。</p><Fields fields={locationFields} value={values} onChange={setValues} /></> : <p className="text-[11px] text-muted-foreground">虚拟资源无实体位置，不录入机柜位置或设备照片。</p>}
+        {photosSupported ? <DeviceImages kind="infrastructure" id={record.id} draftMode={!record.id || Object.keys(photoDraft).length > 0} draftImages={photoDraft} onDraftChange={onPhotoDraftChange} onBusyChange={setPhotoBusy} /> : null}
+      </AssetPanelSection>
+    </AssetFormPanel>
+    <AssetFormPanel active={formTab === 'network'} section="network">
+      <AssetPanelSection title="网络与系统" icon={Network}>
+        <div className="cmdb-form-grid grid min-w-0 grid-cols-1 gap-x-3.5 gap-y-3 sm:grid-cols-2">
+          <Field label="管理 IP"><Input className="h-[34px] font-mono text-[13px]" value={values.mgmt_ip || ''} onChange={(event) => setValues({ ...values, mgmt_ip: event.target.value })} /></Field>
+          <Field label="管理 IP 网络类型"><SelectControl className="w-full" value={values.net_type || ''} onChange={(value) => setValues({ ...values, net_type: value })} options={choices(networkZones, '未配置')} /></Field>
+          <Field label="业务 IP（兼容字段）"><Input className="h-[34px] font-mono text-[13px]" value={values.biz_ip || ''} onChange={(event) => setValues({ ...values, biz_ip: event.target.value })} /></Field>
+        </div>
+        <p className="text-[11px] text-muted-foreground">管理 IP 用于默认连接；多个业务、带外地址在接口中分别登记网络分区。</p>
+        {profile.deviceMac ? <Field label="设备级 MAC 地址"><Input className="h-[34px] font-mono text-[13px]" value={values.mac || ''} onChange={(event) => setValues({ ...values, mac: event.target.value })} /></Field> : null}
+        <NetworkInterfaces interfaces={values.interfaces || []} zones={networkZones} managementIP={values.mgmt_ip} onChange={(interfaces) => setValues({ ...values, interfaces })} />
+        {profile.systemSection ? <><h4 className="text-xs font-medium">{profile.systemSection}</h4><Fields fields={systemFields} value={values} onChange={setValues} />{(profile.cpu || profile.virtualCompute) ? <HardwareCollection value={values} onChange={setValues} connection={netcatty.connection} /> : null}</> : null}
+      </AssetPanelSection>
+    </AssetFormPanel>
+    <AssetFormPanel active={formTab === 'credentials'} section="credentials">
+      <AssetPanelSection title="凭证中心" icon={KeyRound}>
+        <NetcattyConnectionFields asset={values} value={netcatty.connection} onChange={netcatty.setConnection} hosts={netcatty.hosts} credentials={netcatty.credentials} loading={netcatty.loading} error={netcatty.error} createHost={netcatty.createHost} createCredential={netcatty.createCredential} />
+      </AssetPanelSection>
+    </AssetFormPanel>
+    <AssetDraftDiscardDialog guard={draftGuard} busy={busy} />
   </form>
   return record.id
-    ? <AssetPanel open={open} onClose={() => onOpenChange(false)} title="编辑基础设施" subtitle={record.asset_code} icon={Server} footer={footer} dataSection="cmdb-infrastructure-editor">{content}</AssetPanel>
-    : <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle className="flex items-center gap-2"><Server size={17} />新增基础设施</DialogTitle></DialogHeader>{content}<DialogFooter>{footer}</DialogFooter></DialogContent></Dialog>
+    ? <AssetPanel open={open} expanded={expanded} onExpandedChange={onExpandedChange} onWidthChange={onWidthChange} onClose={draftGuard.requestClose} title="编辑基础设施" subtitle={record.asset_code} icon={Server} tabs={<AssetFormTabs tabs={INFRASTRUCTURE_FORM_TABS} value={formTab} onChange={setFormTab} dataSection="infrastructure-form-tabs" />} footer={footer} dataSection="cmdb-infrastructure-editor">{body}</AssetPanel>
+    : <AssetCreateDialog open={open} onOpenChange={(value) => { if (!value) draftGuard.requestClose() }} title="新增基础设施" icon={Server} tabs={INFRASTRUCTURE_FORM_TABS} tab={formTab} onTabChange={setFormTab} busy={busy || photoBusy} footer={footer}>{body}</AssetCreateDialog>
 }

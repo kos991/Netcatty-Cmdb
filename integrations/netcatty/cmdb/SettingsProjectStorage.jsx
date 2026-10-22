@@ -9,6 +9,7 @@ import { directoryChanged, useAction, useQuery } from './hooks'
 import { selectAttachmentDirectory } from './transport'
 import { buildAttachmentMigrationSummary, buildAttachmentStorageSummary, formatAttachmentBytes } from './attachmentStorageModel'
 import { ErrorBanner } from './ui'
+import './settings.css'
 
 export default function SettingsProjectStorage({ project, onSaved }) {
   const attachmentQuery = useQuery(api.attachmentStorage)
@@ -18,8 +19,8 @@ export default function SettingsProjectStorage({ project, onSaved }) {
   const [migration, setMigration] = useState(null)
   const [migrationResult, setMigrationResult] = useState(null)
   useEffect(() => {
-    if (project && projectId.current !== project.id) {
-      projectId.current = project.id
+    if (project && projectId.current !== `${project.id}:${project.revision}`) {
+      projectId.current = `${project.id}:${project.revision}`
       setValues({ name: project.name || '', code: project.code || '' })
     }
   }, [project])
@@ -34,11 +35,11 @@ export default function SettingsProjectStorage({ project, onSaved }) {
     setMigration(null)
     await attachmentQuery.reload()
   }, '附件目录已更新')
-  return <div className="space-y-4">
-    <SettingsSection title="项目设置" actions={<Button size="sm" className="h-8 text-xs" disabled={!project || action.busy} onClick={() => action.run(async () => { await api.updateProject(project.id, values); onSaved?.(); directoryChanged() }, '项目设置已保存')}><Save size={14} className="mr-1.5" />保存设置</Button>}>
+  return <div className="cmdb-settings-sections">
+    <SettingsSection title="项目设置" actions={<Button className="cmdb-primary-action" disabled={!project || action.busy} onClick={() => action.run(async () => { await api.updateProject(project.id, values); onSaved?.(); directoryChanged() }, '项目设置已保存')}><Save size={14} />保存设置</Button>}>
       <SettingCard divided>
-        <SettingRow anchorId="cmdb-project-name" label="项目名称" description="资产、组织、地址池和工单归属同一当前项目"><Input aria-label="项目名称" disabled={!project || action.busy} className="h-9 w-72 max-w-full" value={values.name} onChange={(event) => setValues((old) => ({ ...old, name: event.target.value }))} /></SettingRow>
-        <SettingRow anchorId="cmdb-project-code" label="项目编码" description="用于项目数据隔离和导入导出识别，不作为资产编码"><Input aria-label="项目编码" disabled={!project || action.busy} className="h-9 w-72 max-w-full font-mono" value={values.code} onChange={(event) => setValues((old) => ({ ...old, code: event.target.value }))} /></SettingRow>
+        <SettingRow anchorId="cmdb-project-name" label="项目名称" description="资产、组织、地址池和工单归属同一当前项目"><Input aria-label="项目名称" disabled={!project || action.busy} className="h-[34px] w-72 max-w-full text-[13px]" value={values.name} onChange={(event) => setValues((old) => ({ ...old, name: event.target.value }))} /></SettingRow>
+        <SettingRow anchorId="cmdb-project-code" label="项目编码" description="用于项目数据隔离和导入导出识别，不作为资产编码"><Input aria-label="项目编码" disabled={!project || action.busy} className="h-[34px] w-72 max-w-full font-mono text-[13px]" value={values.code} onChange={(event) => setValues((old) => ({ ...old, code: event.target.value }))} /></SettingRow>
       </SettingCard>
     </SettingsSection>
     <SettingsSection title="附件存储">
@@ -46,7 +47,7 @@ export default function SettingsProjectStorage({ project, onSaved }) {
       <SettingCard divided>
         <SettingRow anchorId="cmdb-attachment-path" label="附件管理路径" description={attachmentQuery.data ? `${summary.modeLabel} · ${summary.writableLabel} · ${summary.countLabel} · ${summary.sizeLabel}` : attachmentQuery.loading ? '正在读取当前项目附件目录、可写状态及容量' : '未能读取附件存储状态'}>
           <div className="flex max-w-full flex-col items-end gap-2">
-            <Input aria-label="附件管理路径" className="h-9 w-72 max-w-full bg-muted/30 font-mono text-xs" value={attachmentQuery.data ? summary.path : ''} readOnly />
+            <Input aria-label="附件管理路径" className="h-[34px] w-72 max-w-full bg-muted/30 font-mono text-xs" value={attachmentQuery.data ? summary.path : ''} readOnly />
             <div className="flex gap-2"><Button size="sm" variant="outline" className="h-8 text-xs" disabled={!project || action.busy || attachmentQuery.loading} onClick={chooseDirectory}>选择目录</Button><Button size="sm" variant="ghost" className="h-8 text-xs" disabled={!project || action.busy || attachmentQuery.loading || attachmentQuery.data?.uses_default} onClick={() => action.run(async () => setMigration({ preview: await api.preflightAttachmentStorage(''), restoreDefault: true }))}>恢复默认</Button></div>
           </div>
         </SettingRow>

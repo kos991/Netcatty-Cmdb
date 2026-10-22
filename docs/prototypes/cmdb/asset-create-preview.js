@@ -2,12 +2,15 @@
   'use strict';
 
   const viewIcons = { terminal: 'monitor', infrastructure: 'server', systems: 'workflow' };
-  const networkKeys = new Set(['deployment', 'port', 'access_url', 'middleware', 'database_info']);
-  const sectionDefinitions = [
-    { title: '基本信息', icon: 'cpu' },
-    { title: '归属与位置', icon: 'map-pin' },
-    { title: '网络与系统', icon: 'network' },
-  ];
+  const formSections = {
+    terminal: [['basic', '基本信息', 'cpu'], ['ownership', '归属位置', 'map-pin'], ['network', '网络系统', 'network'], ['hardware', '硬件配置', 'server']],
+    infrastructure: [['basic', '基本信息', 'cpu'], ['ownership', '归属位置', 'map-pin'], ['hardware', '硬件配置', 'server'], ['network', '网络配置', 'network']],
+    systems: [['basic', '基本信息', 'workflow'], ['ownership', '归属部署', 'map-pin'], ['network', '网络访问', 'network'], ['hosting', '承载设备', 'server']],
+  };
+  const ownershipKeys = new Set(['organization', 'department', 'person', 'room', 'location', 'data_center', 'cabinet_name', 'floor', 'cabinet_row', 'cabinet_col', 'start_u', 'height_u', 'deployment', 'deployment_location']);
+  const hardwareKeys = new Set(['cpu_info', 'memory_mb', 'disk_info', 'vcpu', 'vCPU']);
+  const networkKeys = new Set(['ip', 'physical_ip', 'network', 'os', 'os_type', 'os_version', 'mgmt_ip', 'net_type', 'biz_ip', 'business_network_type', 'service_ip', 'network_type', 'network_source', 'ipam', 'port', 'access_url', 'middleware', 'database_info']);
+  const fullField = (field) => field.kind === 'textarea' || /(?:name|code|sn|model|url|organization|department|person|room|location|data_center|cabinet_name|middleware|database_info|network_source|ipam)/i.test(field.key);
   const element = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -33,7 +36,7 @@
   function createField(field, values, id, onStructuralChange) {
     const hardware = window.assetHardwareControlsPreview.create(field, values, id);
     if (hardware) return hardware;
-    const wrapper = element('div', 'field' + (field.kind === 'textarea' ? ' full' : ''));
+    const wrapper = element('div', 'field' + (fullField(field) ? ' full' : ''));
     const label = element('label', '', field.label);
     label.htmlFor = id;
     if (field.required) label.append(element('span', 'required', '*'));
@@ -56,14 +59,22 @@
       if (['type', 'asset_class', 'os_type'].includes(field.key)) onStructuralChange?.(field.key);
     });
     wrapper.append(label, input);
+    if (field.suggestions && input.tagName === 'INPUT') {
+      const list = element('datalist');
+      list.id = id + '-options';
+      for (const option of field.suggestions(values)) list.append(new Option(option, option));
+      input.setAttribute('list', list.id);
+      input.placeholder = '可选择或输入' + field.label;
+      wrapper.append(list);
+    }
     return wrapper;
   }
 
   function appendCredentials(root, values, prefix) {
-    const section = element('section', 'asset-section create-form-section asset-credentials');
-    const heading = element('h3', '', '凭证中心');
+    const section = element('section', 'asset-section create-form-section asset-credentials record-section');
+    const heading = element('h3', root.dataset.section === 'credentials' ? 'record-redundant-title' : '', '凭证中心');
     heading.prepend(svg('key'));
-    const fields = element('div', 'fields asset-credential-grid');
+    const fields = element('div', 'fields record-fields asset-credential-grid');
     for (const [key, label, options] of [
       ['_prototype_host', 'Netcatty 主机', ['虚构主机甲（原型）', '虚构主机乙（原型）']],
       ['_prototype_vault', 'Netcatty 密钥库', ['虚构密钥库甲（原型）', '虚构密钥库乙（原型）']],
@@ -88,11 +99,11 @@
       draft.family = detectedFamily;
       if (draft.phase !== 'applied') { draft.phase = 'idle'; draft.results = null; }
     }
-    const section = element('section', 'asset-section create-form-section asset-hardware-collection');
+    const section = element('section', 'asset-section create-form-section asset-hardware-collection record-section');
     const heading = element('h3', '', 'SSH 硬件读取（离线模拟）');
     heading.prepend(svg('server'));
     const detected = element('p', 'dialog-note', '表单 OS 识别：' + (detectedFamily || '未识别') + '（' + (os || '未填写') + '）；下方家族可手动选择，仅控制模拟结果。');
-    const controls = element('div', 'fields');
+    const controls = element('div', 'fields record-fields');
     const familyField = element('label', 'field', '操作系统家族');
     const family = element('select');
     family.setAttribute('aria-label', '模拟读取操作系统家族');
@@ -185,12 +196,12 @@
 
   function prepareDialog() {
     if (dialog) return;
-    dialog = element('dialog', 'asset-create-dialog');
+    dialog = element('dialog', 'asset-create-dialog record-shell');
     dialog.id = 'asset-create-dialog';
     dialog.setAttribute('aria-labelledby', 'asset-create-title');
     dialog.setAttribute('aria-describedby', 'asset-create-note');
 
-    const header = element('div', 'dialog-header');
+    const header = element('div', 'dialog-header record-header');
     deviceIcon = element('span', 'sheet-device-icon');
     const identity = element('div', 'create-dialog-identity');
     title = element('h2');
@@ -200,36 +211,43 @@
     close.id = 'asset-create-close';
     close.setAttribute('aria-label', '关闭新增原型');
     close.append(svg('close'));
-    close.addEventListener('click', () => dialog.close());
+    close.addEventListener('click', () => dialog._requestFormClose?.());
     header.append(deviceIcon, identity, close);
 
-    body = element('div', 'dialog-body');
+    body = element('div', 'dialog-body record-body');
     body.id = 'asset-create-body';
-    const footer = element('div', 'dialog-footer');
+    const footer = element('div', 'dialog-footer record-footer');
     const cancel = button('取消');
     cancel.id = 'asset-create-cancel';
-    cancel.addEventListener('click', () => dialog.close());
-    const save = button('新增（原型示意）', 'primary');
+    cancel.addEventListener('click', () => dialog._requestFormClose?.());
+    const save = button('新增（离线不可用）', 'primary');
     save.id = 'asset-create-save';
     save.disabled = true;
     save.title = '原型未接入保存，不会创建资产';
-    footer.append(cancel, save);
+    footer.append(element('span', 'asset-form-offline', '离线原型 · 不会保存'), cancel, save);
     dialog.append(header, body, footer);
     document.body.append(dialog);
-    // 保留原生 dialog 的 Esc、焦点约束与关闭后焦点恢复行为。
+    // Esc 的关闭确认由当前 renderForm 会话处理，仍保留原生焦点约束。
   }
 
-  function mergeGroups(config) {
-    const sections = sectionDefinitions.map((definition) => ({ ...definition, fields: [] }));
+  function mergeGroups(view, config) {
+    const sections = formSections[view].map(([key, title, icon]) => ({ key, title, icon, fields: [] }));
+    if (config.groups.some((group) => group.fields.some((field) => field.key === 'history'))) sections.push({ key: 'history', title: '运维履历', icon: 'history', fields: [] });
     for (const group of config.groups) {
-      const groupIndex = /人员|归属|安装位置/.test(group.title) ? 1
-        : /网络|硬件|业务地址/.test(group.title) ? 2 : 0;
       for (const field of group.fields) {
-        if (field.key === 'history') continue;
-        const index = networkKeys.has(field.key) ? 2 : groupIndex;
-        sections[index].fields.push(field);
+        const key = field.key === 'history' ? 'history' : field.key === 'server_name' ? 'hosting' : ownershipKeys.has(field.key) ? 'ownership'
+          : hardwareKeys.has(field.key) ? 'hardware' : networkKeys.has(field.key) ? 'network'
+            : view === 'terminal' && ['vendor', 'model'].includes(field.key) ? 'hardware' : 'basic';
+        (sections.find((section) => section.key === key) || sections[0]).fields.push(field);
       }
     }
+    const basic = sections.find((section) => section.key === 'basic');
+    const leadingKeys = ['name', 'code', 'type', 'status'];
+    basic.fields = [
+      ...leadingKeys.flatMap((key) => basic.fields.filter((field) => field.key === key)),
+      ...basic.fields.filter((field) => !leadingKeys.includes(field.key)),
+    ];
+    sections.push({ key: 'credentials', title: '凭证中心', icon: 'key', fields: [] });
     return sections;
   }
 
@@ -254,65 +272,182 @@
     section.append(photos);
   }
 
+  function renderForm({ root, nav, view, config, values, prefix = 'asset-field', mode = 'edit' }) {
+    const owner = root.closest('dialog');
+    owner._disposeForm?.();
+    owner.querySelectorAll('[data-form-tabs]').forEach((node) => node.remove());
+    root.replaceChildren();
+    root.classList.add('record-body');
+    root.removeAttribute('role');
+    root.removeAttribute('aria-labelledby');
+    delete root.dataset.detailPanel;
+    const tabs = nav || element('div', 'record-tabs asset-form-tabs');
+    tabs.classList.add('record-tabs', 'asset-form-tabs');
+    tabs.dataset.formTabs = '';
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', config.label + '表单分区');
+    tabs.replaceChildren();
+    if (!nav) root.before(tabs);
+    let activeSection = 'basic';
+    let dirty = false;
+    const sections = mergeGroups(view, config);
+    const panels = new Map();
+    const controls = [];
+    const scrollPositions = new Map();
+    const note = element('p', 'dialog-note create-dialog-note asset-form-offline', '离线表单预览：草稿仅在本次窗口保留，保存、上传和真实连接均未接入。');
+    note.id = mode === 'create' ? 'asset-create-note' : prefix + '-note';
+    root.append(note);
+
+    function selectSection(key) {
+      if (!panels.has(key)) return;
+      scrollPositions.set(activeSection, root.scrollTop);
+      activeSection = key;
+      root.dataset.activeSection = key;
+      for (const [sectionKey, panel] of panels) panel.hidden = sectionKey !== key;
+      for (const tab of tabs.children) {
+        const selected = tab.dataset.formTab === key;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      }
+      root.scrollTop = scrollPositions.get(key) || 0;
+    }
+
+    for (const definition of sections) {
+      const section = element('section', 'asset-section create-form-section record-section');
+      section.id = prefix + '-section-' + definition.key;
+      section.dataset.section = definition.key;
+      section.setAttribute('role', 'tabpanel');
+      section.setAttribute('aria-labelledby', prefix + '-tab-' + definition.key);
+      const heading = element('h3', 'record-redundant-title', definition.title);
+      heading.prepend(svg(definition.icon));
+      const fields = element('div', 'fields record-fields');
+      section.append(heading, fields);
+      const uniqueFields = new Map();
+      for (const field of definition.fields) {
+        if (!uniqueFields.has(field.key)) uniqueFields.set(field.key, []);
+        uniqueFields.get(field.key).push(field);
+      }
+      for (const [key, variants] of uniqueFields) {
+        const initial = variants.find((field) => !field.when || field.when(values)) || variants[0];
+        const wrapper = createField(initial, values, prefix + '-' + key, () => refresh());
+        wrapper.dataset.fieldKey = key;
+        fields.append(wrapper);
+        controls.push({ key, variants, wrapper, field: initial });
+      }
+      if (definition.key === 'ownership' && view === 'infrastructure') {
+        const photos = element('div', 'asset-form-photos');
+        appendPhotos(photos);
+        section.append(photos);
+        const virtualNote = element('p', 'dialog-note asset-form-virtual-note', '虚拟资源无实体位置，不录入机柜位置或设备照片；切回实体类型可继续填写原草稿。');
+        section.append(virtualNote);
+      }
+      if (definition.key === 'network' && view === 'systems') section.append(element('p', 'dialog-note', '仅预览系统自身业务地址；不解析地址池，也不带入承载设备的 IP 或网络类型。'));
+      if (definition.key === 'hardware') {
+        section.append(element('p', 'dialog-note asset-form-hardware-note', '当前类型没有专属硬件录入项；切换为电脑、服务器或存储设备后可填写对应配置。'), element('div', 'asset-form-collection'));
+      }
+      if (definition.key === 'credentials') appendCredentials(section, values, prefix);
+      if (definition.key === 'hosting') section.append(element('p', 'dialog-note', '仅保留承载设备的离线关联草稿；不会读取或修改承载设备。'));
+      panels.set(definition.key, section);
+      root.append(section);
+      const tab = button('', 'asset-form-tab');
+      tab.id = prefix + '-tab-' + definition.key;
+      tab.dataset.formTab = definition.key;
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-controls', section.id);
+      tab.setAttribute('aria-label', definition.title);
+      tab.title = definition.title;
+      tab.append(svg(definition.icon), element('span', 'record-tab-label', definition.title));
+      tab.addEventListener('click', () => selectSection(definition.key));
+      tab.addEventListener('keydown', (event) => {
+        const list = [...tabs.children];
+        const index = list.indexOf(tab);
+        const next = event.key === 'ArrowRight' ? (index + 1) % list.length : event.key === 'ArrowLeft' ? (index + list.length - 1) % list.length : event.key === 'Home' ? 0 : event.key === 'End' ? list.length - 1 : -1;
+        if (next < 0) return;
+        event.preventDefault();
+        selectSection(list[next].dataset.formTab);
+        list[next].focus();
+      });
+      tabs.append(tab);
+    }
+
+    function refresh(fromCollection = false) {
+      for (const control of controls) {
+        const field = control.variants.find((candidate) => !candidate.when || candidate.when(values));
+        control.wrapper.hidden = !field;
+        if (!field) continue;
+        if (field !== control.field) {
+          const label = control.wrapper.querySelector('label');
+          label.textContent = field.label;
+          if (field.required) label.append(element('span', 'required', '*'));
+          control.field = field;
+        }
+        if (fromCollection && hardwareKeys.has(control.key)) {
+          const replacement = createField(field, values, prefix + '-' + control.key, () => refresh());
+          replacement.dataset.fieldKey = control.key;
+          control.wrapper.replaceWith(replacement);
+          control.wrapper = replacement;
+        } else {
+          const input = control.wrapper.querySelector('[name="' + control.key + '"]');
+          if (input && !hardwareKeys.has(control.key)) {
+            const value = String(values[control.key] ?? '');
+            if (input.tagName === 'SELECT' && value && ![...input.options].some((option) => option.value === value)) input.append(new Option(value, value));
+            input.value = value;
+          }
+        }
+      }
+      if (view === 'infrastructure') {
+        const virtual = /虚拟机|virtual|云主机|容器/i.test(values.type || '');
+        root.querySelector('.asset-form-photos').hidden = virtual;
+        root.querySelector('.asset-form-virtual-note').hidden = !virtual;
+      }
+      const hardwareNote = root.querySelector('.asset-form-hardware-note');
+      if (hardwareNote) hardwareNote.hidden = controls.some((control) => control.wrapper.closest('[data-section="hardware"]') && !control.wrapper.hidden);
+      const collection = root.querySelector('.asset-form-collection');
+      if (collection) {
+        collection.replaceChildren();
+        appendCollection(collection, values, () => { dirty = true; refresh(true); });
+      }
+    }
+    const markDirty = () => { dirty = true; };
+    root.addEventListener('input', markDirty);
+    root.addEventListener('change', markDirty);
+    const requestClose = () => {
+      if (dirty && !window.confirm('当前有未保存的离线草稿，确定放弃并关闭？')) return false;
+      owner.close();
+      return true;
+    };
+    const cancel = (event) => { event.preventDefault(); requestClose(); };
+    owner.addEventListener('cancel', cancel);
+    owner._requestFormClose = requestClose;
+    const dispose = () => {
+      root.removeEventListener('input', markDirty);
+      root.removeEventListener('change', markDirty);
+      owner.removeEventListener('cancel', cancel);
+      owner.removeEventListener('close', dispose);
+      delete owner._requestFormClose;
+      delete owner._disposeForm;
+    };
+    owner._disposeForm = dispose;
+    owner.addEventListener('close', dispose, { once: true });
+    refresh();
+    selectSection('basic');
+    return { values, selectSection, requestClose, isDirty: () => dirty, get activeSection() { return activeSection; } };
+  }
+
   function show({ view, config }) {
     if (!viewIcons[view]) throw new Error('不支持的资产新增原型：' + view);
     prepareDialog();
-    const sections = mergeGroups(config);
-    // 只初始化类型和状态；不读取示例记录，也不继承上次关闭的表单。
+    // 新增每次均从空草稿开始，不读取或继承示例记录。
     const values = {};
-    for (const section of sections) {
-      for (const field of section.fields) {
-        if (field.key === 'type' || field.key === 'status') values[field.key] = field.options?.[0] || '';
-      }
-    }
     dialog.dataset.view = view;
     title.textContent = '新增' + config.label;
     deviceIcon.replaceChildren(svg(viewIcons[view]));
-
-    function renderFields(focusKey) {
-      const previousScroll = body.scrollTop;
-      body.replaceChildren();
-      const note = element('p', 'dialog-note create-dialog-note', '所有字段均为原型录入预览，内容仅保留于本次弹窗；新增功能未接入。');
-      note.id = 'asset-create-note';
-      body.append(note);
-      for (let index = 0; index < sections.length; index++) {
-        const definition = sections[index];
-        const section = element('section', 'create-form-section');
-        section.dataset.section = ['basic', 'ownership', 'network'][index];
-        const heading = element('h3', '', definition.title);
-        heading.id = 'asset-create-section-' + index;
-        heading.prepend(svg(definition.icon));
-        section.setAttribute('aria-labelledby', heading.id);
-        const fields = element('div', 'fields');
-        for (const field of definition.fields) {
-          if (field.when && !field.when(values)) continue;
-          fields.append(createField(field, values, 'create-field-' + field.key, renderFields));
-        }
-        section.append(heading, fields);
-        if (view === 'infrastructure' && index === 1) {
-          if (/虚拟机|virtual|云主机|容器/i.test(values.type || '')) {
-            section.append(element('p', 'dialog-note', '虚拟资源无实体位置，不录入机柜位置或设备照片。'));
-          } else {
-            appendPhotos(section);
-          }
-        }
-        if (view === 'systems' && index === 2) {
-          section.append(element('p', 'dialog-note', '仅预览系统自身业务地址；原型不解析地址池，也不带入承载设备的 IP 或网络类型。'));
-        }
-        body.append(section);
-      }
-      if (view !== 'systems') appendCollection(body, values, () => renderFields());
-      appendCredentials(body, values, 'create-field');
-      if (focusKey) document.getElementById('create-field-' + focusKey)?.focus({ preventScroll: true });
-      body.scrollTop = previousScroll;
-    }
-
-    renderFields();
+    renderForm({ root: body, view, config, values, prefix: 'create-field', mode: 'create' });
     if (!dialog.open) dialog.showModal();
     body.scrollTop = 0;
     document.getElementById('create-field-name')?.focus({ preventScroll: true });
   }
 
-  window.assetPrototypeForm = { createField, appendCredentials, appendCollection, appendPhotos };
+  window.assetPrototypeForm = { renderForm, createField, appendCredentials, appendCollection, appendPhotos };
   window.assetPrototypeCreate = { show };
 })();

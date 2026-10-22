@@ -7,18 +7,21 @@ import NetworkAddressWorkspace from './NetworkAddressWorkspace'
 import RackOverview from './RackOverview'
 
 function ResourceNavigation({ active, onChange }) {
-  return <nav aria-label="机柜与网络二级导航" className="flex shrink-0 items-center gap-1 self-stretch">
-    {[['rack', '机柜', Server], ['ip', '网络', Network]].map(([key, label, Icon]) => <Button key={key} data-network-view={key} type="button" variant="ghost" size="sm" aria-current={active === key ? 'page' : undefined} onClick={() => onChange(key)} className={`h-auto self-stretch gap-1.5 rounded-none border-b-2 px-3 text-xs ${active === key ? 'border-primary text-primary hover:text-primary' : 'border-transparent text-muted-foreground'}`}><Icon size={15} />{label}</Button>)}
+  return <nav aria-label="机柜与网络二级导航" className="flex h-[34px] shrink-0 items-center gap-1">
+    {[['rack', '机柜', Server], ['ip', '网络', Network]].map(([key, label, Icon]) => <Button key={key} data-network-view={key} type="button" variant="ghost" size="sm" aria-current={active === key ? 'page' : undefined} onClick={() => onChange(key)} className={`h-[30px] shrink-0 gap-1.5 rounded-[5px] px-2.5 text-xs ${active === key ? 'bg-primary/10 font-medium text-foreground hover:bg-primary/10' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`}><Icon size={14} />{label}</Button>)}
   </nav>
 }
 
 function CabinetWorkspace({ navigation, keyword, onKeywordChange, focusTarget, onDirtyChange, onNavigate }) {
-  return <div data-ipam-page="rack" className="flex h-full min-h-0 flex-col">
-    <VaultPageHeader dataSection="cmdb-ipam-header" contentClassName="h-auto min-h-14 flex-wrap">
-      {navigation}<span className="min-w-0 flex-1" />
-      <VaultHeaderSearch data-rack-search value={keyword} onChange={event => onKeywordChange(event.target.value)} placeholder="搜索机房、机柜、设备或 IP" className="min-w-[180px] max-w-[360px]" />
+  const [selectorHost, setSelectorHost] = useState(null)
+  return <div data-ipam-page="rack" className="cmdb-theme-scope flex h-full min-h-0 min-w-0 flex-col">
+    <VaultPageHeader dataSection="cmdb-ipam-header" contentClassName="h-auto min-h-[54px] flex-wrap gap-2.5 px-3.5 py-[9px]">
+      <span ref={setSelectorHost} className="flex min-w-0 shrink-0 items-center gap-2.5" />
+      <VaultHeaderSearch data-rack-search value={keyword} onChange={event => onKeywordChange(event.target.value)} placeholder="搜索机房、机柜、设备或 IP" className="min-w-[180px] max-w-[520px] flex-[1_1_240px]" inputClassName="h-[34px] rounded-[7px] text-[13px]" />
+      <span className="min-w-0 flex-1" />
+      <span className="ml-auto flex shrink-0 items-center">{navigation}</span>
     </VaultPageHeader>
-    <RackOverview keyword={keyword} onKeywordChange={onKeywordChange} focusTarget={focusTarget} onDirtyChange={onDirtyChange} onOpenAsset={id => onNavigate?.({ tableKey: 'cmdb_assets', id })} />
+    <RackOverview selectorHost={selectorHost} keyword={keyword} onKeywordChange={onKeywordChange} focusTarget={focusTarget} onDirtyChange={onDirtyChange} onOpenAsset={id => onNavigate?.({ tableKey: 'cmdb_assets', id })} />
   </div>
 }
 

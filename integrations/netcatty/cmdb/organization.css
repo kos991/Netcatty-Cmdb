@@ -1,0 +1,15 @@
+/* 组织架构页与人员维护弹窗：仅补宿主未覆盖的列宽、密度和窄屏布局。 */
+.cmdb-organization-layout { grid-template-columns: 236px minmax(0, 1fr); }
+.cmdb-people-list table { table-layout: fixed; }
+.cmdb-people-list :is(th, td) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdb-organization-maintenance :is(input, button[role="combobox"]) { height: 34px; font-size: 13px; }
+@media (max-width: 1100px) {
+  .cmdb-organization-layout { grid-template-columns: 210px minmax(0, 1fr); }
+}
+@media (max-width: 979px) {
+  .cmdb-people-list-surface { padding-inline-end: 0 !important; }
+}
+@media (max-width: 640px) {
+  .cmdb-organization-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: 185px minmax(0, 1fr); }
+  .cmdb-organization-maintenance { height: calc(100dvh - 20px); max-height: calc(100dvh - 20px); }
+}

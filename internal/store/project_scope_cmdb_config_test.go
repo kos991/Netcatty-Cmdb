@@ -29,10 +29,10 @@ func TestProjectScopeCmdbModulesTaxonomyAndConfigIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建项目 B 同名分类: %v", err)
 	}
-	if list, err := s.ListCmdbTaxonomyForProject(scopeA, "categories"); err != nil || len(list) != 1 || list[0].ID != catA {
+	if list, err := s.ListCmdbTaxonomyForProject(scopeA, "categories"); err != nil || !taxonomyContainsID(list, catA) || taxonomyContainsID(list, catB) {
 		t.Fatalf("项目 A 分类隔离失败: list=%+v err=%v", list, err)
 	}
-	if list, err := s.ListCmdbTaxonomyForProject(scopeB, "categories"); err != nil || len(list) != 1 || list[0].ID != catB {
+	if list, err := s.ListCmdbTaxonomyForProject(scopeB, "categories"); err != nil || !taxonomyContainsID(list, catB) || taxonomyContainsID(list, catA) {
 		t.Fatalf("项目 B 分类隔离失败: list=%+v err=%v", list, err)
 	}
 
@@ -107,6 +107,27 @@ func TestProjectScopeCmdbModulesTaxonomyAndConfigIsolation(t *testing.T) {
 	}
 	if subnets, err := s.ListIPSubnetsForProject(scopeA); err != nil || len(subnets) != 1 || subnets[0].Name != "同名网段" {
 		t.Fatalf("项目 A 网段隔离失败: subnets=%+v err=%v", subnets, err)
+	}
+}
+
+func TestProjectScopeModelMetadataListsBeyondManagementPage(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scopeA, scopeB := newCmdbProjectScopes(t, s)
+	if _, err := s.db.Exec(`WITH RECURSIVE seq(n) AS
+		(SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<501)
+		INSERT INTO cmdb_device_models(project_id,vendor,model)
+		SELECT ?, '真实厂商', printf('型号-%04d',n) FROM seq`, scopeA.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateCmdbModelForProject(scopeB, &CmdbDeviceModel{Vendor: "其他项目", Model: "隔离型号"}); err != nil {
+		t.Fatal(err)
+	}
+	models, err := s.ListCmdbModelsForProject(scopeA)
+	if err != nil || len(models) != 501 || models[500].Model != "型号-0501" {
+		t.Fatalf("元数据列表不得截断型号: count=%d err=%v", len(models), err)
+	}
+	if _, total, err := s.QueryCmdbModelsForProject(scopeA, "", 1, 500); err != nil || total != 501 {
+		t.Fatalf("管理列表分页语义不可变化: total=%d err=%v", total, err)
 	}
 }
 
@@ -412,7 +433,7 @@ func TestProjectScopeConfigDefaultCompatibility(t *testing.T) {
 	if _, err := s.CreateCmdbTaxonomyForProject(otherScope, "categories", "其他分类", 0, 1); err != nil {
 		t.Fatal(err)
 	}
-	if list, err := s.ListCmdbTaxonomy("categories"); err != nil || len(list) != 1 || list[0].ID != defaultCategory || list[0].ProjectID != defaultScope.ProjectID {
+	if list, err := s.ListCmdbTaxonomy("categories"); err != nil || !taxonomyContainsID(list, defaultCategory) {
 		t.Fatalf("旧分类 API 未限定默认项目: %+v %v", list, err)
 	}
 

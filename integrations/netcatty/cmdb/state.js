@@ -12,8 +12,9 @@ export function formatDepartmentName(dept = '') {
 export const MODULES = [
   { key: 'assets', label: '设备资产', icon: 'Monitor' },
   { key: 'people', label: '组织架构', icon: 'Users' },
-  { key: 'ip', label: '机柜与网络', icon: 'Network' },
+  { key: 'ip', label: '机柜与网络', icon: 'Router' },
   { key: 'operations', label: '工单与统计', icon: 'ChartNoAxesCombined' },
+  { key: 'topology', label: '拓扑图', icon: 'Network' },
 ]
 
 const SEARCH_TARGETS = {

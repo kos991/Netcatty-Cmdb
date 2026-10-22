@@ -18,9 +18,9 @@ export function Fields({ fields, value, onChange, className, textareaFullWidth =
     const control = field.render ? field.render({ current, raw, value, onChange: change, props })
       : field.options ? <SelectControl {...props} searchable={field.searchable || ['person_id', 'to_person_id', 'owner_id', 'server_id'].includes(field.key)} value={current} onChange={(next) => change(field.numeric ? Number(next) : next)} options={field.options} />
         : field.type === 'boolean' ? <Switch {...props} checked={!!current} onCheckedChange={(next) => change(field.numeric ? Number(next) : next)} />
-          : field.type === 'textarea' ? <Textarea {...props} value={current} onChange={(event) => change(event.target.value)} rows={3} />
-            : <Input {...props} className="h-9" type={field.type || 'text'} min={field.min} step={field.step} pattern={field.pattern} placeholder={field.placeholder} value={current} onChange={(event) => change(field.type === 'number' ? Number(event.target.value) : event.target.value)} />
-    return <Field key={field.key} label={field.label} required={field.required} className={field.wide || (textareaFullWidth && field.type === 'textarea') ? 'sm:col-span-2' : ''}>{control}</Field>
+          : field.type === 'textarea' ? <Textarea {...props} className="min-h-[76px] text-[13px]" value={current} onChange={(event) => change(event.target.value)} rows={3} />
+            : <Input {...props} className="h-[34px] min-w-0 text-[13px]" type={field.type || 'text'} min={field.min} max={field.max} step={field.step} pattern={field.pattern} placeholder={field.placeholder} value={current} onChange={(event) => change(field.type === 'number' ? Number(event.target.value) : event.target.value)} />
+    return <Field key={field.key} htmlFor={props.id} label={field.label} required={field.required} className={field.wide || (textareaFullWidth && field.type === 'textarea') ? 'sm:col-span-2' : ''}>{control}</Field>
   })}</FormGrid>
 }
 

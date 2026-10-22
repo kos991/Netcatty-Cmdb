@@ -450,9 +450,29 @@ func (s *Store) ListCmdbCategoriesForProject(scope ProjectScope) ([]CmdbCategory
 	return out, rows.Err()
 }
 
+// 元数据用于完整的型号下拉，不受管理列表的分页上限约束。
 func (s *Store) ListCmdbModelsForProject(scope ProjectScope) ([]CmdbDeviceModel, error) {
-	rows, _, err := s.QueryCmdbModelsForProject(scope, "", 1, 500)
-	return rows, err
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT id, project_id, IFNULL(sync_id,''), IFNULL(vendor,''), IFNULL(model,''), height_u,
+		rated_power_w, max_power_w, IFNULL(weight_kg,0), depth_mm
+		FROM cmdb_device_models WHERE project_id=?
+		ORDER BY IFNULL(vendor,''), IFNULL(model,''), id`, scope.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]CmdbDeviceModel, 0)
+	for rows.Next() {
+		var model CmdbDeviceModel
+		if err := rows.Scan(&model.ID, &model.ProjectID, &model.SyncID, &model.Vendor, &model.Model,
+			&model.HeightU, &model.RatedPowerW, &model.MaxPowerW, &model.WeightKG, &model.DepthMM); err != nil {
+			return nil, err
+		}
+		out = append(out, model)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) SeedCmdbOrgsFromDepartmentsForProject(scope ProjectScope, departments []string) (int, error) {

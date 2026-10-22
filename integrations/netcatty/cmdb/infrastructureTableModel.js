@@ -11,11 +11,10 @@ export function infrastructureNetworkZoneOptions(values = []) {
 
 export function infrastructureNamePresentation(record = {}) {
   const assetCode = clean(record.asset_code)
-  const serialNumber = clean(record.sn || record.serial_number || record.box_sn)
   const deviceName = clean(record.name || record.device_name) || '未命名设备'
   return {
     name: deviceName,
-    secondary: [assetCode || '未配置编码', serialNumber ? `SN：${serialNumber}` : '未配置 SN'].join(' · '),
+    secondary: assetCode || '未配置编码',
   }
 }
 
@@ -81,17 +80,18 @@ export function infrastructureNetworkSummary(record = {}) {
   addAddress(secondary, seen, record.public_ip, '公网', record.public_net_type || '外网')
   for (const iface of record.interfaces || []) {
     const interfaceZone = iface.network_zone || iface.net_zone
-    const mainPurpose = iface.main_ip_purpose || (iface.is_primary ? 'management' : '业务')
-    const mainLabel = mainPurpose === 'management' ? '管理' : mainPurpose === 'out_of_band' ? '带外' : '业务'
-    if (clean(iface.ip) !== managementIP) addAddress(secondary, seen, iface.ip, mainLabel, interfaceZone)
     let addresses = []
     try { addresses = JSON.parse(iface.additional_ips_json || '[]') } catch { addresses = [] }
-    for (const address of Array.isArray(addresses) ? addresses : []) {
-      const purposes = Array.isArray(address.purpose) ? address.purpose : [address.purpose || 'business']
-      for (const purpose of purposes) {
-        const label = purpose === 'management' ? '管理' : purpose === 'out_of_band' ? '带外' : '业务'
-        addAddress(secondary, seen, address.ip, label, interfaceZone)
-      }
+    addresses = Array.isArray(addresses) ? addresses : []
+    const purposeLabel = (value) => {
+      const purposes = Array.isArray(value) ? value : [value]
+      return purposes.map((purpose) => ({ management: '管理', business: '业务', out_of_band: '带外' })[purpose]).filter(Boolean).join(' / ') || '未标注用途'
+    }
+    const mainAddress = addresses.find((address) => clean(address.ip) === clean(iface.ip))
+    const mainPurpose = mainAddress?.purpose || iface.main_ip_purpose || (iface.is_primary ? 'management' : 'business')
+    if (clean(iface.ip) !== managementIP) addAddress(secondary, seen, iface.ip, purposeLabel(mainPurpose), interfaceZone)
+    for (const address of addresses) {
+      addAddress(secondary, seen, address.ip, purposeLabel(address.purpose), interfaceZone)
     }
   }
 

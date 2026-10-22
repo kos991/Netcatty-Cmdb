@@ -39,6 +39,11 @@ func TestProjectMigrationCreatesEmptyDefaultProject(t *testing.T) {
 		if table == "cmdb_network_types" {
 			want = 3
 		}
+		if table == "cmdb_device_categories" {
+			for _, group := range defaultAssetCategories {
+				want += len(group.names)
+			}
+		}
 		if count != want {
 			t.Fatalf("全新库 %s 有 %d 条记录，期望 %d", table, count, want)
 		}
@@ -221,6 +226,228 @@ func TestProjectMigrationAssignsMetadataToNewRows(t *testing.T) {
 				t.Fatalf("sync_id 不是 UUID: %q: %v", syncID, err)
 			}
 		})
+	}
+}
+
+func TestProjectAssetCatalogDefaultsAndRealModelsStayScoped(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "catalog.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultScope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.CreateCmdbProject(&CmdbProject{Code: "catalog-other", Name: "其他项目"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherScope := ProjectScope{ProjectID: other.ID}
+	for _, scope := range []ProjectScope{defaultScope, otherScope} {
+		for _, group := range defaultAssetCategories {
+			kind := group.scope + "-categories"
+			list, err := s.ListCmdbTaxonomyForProject(scope, kind)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(list) != len(group.names) {
+				t.Fatalf("项目 %d 的 %s 默认分类数: %+v", scope.ProjectID, kind, list)
+			}
+			for _, name := range group.names {
+				found := false
+				for _, category := range list {
+					if category.Name == name && category.ProjectID == scope.ProjectID && category.SyncID != "" {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("项目 %d 缺失默认分类 %s/%s: %+v", scope.ProjectID, kind, name, list)
+				}
+			}
+		}
+	}
+	for _, deviceType := range []string{"云桌面盒子", "云盒"} {
+		if _, err := s.CreateAssetForProject(otherScope, &Asset{AssetCode: "CLOUD-" + deviceType, DeviceType: deviceType, Status: "在用"}, "测试"); err != nil {
+			t.Fatalf("新项目的 %s 分类必须可用于终端建档: %v", deviceType, err)
+		}
+	}
+	if _, err := s.CreateAssetForProject(defaultScope, &Asset{AssetCode: "CAT-PC-1", Vendor: "真实厂商", Model: "型号甲", Status: "在用"}, "测试"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ImportAssetsForProject(defaultScope, []Asset{
+		{AssetCode: "CAT-PC-2", Vendor: "真实厂商", Model: "型号甲", Status: "在用"},
+		{AssetCode: "CAT-PC-3", Vendor: "真实厂商", Model: "   ", Status: "在用"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateCmdbAssetManualForProject(defaultScope, &CmdbAsset{Name: "设备", Vendor: "真实厂商", Model: "型号甲"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateCmdbAssetManualForProject(defaultScope, &CmdbAsset{Name: "未知厂商设备", Model: "型号乙"}); err != nil {
+		t.Fatal(err)
+	}
+	if models, total, err := s.QueryCmdbModelsForProject(defaultScope, "", 1, 100); err != nil || total != 1 || len(models) != 1 || models[0].Vendor != "真实厂商" || models[0].Model != "型号甲" || models[0].SyncID == "" {
+		t.Fatalf("真实完整型号应且仅应登记一次: total=%d models=%+v err=%v", total, models, err)
+	}
+	if _, total, err := s.QueryCmdbModelsForProject(otherScope, "", 1, 100); err != nil || total != 0 {
+		t.Fatalf("其他项目不能读取型号: total=%d err=%v", total, err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, total, err := s.QueryCmdbModelsForProject(defaultScope, "", 1, 100); err != nil || total != 1 {
+		t.Fatalf("重启不能重复创建型号: total=%d err=%v", total, err)
+	}
+}
+
+func TestProjectAssetCatalogDoesNotRestoreDeletedEntries(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "deleted-catalog.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	types, err := s.ListCmdbTaxonomyForProject(scope, "terminal-categories")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workstationID int64
+	for _, category := range types {
+		if category.Name == "工作站" {
+			workstationID = category.ID
+		}
+	}
+	if workstationID == 0 {
+		t.Fatal("未初始化工作站分类")
+	}
+	if err := s.DeleteCmdbTaxonomyForProject(scope, "terminal-categories", workstationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAssetForProject(scope, &Asset{AssetCode: "MODEL-DELETE", Vendor: "真实厂商", Model: "可删除型号", Status: "在用"}, "测试"); err != nil {
+		t.Fatal(err)
+	}
+	models, total, err := s.QueryCmdbModelsForProject(scope, "", 1, 10)
+	if err != nil || total != 1 {
+		t.Fatalf("真实型号未创建: total=%d err=%v", total, err)
+	}
+	if err := s.DeleteCmdbModelForProject(scope, models[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	types, err = s.ListCmdbTaxonomyForProject(scope, "terminal-categories")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, category := range types {
+		if category.Name == "工作站" {
+			t.Fatal("重启恢复了用户主动删除的分类")
+		}
+	}
+	if _, total, err := s.QueryCmdbModelsForProject(scope, "", 1, 10); err != nil || total != 0 {
+		t.Fatalf("重启恢复了用户主动删除的型号: total=%d err=%v", total, err)
+	}
+}
+
+func TestProjectAssetCatalogUpdatesOnAssetEdits(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminal := &Asset{AssetCode: "MODEL-EDIT", Vendor: "甲厂商", Status: "在用"}
+	id, err := s.CreateAssetForProject(scope, terminal, "测试")
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminal.ID = id
+	terminal.Model = "终端型号"
+	if err := s.UpdateAssetForProject(scope, terminal, "测试"); err != nil {
+		t.Fatal(err)
+	}
+	cmdbID, err := s.CreateCmdbAssetManualForProject(scope, &CmdbAsset{Name: "真实设备", Vendor: "乙厂商"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := "设施型号"
+	if _, err := s.ApplyCmdbAssetChangesForProject(scope, []int64{cmdbID}, CmdbAssetChanges{Model: &model}); err != nil {
+		t.Fatal(err)
+	}
+	models, total, err := s.QueryCmdbModelsForProject(scope, "", 1, 100)
+	if err != nil || total != 2 || len(models) != 2 {
+		t.Fatalf("编辑后应实时收录已保存的型号: total=%d models=%+v err=%v", total, models, err)
+	}
+}
+
+func TestProjectAssetCatalogBackfillsLegacyAndKeepsUserRecords(t *testing.T) {
+	path := createLegacyProjectFixture(t)
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE assets SET vendor='历史厂商', model='终端真实型号';
+		UPDATE cmdb_assets SET vendor='历史厂商', model='基础设施真实型号', device_type='旧设备类型';
+		INSERT INTO assets(asset_code, vendor, model) VALUES ('MISSING-MODEL', '历史厂商', '');
+		INSERT INTO cmdb_device_models(vendor,model,height_u) VALUES ('历史厂商','终端真实型号',9);
+		INSERT INTO cmdb_device_categories(name,asset_scope,sort_order) VALUES ('台式电脑','terminal',99);
+		INSERT INTO cmdb_assets(name,device_type,category_id) VALUES ('历史技术编码资产','virtual_machine',0);`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var categoryID int64
+	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_categories WHERE project_id=? AND asset_scope='terminal' AND name='台式电脑' AND sort_order=99`, scope.ProjectID).Scan(&categoryID); err != nil {
+		t.Fatalf("原有分类不可被覆盖: %v", err)
+	}
+	var modelID int64
+	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_models WHERE project_id=? AND vendor='历史厂商' AND model='终端真实型号' AND height_u=9`, scope.ProjectID).Scan(&modelID); err != nil {
+		t.Fatalf("人工型号属性不可被覆盖: %v", err)
+	}
+	models, total, err := s.QueryCmdbModelsForProject(scope, "历史厂商", 1, 100)
+	if err != nil || total != 2 || len(models) != 2 {
+		t.Fatalf("旧库只应补真实双字段型号: total=%d models=%+v err=%v", total, models, err)
+	}
+	infra, err := s.ListCmdbTaxonomyForProject(scope, "infrastructure-categories")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, category := range infra {
+		if category.Name == "旧设备类型" {
+			found = true
+		}
+		if category.Name == "virtual_machine" {
+			t.Fatalf("内部设备编码不能冒充基础设施目录类型: %+v", category)
+		}
+	}
+	if !found {
+		t.Fatalf("真实基础设施类型未回填: %+v", infra)
 	}
 }
 

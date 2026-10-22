@@ -2,8 +2,10 @@ package internal
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"czfy-assets/internal/store"
@@ -149,5 +151,83 @@ func TestParseLegacyAssetImportRejectsMissingDeviceType(t *testing.T) {
 	}
 	if len(rows) != 1 || len(errors) != 1 || rows[0].Message != "设备类型不能为空" {
 		t.Fatalf("rows=%#v errors=%v", rows, errors)
+	}
+}
+
+func TestLegacyAssetNetworkListAndExportsUseBusinessIPAM(t *testing.T) {
+	_, st, mux := newLegacyHandlerTestServer(t)
+	for _, subnet := range []store.IPSubnet{
+		{Name: "业务大网段", Category: "内网", CIDR: "198.51.100.0/23"},
+		{Name: "业务小网段", Category: "专网", CIDR: "198.51.100.0/24"},
+		{Name: "终端物理网段", Category: "外网", CIDR: "10.0.0.0/24"},
+	} {
+		if _, err := st.CreateIPSubnet(&subnet); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, asset := range []store.Asset{
+		{AssetCode: "NETWORK-A", DeviceType: "云桌面终端", IP: "198.51.100.10", TerminalIP: "10.0.0.10", NetType: "手工网络", Status: "在用"},
+		{AssetCode: "NETWORK-B", DeviceType: "云桌面终端", IP: "198.51.100.11", TerminalIP: "10.0.0.11", NetType: "手工网络", Status: "在用"},
+		{AssetCode: "NETWORK-UNKNOWN", DeviceType: "云桌面终端", IP: "203.0.113.10", TerminalIP: "10.0.0.12", NetType: "手工网络", Status: "在用"},
+		{AssetCode: "NETWORK-EMPTY", DeviceType: "云桌面终端", TerminalIP: "10.0.0.13", NetType: "手工网络", Status: "在用"},
+	} {
+		if _, err := st.CreateAsset(&asset, "测试"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, fixture := range []struct {
+		filter, network string
+		codes           []string
+	}{
+		{filter: "专网", network: "专网", codes: []string{"NETWORK-A", "NETWORK-B"}},
+		{filter: "内网"},
+		{filter: "外网"},
+		{filter: "手工网络"},
+		{filter: store.AssetUnconfiguredFilter, codes: []string{"NETWORK-UNKNOWN", "NETWORK-EMPTY"}},
+	} {
+		t.Run(fixture.filter, func(t *testing.T) {
+			query := "?net_type=" + url.QueryEscape(fixture.filter) + "&page=1&page_size=1"
+			list := httptest.NewRecorder()
+			mux.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/api/assets"+query, nil))
+			var result struct {
+				List  []store.Asset `json:"list"`
+				Total int           `json:"total"`
+			}
+			if list.Code != http.StatusOK {
+				t.Fatalf("列表失败: status=%d body=%s", list.Code, list.Body.String())
+			}
+			if err := json.Unmarshal(list.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Total != len(fixture.codes) || len(result.List) > 1 {
+				t.Fatalf("列表网络筛选错误: %+v", result)
+			}
+			for _, asset := range result.List {
+				if asset.IPNetworkType != fixture.network || asset.TerminalIPNetworkType != "外网" {
+					t.Fatalf("业务与物理网络混淆: %+v", asset)
+				}
+			}
+			for _, format := range []string{"xlsx", "csv"} {
+				exported := httptest.NewRecorder()
+				mux.ServeHTTP(exported, httptest.NewRequest(http.MethodGet, "/api/export/assets"+query+"&format="+format, nil))
+				if exported.Code != http.StatusOK {
+					t.Fatalf("导出失败: format=%s status=%d body=%s", format, exported.Code, exported.Body.String())
+				}
+				rows, problems, err := parseLegacyAssetImport(bytes.NewReader(exported.Body.Bytes()))
+				if err != nil || len(problems) != 0 || len(rows) != len(fixture.codes) {
+					t.Fatalf("导出必须包含全部筛选结果: format=%s rows=%+v problems=%v err=%v", format, rows, problems, err)
+				}
+				want := make(map[string]bool, len(fixture.codes))
+				for _, code := range fixture.codes {
+					want[code] = true
+				}
+				for _, row := range rows {
+					if !want[row.Asset.AssetCode] || row.Asset.NetType != fixture.network {
+						t.Fatalf("导出值必须使用列表IPAM业务网络: format=%s asset=%+v", format, row.Asset)
+					}
+					delete(want, row.Asset.AssetCode)
+				}
+			}
+		})
 	}
 }

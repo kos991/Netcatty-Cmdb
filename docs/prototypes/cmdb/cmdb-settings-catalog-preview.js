@@ -60,6 +60,24 @@
     let activeKey = '', draft = null, tree = [], expanded = new Set();
     const catalog = () => catalogs[activeKey];
     const isTaxonomy = () => catalog().kind === 'taxonomy';
+    const hasColor = () => catalog().fields.some((field) => field.type === 'color');
+    const saveButton = $('cmdb-catalog-save');
+    const notice = host.querySelector('#cmdb-settings-catalog .cmdb-catalog-notice');
+    // 网络类型目录在原型内存中保存，演示左侧色标与资产列表色点随保存更新；刷新恢复示例，其他目录仍禁用保存。
+    saveButton.addEventListener('click', () => {
+      if (!hasColor() || !draft) return;
+      const color = String(draft.color || '').trim().toUpperCase();
+      if (color && !/^#[0-9A-F]{6}$/.test(color)) { notice.textContent = '颜色需为 #RRGGBB 或留空'; return; }
+      if (!String(draft.name || '').trim()) { notice.textContent = '请填写名称'; return; }
+      const saved = { ...draft, color, sort_order: Number(draft.sort_order) || 0 };
+      if (saved.id) catalog().entries = catalog().entries.map((entry) => entry.id === saved.id ? saved : entry);
+      else { saved.id = Math.max(0, ...catalog().entries.map((entry) => entry.id)) + 1; catalog().entries = [...catalog().entries, saved]; }
+      draft = { ...saved };
+      notice.textContent = '已保存到本页内存（原型）· 刷新恢复示例';
+      renderFields();
+      renderEntries();
+      window.dispatchEvent(new Event('cmdb-prototype-network-types-changed'));
+    });
 
     function parentOptions() {
       const excluded = excludedParents(catalog().entries, draft.id);
@@ -82,7 +100,10 @@
         let control;
         if (field.type === 'parent') control = `<select id="${id}" name="${field.key}">${parentOptions()}</select>`;
         else if (field.type === 'textarea') control = `<textarea id="${id}" name="${field.key}" rows="3"${required}${description}>${escape(draft[field.key])}</textarea>`;
-        else control = `<input id="${id}" name="${field.key}" type="${field.type || 'text'}" value="${escape(draft[field.key])}"${required}${field.min !== undefined ? ` min="${field.min}"` : ''}${description}>`;
+        else if (field.type === 'color') {
+          const color = /^#[0-9A-Fa-f]{6}$/.test(String(draft[field.key] || '')) ? draft[field.key] : '#94A3B8';
+          control = `<div class="cmdb-catalog-color"><input type="color" aria-label="选择颜色" data-color-picker="${id}" value="${color}"><input id="${id}" name="${field.key}" type="text" value="${escape(draft[field.key])}" placeholder="#RRGGBB"${description}></div>`;
+        } else control = `<input id="${id}" name="${field.key}" type="${field.type || 'text'}" value="${escape(draft[field.key])}"${required}${field.min !== undefined ? ` min="${field.min}"` : ''}${description}>`;
         return `<div class="cmdb-catalog-field"><label for="${id}">${field.label}${field.required ? '<span class="cmdb-catalog-required" aria-hidden="true"> *</span>' : ''}</label>${control}${field.description ? `<p id="${descriptionId}">${escape(field.description)}</p>` : ''}</div>`;
       }).join('');
       childButton.disabled = !draft.id;
@@ -101,11 +122,15 @@
         content = nodes.length ? renderNodes(nodes) : '';
       } else {
         const entries = catalog().entries.filter((entry) => catalog().fields.some((field) => String(entry[field.key] ?? '').toLocaleLowerCase().includes(query)));
+        const colored = hasColor();
         content = entries.length ? `<ul class="cmdb-catalog-list">${entries.map((entry) => {
           const model = activeKey === 'models';
           const name = model ? entry.model : entry.name;
           const detail = model ? entry.vendor : entry.remark;
-          return `<li>${button(`<span class="cmdb-catalog-list-name">${escape(name)}</span><span class="cmdb-catalog-list-detail">${escape(detail)}</span>${!model ? `<span class="cmdb-catalog-list-sort" aria-label="排序 ${entry.sort_order}">${entry.sort_order}</span>` : ''}`, `class="cmdb-catalog-list-select" data-catalog-select="${entry.id}" aria-pressed="${draft.id === entry.id}"`)}</li>`;
+          // 色标只读取已保存条目；草稿颜色在点击“保存”后才更新到左侧。
+          const color = /^#[0-9A-Fa-f]{6}$/.test(String(entry.color || '')) ? entry.color : '#94A3B8';
+          const swatch = colored ? `<span class="cmdb-catalog-list-color" data-catalog-color="${escape(entry.color || '')}" style="background:${color}" title="${entry.color ? '颜色 ' + escape(entry.color) : '未设置颜色，使用默认灰'}"></span>` : '';
+          return `<li>${button(`${swatch}<span class="cmdb-catalog-list-name">${escape(name)}</span><span class="cmdb-catalog-list-detail">${escape(detail)}</span>${!model ? `<span class="cmdb-catalog-list-sort" aria-label="排序 ${entry.sort_order}">${entry.sort_order}</span>` : ''}`, `class="cmdb-catalog-list-select${colored ? ' has-color' : ''}" data-catalog-select="${entry.id}" aria-pressed="${draft.id === entry.id}"`)}</li>`;
         }).join('')}</ul>` : '';
       }
       entriesRoot.innerHTML = content || '<p class="cmdb-catalog-empty" role="status">没有匹配的目录示例。<br>可调整搜索，或新增一项预览。</p>';
@@ -149,6 +174,12 @@
     childButton.addEventListener('click', () => beginCreate(draft.id));
     $('cmdb-catalog-form').addEventListener('input', (event) => {
       const control = event.target;
+      if (control.dataset.colorPicker) {
+        const hex = $(control.dataset.colorPicker);
+        hex.value = control.value.toUpperCase();
+        draft[hex.name] = hex.value;
+        return;
+      }
       if (!control.name) return;
       draft[control.name] = control.name === 'parent_id' ? Number(control.value) : control.value;
     });
@@ -165,6 +196,9 @@
         $('cmdb-catalog-context').textContent = `当前项目：${projectLabel} · 目录示例，非实际项目记录`;
         newButton.querySelector('span').textContent = isTaxonomy() ? '新增大类' : '新增';
         childButton.hidden = !isTaxonomy();
+        saveButton.disabled = !hasColor();
+        saveButton.title = hasColor() ? '保存到本页内存（原型）' : '原型不保存项目配置';
+        notice.textContent = hasColor() ? '网络类型可保存到本页内存 · 刷新恢复示例，不写项目配置' : '项目目录示例 · 不读取真实记录，保存与删除不可用';
         if (catalog().entries.length) selectEntry(catalog().entries[0].id);
         else beginCreate(0);
         if (!dialog.open) dialog.showModal();

@@ -221,7 +221,27 @@ func MigrateProjectSchema(db *sql.DB) error {
 	if err := migrateProjectUniqueIndexes(tx); err != nil {
 		return err
 	}
-	if err := backfillAssetCategoryTaxonomies(tx, now); err != nil {
+	// 默认类型、基础设施自由文本类型及型号只做一次历史回填，避免重启恢复用户主动删除的目录项。
+	var catalogSeeded int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM _meta WHERE k='cmdb_asset_catalog_seeded_v1'`).Scan(&catalogSeeded); err != nil {
+		return fmt.Errorf("check asset catalog initialization: %w", err)
+	}
+	// 终端/业务系统类型仍沿用原有重启回填约定：有资产引用的分类本就不能由配置中心删除。
+	if err := backfillAssetCategoryTaxonomies(tx, now, catalogSeeded == 0); err != nil {
+		return err
+	}
+	if catalogSeeded == 0 {
+		if err := seedDefaultAssetCategories(tx); err != nil {
+			return err
+		}
+		if err := backfillAssetModels(tx, now); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO _meta(k,v) VALUES('cmdb_asset_catalog_seeded_v1','1')`); err != nil {
+			return fmt.Errorf("record asset catalog initialization: %w", err)
+		}
+	}
+	if err := createAssetModelCatalogTriggers(tx); err != nil {
 		return err
 	}
 	if err := migrateLegacyPersonOrgPaths(tx, now); err != nil {
@@ -250,24 +270,154 @@ func insertDefaultNetworkTypes(tx *sql.Tx, projectID int64, _ string) error {
 	return nil
 }
 
-func backfillAssetCategoryTaxonomies(tx *sql.Tx, now string) error {
-	statements := []struct {
+// 默认类型只填充同项目、同资产范围缺失的根节点；不调整用户已有节点的 ID、排序或上级。
+var defaultAssetCategories = []struct {
+	scope string
+	names []string
+}{
+	{"terminal", []string{"台式电脑", "笔记本电脑", "云桌面终端", "云桌面盒子", "云盒", "一体机", "工作站", "瘦客户机", "平板电脑", "打印机", "扫描仪", "高拍仪", "自助终端"}},
+	{"infrastructure", []string{"服务器", "虚拟机", "交换机", "路由器", "防火墙", "存储设备", "负载均衡设备", "无线接入点", "无线控制器", "网络安全设备", "UPS电源"}},
+}
+
+func seedDefaultAssetCategories(tx *sql.Tx) error {
+	rows, err := tx.Query(`SELECT id FROM cmdb_projects WHERE deleted_at IS NULL`)
+	if err != nil {
+		return fmt.Errorf("list projects for asset categories: %w", err)
+	}
+	var projectIDs []int64
+	for rows.Next() {
+		var projectID int64
+		if err := rows.Scan(&projectID); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan project for asset categories: %w", err)
+		}
+		projectIDs = append(projectIDs, projectID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate projects for asset categories: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close projects for asset categories: %w", err)
+	}
+	for _, projectID := range projectIDs {
+		if err := insertDefaultAssetCategories(tx, projectID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertDefaultAssetCategories(tx *sql.Tx, projectID int64) error {
+	var projectSyncID string
+	if err := tx.QueryRow(`SELECT sync_id FROM cmdb_projects WHERE id=? AND deleted_at IS NULL`, projectID).Scan(&projectSyncID); err != nil {
+		return fmt.Errorf("read project %d for asset categories: %w", projectID, err)
+	}
+	const createdAt = "1970-01-01T00:00:00Z"
+	for _, group := range defaultAssetCategories {
+		for index, name := range group.names {
+			syncID := defaultAssetCategorySyncID(projectSyncID, group.scope, name)
+			_, err := tx.Exec(`INSERT INTO cmdb_device_categories
+				(project_id,sync_id,name,asset_scope,parent_id,sort_order,created_at,updated_at)
+				SELECT ?,?,?,?,0,?,?,?
+				WHERE NOT EXISTS (SELECT 1 FROM cmdb_device_categories
+					WHERE project_id=? AND asset_scope=? AND name=? AND deleted_at IS NULL)`,
+				projectID, syncID, name, group.scope, index+1, createdAt, createdAt,
+				projectID, group.scope, name)
+			if err != nil {
+				return fmt.Errorf("seed %s category %s for project %d: %w", group.scope, name, projectID, err)
+			}
+		}
+	}
+	return nil
+}
+
+func defaultAssetCategorySyncID(projectSyncID, scope, name string) string {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("netcatty/cmdb/device-category/"+projectSyncID+"/"+scope+"/"+name)).String()
+}
+
+func backfillAssetCategoryTaxonomies(tx *sql.Tx, now string, includeInfrastructure bool) error {
+	type categorySource struct {
 		scope  string
 		table  string
 		column string
-	}{
-		{scope: "terminal", table: "assets", column: "device_type"},
-		{scope: "application", table: "server_apps", column: "app_type"},
+		filter string
+	}
+	statements := []categorySource{
+		{scope: "terminal", table: "assets", column: "device_type", filter: "deleted_at IS NULL"},
+		{scope: "application", table: "server_apps", column: "app_type", filter: "deleted_at IS NULL"},
+	}
+	if includeInfrastructure {
+		statements = append(statements, categorySource{scope: "infrastructure", table: "cmdb_assets", column: "device_type",
+			filter: `deleted_at IS NULL AND source_type <> 'legacy_asset' AND category_id=0
+				AND device_type NOT IN ('server','virtual_machine','hyperconverged','switch','router','security_device','storage')`})
 	}
 	for _, item := range statements {
 		query := fmt.Sprintf(`INSERT OR IGNORE INTO cmdb_device_categories
 			(project_id,name,asset_scope,parent_id,sort_order,created_at,updated_at)
 			SELECT project_id,TRIM(%s),?,0,0,?,?
 			FROM %s
-			WHERE project_id>0 AND TRIM(IFNULL(%s,''))<>''
-			GROUP BY project_id,TRIM(%s)`, item.column, item.table, item.column, item.column)
+			WHERE project_id>0 AND TRIM(IFNULL(%s,''))<>'' AND %s
+			GROUP BY project_id,TRIM(%s)`, item.column, item.table, item.column, item.filter, item.column)
 		if _, err := tx.Exec(query, item.scope, now, now); err != nil {
 			return fmt.Errorf("backfill %s asset categories: %w", item.scope, err)
+		}
+	}
+	return nil
+}
+
+// 历史目录仅取两种已保存资产自己的厂商和型号；不根据设备名、品牌型号混写字段或夹具推测型号。
+func backfillAssetModels(tx *sql.Tx, now string) error {
+	_, err := tx.Exec(`INSERT INTO cmdb_device_models (project_id,vendor,model,created_at,updated_at)
+		SELECT source.project_id, source.vendor, source.model, ?, ?
+		FROM (
+			SELECT project_id, TRIM(vendor) AS vendor, TRIM(model) AS model
+			FROM assets WHERE project_id>0 AND deleted_at IS NULL
+			UNION
+			SELECT project_id, TRIM(vendor), TRIM(model)
+			FROM cmdb_assets WHERE project_id>0 AND deleted_at IS NULL AND source_type <> 'legacy_asset'
+		) source
+		WHERE source.vendor<>'' AND source.model<>''
+			AND NOT EXISTS (SELECT 1 FROM cmdb_device_models existing
+				WHERE existing.project_id=source.project_id AND existing.vendor=source.vendor
+					AND existing.model=source.model AND existing.deleted_at IS NULL)
+		ON CONFLICT(project_id,vendor,model) WHERE deleted_at IS NULL DO NOTHING`, now, now)
+	if err != nil {
+		return fmt.Errorf("backfill asset models: %w", err)
+	}
+	return nil
+}
+
+// 资产导入、编辑和跨项目同步都会写两张资产表；在同一个事务内登记型号，
+// 从而避免分别为每条保存路径维护目录逻辑或读目录时再修改数据。
+func createAssetModelCatalogTriggers(tx *sql.Tx) error {
+	for _, table := range []string{"assets", "cmdb_assets"} {
+		filter := ""
+		if table == "cmdb_assets" {
+			filter = " AND NEW.source_type <> 'legacy_asset'"
+		}
+		for _, event := range []struct{ suffix, action string }{
+			{"insert", "INSERT"},
+			{"update", "UPDATE OF vendor, model"},
+		} {
+			name := "trg_" + table + "_catalog_model_" + event.suffix
+			query := fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %s AFTER %s ON %s
+				FOR EACH ROW WHEN NEW.project_id>0 AND NEW.deleted_at IS NULL
+					AND TRIM(IFNULL(NEW.vendor,''))<>'' AND TRIM(IFNULL(NEW.model,''))<>''%s
+				BEGIN
+					INSERT INTO cmdb_device_models(project_id,vendor,model,created_at,updated_at)
+					SELECT NEW.project_id,TRIM(NEW.vendor),TRIM(NEW.model),
+						strftime('%%Y-%%m-%%dT%%H:%%M:%%fZ','now'),strftime('%%Y-%%m-%%dT%%H:%%M:%%fZ','now')
+					WHERE NOT EXISTS (
+						SELECT 1 FROM cmdb_device_models
+						WHERE project_id=NEW.project_id AND vendor=TRIM(NEW.vendor)
+							AND model=TRIM(NEW.model) AND deleted_at IS NULL
+					)
+					ON CONFLICT(project_id,vendor,model) WHERE deleted_at IS NULL DO NOTHING;
+				END`, name, event.action, table, filter)
+			if _, err := tx.Exec(query); err != nil {
+				return fmt.Errorf("create %s: %w", name, err)
+			}
 		}
 	}
 	return nil

@@ -77,20 +77,20 @@ describe('CmdbCloudSync', () => {
   });
 
   it('迁移旧分项设置，保留总开关与宿主结果并删除分项', () => {
-    localStorage.setItem(CMDB_CLOUD_SYNC_STORAGE_KEY, JSON.stringify({
+    globalThis.localStorage.setItem(CMDB_CLOUD_SYNC_STORAGE_KEY, JSON.stringify({
       enabled: true, includeContacts: false, includeHistory: false,
       lastStatus: 'error', lastError: 'S3 不可用',
     }));
     assert.deepEqual(readCmdbCloudSyncSettings(), {
       enabled: true, lastStatus: 'error', lastError: 'S3 不可用', lastSyncedAt: undefined,
     });
-    assert.deepEqual(JSON.parse(localStorage.getItem(CMDB_CLOUD_SYNC_STORAGE_KEY)!), {
+    assert.deepEqual(JSON.parse(globalThis.localStorage.getItem(CMDB_CLOUD_SYNC_STORAGE_KEY)!), {
       enabled: true, lastStatus: 'error', lastError: 'S3 不可用',
     });
   });
 
   it('迁移旧分项不会替用户启用总开关', () => {
-    localStorage.setItem(CMDB_CLOUD_SYNC_STORAGE_KEY, JSON.stringify({
+    globalThis.localStorage.setItem(CMDB_CLOUD_SYNC_STORAGE_KEY, JSON.stringify({
       enabled: false, includeContacts: true, includeHistory: true,
     }));
     assert.equal(readCmdbCloudSyncSettings().enabled, false);

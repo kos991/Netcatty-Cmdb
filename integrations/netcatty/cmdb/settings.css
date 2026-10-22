@@ -1,0 +1,200 @@
+/* Cmdb settings keep a fixed heading/tabs header while each panel scrolls alone. */
+.cmdb-settings-header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  padding: 14px 24px 0;
+  background: hsl(var(--background));
+}
+.cmdb-settings-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  margin-bottom: 12px;
+}
+.cmdb-settings-heading h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.cmdb-settings-project {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmdb-version-badge {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+}
+.cmdb-version-tag {
+  display: inline-flex;
+  height: 22px;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid hsl(var(--primary) / 0.35);
+  border-radius: 999px;
+  background: hsl(var(--primary) / 0.08);
+  color: hsl(var(--primary));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.cmdb-version-tag:hover { background: hsl(var(--primary) / 0.14); }
+.cmdb-version-tag:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 1px; }
+.cmdb-version-badge:is([data-version-kind="development"], [data-version-kind="unknown"]) .cmdb-version-tag {
+  border-color: hsl(var(--border));
+  border-style: dashed;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-family: inherit;
+}
+.cmdb-version-ok { font-size: 11px; color: hsl(var(--muted-foreground)); }
+.cmdb-version-error { max-width: 240px; overflow: hidden; font-size: 11px; color: hsl(var(--destructive)); text-overflow: ellipsis; white-space: nowrap; }
+.cmdb-settings-tabs {
+  display: flex;
+  align-self: flex-start;
+  max-width: 100%;
+  min-height: 40px;
+  gap: 2px;
+  padding: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 6px;
+  background: hsl(var(--muted));
+  scrollbar-width: thin;
+}
+.cmdb-settings-tabs { margin-bottom: 16px; }
+.cmdb-settings-tabs .cmdb-settings-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+}
+.cmdb-settings-tabs .cmdb-settings-tab:hover { color: hsl(var(--foreground)); }
+.cmdb-settings-tabs .cmdb-settings-tab[data-state="active"] { color: hsl(var(--foreground)); background: hsl(var(--background)); box-shadow: 0 1px 3px hsl(var(--foreground) / 0.12); }
+.cmdb-settings-tabs .cmdb-settings-tab svg { width: 14px; height: 14px; flex: none; }
+.cmdb-settings-panes { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.cmdb-settings-pane { height: 100%; min-height: 0; margin: 0; padding: 4px 24px 20px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; }
+.cmdb-settings-pane[hidden] { display: none; }
+.cmdb-settings-sections { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.cmdb-settings-sections > section { scroll-margin-top: 8px; }
+.cmdb-settings-pane [data-settings-anchor] { scroll-margin-top: 12px; }
+.cmdb-settings-pane [data-settings-anchor] > div:first-child > div:last-child { overflow: hidden; text-overflow: ellipsis; }
+.cmdb-settings-pane :is(input, button[role="combobox"]) { font-size: 13px; }
+.cmdb-settings-pane textarea { font-size: 13px; line-height: 1.5; }
+.cmdb-settings-sections button:not(.cmdb-settings-tab):not([role="switch"]):not([role="tab"]) { border-radius: 6px; }
+
+@media (max-width: 900px) {
+  .cmdb-settings-header { padding: 12px 16px 0; }
+  .cmdb-settings-tabs { align-self: stretch; gap: 0; }
+  .cmdb-settings-tabs .cmdb-settings-tab { flex: 1; justify-content: center; gap: 4px; padding: 0 6px; font-size: 11px; }
+  .cmdb-settings-tabs .cmdb-settings-tab svg { width: 12px; height: 12px; }
+  .cmdb-settings-pane { padding: 4px 16px 18px; }
+}
+
+@media (max-width: 600px) {
+  .cmdb-settings-header { padding: 12px 12px 0; }
+  .cmdb-settings-heading { flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 10px; }
+  .cmdb-settings-tabs { flex-wrap: wrap; overflow: visible; }
+  .cmdb-settings-tabs .cmdb-settings-tab { flex: 1 1 30%; min-width: 0; }
+  .cmdb-settings-tabs .cmdb-settings-tab span { overflow: hidden; text-overflow: ellipsis; }
+  .cmdb-settings-pane { padding: 4px 12px 12px; }
+  .cmdb-settings-sections { gap: 14px; }
+  .cmdb-settings-pane [data-settings-anchor] { flex-wrap: wrap; }
+  .cmdb-settings-pane [data-settings-anchor] > div:last-child { max-width: 100%; }
+  .cmdb-settings-pane :is(input, button[role="combobox"]) { max-width: 100%; }
+  .cmdb-settings-pane [data-settings-anchor] :is(input, button[role="combobox"]) { width: 100%; }
+}
+
+/* Catalog editor and operation dialogs keep the prototype two-column density. */
+.cmdb-settings-dialog { margin: auto; }
+.cmdb-settings-dialog .cmdb-record-header :is(h1, h2, h3) { letter-spacing: normal; }
+
+.cmdb-settings-dialog-note { margin: 3px 0 0; color: hsl(var(--muted-foreground)); font-size: 11px; line-height: 16px; }
+.cmdb-settings-catalog-layout {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  grid-template-columns: minmax(250px, 36%) minmax(0, 1fr);
+}
+.cmdb-settings-catalog-directory {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+.cmdb-settings-catalog-tools { display: flex; flex: none; flex-direction: column; gap: 10px; padding: 12px; border-bottom: 1px solid hsl(var(--border)); }
+.cmdb-settings-catalog-tools > button { width: 100%; justify-content: center; }
+.cmdb-settings-catalog-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--background));
+}
+.cmdb-settings-catalog-search:focus-within { border-color: hsl(var(--primary)); }
+.cmdb-settings-catalog-entries { flex: 1; min-height: 0; overflow: auto; padding: 8px; scrollbar-width: thin; }
+.cmdb-settings-catalog-entry {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  margin-bottom: 2px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+.cmdb-settings-catalog-entry:hover { background: hsl(var(--muted)); }
+.cmdb-settings-catalog-entry[aria-pressed="true"] { color: hsl(var(--primary)); background: hsl(var(--primary) / 0.1); }
+.cmdb-settings-catalog-entry-name { grid-column: 1; overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.cmdb-settings-catalog-entry-detail { grid-column: 1; overflow: hidden; color: hsl(var(--muted-foreground)); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.cmdb-settings-catalog-entry-sort { grid-column: 2; grid-row: 1 / 3; align-self: center; color: hsl(var(--muted-foreground)); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cmdb-settings-catalog-entry.has-color { grid-template-columns: 10px minmax(0, 1fr) auto; }
+.cmdb-settings-catalog-entry.has-color .cmdb-settings-catalog-entry-color { grid-column: 1; grid-row: 1 / 3; align-self: center; width: 10px; height: 10px; border: 1px solid hsl(var(--border)); border-radius: 999px; }
+.cmdb-settings-catalog-entry.has-color :is(.cmdb-settings-catalog-entry-name, .cmdb-settings-catalog-entry-detail) { grid-column: 2; }
+.cmdb-settings-catalog-entry.has-color .cmdb-settings-catalog-entry-sort { grid-column: 3; }
+.cmdb-settings-catalog-empty { margin: 0; padding: 24px 8px; color: hsl(var(--muted-foreground)); font-size: 12px; text-align: center; }
+.cmdb-settings-catalog-editor { min-width: 0; min-height: 0; overflow: auto; padding: 20px; scrollbar-width: thin; }
+
+@media (max-width: 640px) {
+  .cmdb-settings-catalog-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(160px, 42%) minmax(0, 1fr); }
+  .cmdb-settings-catalog-directory { border-right: 0; border-bottom: 1px solid hsl(var(--border)); }
+  .cmdb-settings-catalog-tools { flex-direction: row; align-items: center; gap: 8px; padding: 10px 12px; }
+  .cmdb-settings-catalog-tools > div { flex: 1; }
+  .cmdb-settings-catalog-tools > button { width: auto; flex: none; }
+  .cmdb-settings-catalog-editor { padding: 16px; }
+  .cmdb-settings-dialog .cmdb-form-grid,
+  .cmdb-settings-dialog .cmdb-record-fields { grid-template-columns: minmax(0, 1fr); }
+  .cmdb-settings-dialog .cmdb-form-grid > * { grid-column: auto; }
+  .cmdb-settings-dialog .cmdb-record-footer { gap: 6px; }
+  .cmdb-settings-dialog .cmdb-record-footer button { min-width: 0; padding: 0 10px; }
+}

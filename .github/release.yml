@@ -1,0 +1,11 @@
+# 自动发布说明按 PR 标签分组；未打标签的 PR 归入“其他变更”。
+changelog:
+  exclude:
+    labels: [skip-changelog]
+  categories:
+    - title: 修复
+      labels: [fix, bug]
+    - title: 新功能
+      labels: [feature, enhancement]
+    - title: 其他变更
+      labels: ["*"]

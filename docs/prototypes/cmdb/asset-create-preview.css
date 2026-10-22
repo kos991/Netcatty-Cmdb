@@ -1,5 +1,5 @@
 .asset-create-dialog {
-  width: 760px;
+  width: 860px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
   max-height: calc(100dvh - 32px);
@@ -32,6 +32,13 @@
 .asset-create-dialog .create-hardware-photos h4 svg { width: 14px; height: 14px; }
 .asset-create-dialog .create-hardware-photos > button { height: 29px; font-size: 11px; margin: 10px 8px 0 0; max-width: 100%; white-space: normal; }
 .asset-create-dialog .hardware-photos .detail-photo { min-width: 0; overflow-wrap: anywhere; }
+:is(#asset-sheet-body, #asset-create-body) [hidden] { display: none; }
+:is(#asset-sheet-body, #asset-create-body) > .record-section[role="tabpanel"] { border-top: 0; padding-top: 0; }
+:is(#asset-sheet, #asset-create-dialog) .asset-form-offline { color: var(--accent); font-size: 11px; font-weight: 600; line-height: 1.5; }
+:is(#asset-sheet, #asset-create-dialog) .record-footer > .asset-form-offline { margin-right: auto; }
+:is(#asset-sheet, #asset-create-dialog) .asset-form-photos .create-hardware-photos > button { height: auto; min-height: 30px; margin: 10px 8px 0 0; max-width: 100%; white-space: normal; font-size: 11px; }
+:is(#asset-sheet, #asset-create-dialog) .asset-form-photos h4 { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+:is(#asset-sheet, #asset-create-dialog) .asset-form-photos h4 svg { width: 14px; height: 14px; }
 @media (max-width: 560px) {
   .asset-create-dialog .dialog-header { padding: 13px 14px; gap: 8px; }
   .asset-create-dialog .dialog-body { padding: 14px 16px 2px; }

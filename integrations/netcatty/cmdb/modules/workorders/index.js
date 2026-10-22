@@ -1,5 +1,0 @@
-export { default as WorkOrders } from './WorkOrders.jsx'
-export { default as WorkOrderList } from './WorkOrderList.jsx'
-export { default as Operations } from './Operations.jsx'
-export { default as RouterOperations } from './RouterOperations.jsx'
-export { default as ServerOperations } from './ServerOperations.jsx'

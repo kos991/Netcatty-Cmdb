@@ -9,8 +9,10 @@ import {
   patchStartupUpdateAction,
   patchUpdateRepositoryConfig,
   patchUpdateTranslations,
+  patchUpdateConsumers,
 } from "./netcatty-update-integration.mjs";
 import { CMDB_SETTINGS_HOST_PATCHES } from "./netcatty-settings-integration.mjs";
+import { patchAsidePanel } from "./netcatty-aside-panel-integration.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const integrationRoot = join(repositoryRoot, "integrations", "netcatty");
@@ -86,6 +88,9 @@ cpSync(join(integrationRoot, "electron", "cmdbBridge.cjs"), join(target, "electr
 cpSync(join(integrationRoot, "electron", "cmdbBridge.test.cjs"), join(target, "electron", "bridges", "cmdbBridge.test.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbAttachmentCloud.cjs"), join(target, "electron", "bridges", "cmdbAttachmentCloud.cjs"));
 cpSync(join(integrationRoot, "electron", "cmdbAttachmentCloud.test.cjs"), join(target, "electron", "bridges", "cmdbAttachmentCloud.test.cjs"));
+cpSync(join(integrationRoot, 'update', 'updateService.ts'), join(target, 'infrastructure', 'services', 'updateService.ts'));
+cpSync(join(integrationRoot, 'update', 'useUpdateCheck.ts'), join(target, 'application', 'state', 'useUpdateCheck.ts'));
+cpSync(join(integrationRoot, 'electron', 'autoUpdateBridge.cjs'), join(target, 'electron', 'bridges', 'autoUpdateBridge.cjs'));
 
 const cmdbMainBlock = `let cmdbService = null;
 let cmdbStartupError = null;
@@ -370,7 +375,9 @@ update("electron-builder.config.cjs", (source) => {
   );
 });
 
-update("infrastructure/services/updateService.ts", patchUpdateRepositoryConfig);
+for (const relativePath of ['components/SettingsApplicationTab.tsx', 'components/SettingsPage.tsx', 'application/app/AppSideEffects.tsx', 'application/app/useAppStartupEffects.ts', 'infrastructure/config/storageKeys.ts', 'types/global/netcatty-bridge-app.d.ts', 'application/app/strictModeIdempotency.test.ts', 'electron/bridges/autoUpdateBridge.test.cjs']) {
+  update(relativePath, source => patchUpdateConsumers(relativePath, source));
+}
 update("electron-builder.config.cjs", patchUpdateRepositoryConfig);
 update("components/SettingsApplicationTab.tsx", (source) => patchSettingsApplicationTab(source, netcattyVersion));
 update("components/SettingsPage.tsx", patchSettingsPageWithCmdb);
@@ -516,8 +523,8 @@ update("domain/convergentSync/payload.ts", (source) => {
   );
   return replaceOnce(
     output,
-    "    syncMeta?: SyncReliabilityMeta;\n    pluginSidecars?: SyncPayload['pluginSidecars'];\n  },\n): SyncPayload {",
-    "    syncMeta?: SyncReliabilityMeta;\n    pluginSidecars?: SyncPayload['pluginSidecars'];\n    cmdbSnapshot?: SyncPayload['cmdbSnapshot'];\n  },\n): SyncPayload {",
+    "    syncMeta?: SyncReliabilityMeta;\n    pluginSidecars?: SyncPayload['pluginSidecars'];\n    aiSessions?: SyncPayload['aiSessions'];\n  },\n): SyncPayload {",
+    "    syncMeta?: SyncReliabilityMeta;\n    pluginSidecars?: SyncPayload['pluginSidecars'];\n    aiSessions?: SyncPayload['aiSessions'];\n    cmdbSnapshot?: SyncPayload['cmdbSnapshot'];\n  },\n): SyncPayload {",
     "domain/convergentSync/payload.ts",
   );
 });
@@ -549,8 +556,8 @@ function mergeMigrationCmdbSnapshots(options: {
   );
   output = replaceOnce(
     output,
-    "  return trustedBaseline !== null\n    || hasSyncPayloadEntityData(payload, CLOUD_SYNC_PAYLOAD_ENTITY_KEYS);",
-    "  return trustedBaseline !== null\n    || hasSyncPayloadEntityData(payload, CLOUD_SYNC_PAYLOAD_ENTITY_KEYS)\n    || payload.cmdbSnapshot !== undefined;",
+    "  return trustedBaseline !== null\n    || hasSyncPayloadEntityData(payload, [...CONVERGENT_ENTITY_COLLECTIONS, ...CONVERGENT_STRING_COLLECTIONS]);",
+    "  return trustedBaseline !== null\n    || hasSyncPayloadEntityData(payload, [...CONVERGENT_ENTITY_COLLECTIONS, ...CONVERGENT_STRING_COLLECTIONS])\n    || payload.cmdbSnapshot !== undefined;",
     "domain/convergentSync/migration.ts",
   );
   output = replaceOnce(
@@ -584,8 +591,8 @@ function mergeMigrationCmdbSnapshots(options: {
   );
   output = replaceOnce(
     output,
-    "        syncedAt: options.now,\n        ...(joinedSidecars ? { pluginSidecars: joinedSidecars } : {}),\n      });",
-    "        syncedAt: options.now,\n        ...(joinedSidecars ? { pluginSidecars: joinedSidecars } : {}),\n        ...(joinedCmdbSnapshot ? { cmdbSnapshot: joinedCmdbSnapshot } : {}),\n      });",
+    "        syncedAt: options.now,\n        ...(joinedSidecars ? { pluginSidecars: joinedSidecars } : {}),\n        ...(joinedAiPayload.aiSessions !== undefined ? { aiSessions: joinedAiPayload.aiSessions } : {}),\n      });",
+    "        syncedAt: options.now,\n        ...(joinedSidecars ? { pluginSidecars: joinedSidecars } : {}),\n        ...(joinedAiPayload.aiSessions !== undefined ? { aiSessions: joinedAiPayload.aiSessions } : {}),\n        ...(joinedCmdbSnapshot ? { cmdbSnapshot: joinedCmdbSnapshot } : {}),\n      });",
     "domain/convergentSync/migration.ts",
   );
   return replaceOnce(
@@ -605,14 +612,14 @@ update("infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts", (sou
   );
   output = replaceOnce(
     output,
-    "  pluginSidecars?: SyncPayload['pluginSidecars'],\n): SyncPayload {",
-    "  pluginSidecars?: SyncPayload['pluginSidecars'],\n  cmdbSnapshot?: SyncPayload['cmdbSnapshot'],\n): SyncPayload {",
+    "  pluginSidecars?: SyncPayload['pluginSidecars'],\n  aiSessions?: SyncPayload['aiSessions'],\n): SyncPayload {",
+    "  pluginSidecars?: SyncPayload['pluginSidecars'],\n  aiSessions?: SyncPayload['aiSessions'],\n  cmdbSnapshot?: SyncPayload['cmdbSnapshot'],\n): SyncPayload {",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
     output,
-    "      ? { pluginSidecars }\n      : {}),\n  });",
-    "      ? { pluginSidecars }\n      : {}),\n    ...(cmdbSnapshot ? { cmdbSnapshot } : {}),\n  });",
+    "      ? { pluginSidecars }\n      : {}),\n    ...(aiSessions !== undefined ? { aiSessions } : {}),\n  });",
+    "      ? { pluginSidecars }\n      : {}),\n    ...(aiSessions !== undefined ? { aiSessions } : {}),\n    ...(cmdbSnapshot ? { cmdbSnapshot } : {}),\n  });",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
@@ -650,7 +657,7 @@ update("infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts", (sou
   );
   output = replaceOnce(
     output,
-    "    const needsUpload = usable.some((runtime) => (\n      !runtime.error && !preflightVerified.has(runtime.provider)\n    )) || remoteSidecarMismatch;",
+    "    const needsUpload = usable.some((runtime) => (\n      !runtime.error && !preflightVerified.has(runtime.provider)\n    )) || remoteSidecarMismatch || usable.some((runtime) => !runtime.error && providerChatMismatch(runtime));",
     `    const providerCmdbMismatch = (runtime: { provider: string }) => {
       const decoded = preflightVerified.get(runtime.provider);
       if (!decoded) return true;
@@ -662,19 +669,19 @@ update("infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts", (sou
     ));
     const needsUpload = usable.some((runtime) => (
       !runtime.error && !preflightVerified.has(runtime.provider)
-    )) || remoteSidecarMismatch || remoteCmdbMismatch;`,
+    )) || remoteSidecarMismatch || usable.some((runtime) => !runtime.error && providerChatMismatch(runtime)) || remoteCmdbMismatch;`,
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
     output,
-    "        syncedAt: now(),\n        pluginSidecars,\n      })",
-    "        syncedAt: now(),\n        pluginSidecars,\n        cmdbSnapshot,\n      })",
+    "        syncedAt: now(),\n        pluginSidecars,\n        aiSessions,\n      })",
+    "        syncedAt: now(),\n        pluginSidecars,\n        aiSessions,\n        cmdbSnapshot,\n      })",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
     output,
-    "      if (preflightVerified.has(runtime.provider) && !providerSidecarMismatch(runtime)) return;",
-    "      if (\n        preflightVerified.has(runtime.provider)\n        && !providerSidecarMismatch(runtime)\n        && !providerCmdbMismatch(runtime)\n      ) return;",
+    "      if (preflightVerified.has(runtime.provider) && !providerSidecarMismatch(runtime) && !providerChatMismatch(runtime)) return;",
+    "      if (\n        preflightVerified.has(runtime.provider)\n        && !providerSidecarMismatch(runtime)\n        && !providerChatMismatch(runtime)\n        && !providerCmdbMismatch(runtime)\n      ) return;",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
@@ -697,8 +704,13 @@ update("infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts", (sou
   );
   output = replaceOnce(
     output,
-    "    const [first, ...rest] = remoteStates;\n    return materializedPayload(mergeStates(first, rest), Date.now());",
+    "    const [first, ...rest] = remoteStates;\n    let aiSessions: SyncPayload['aiSessions'];\n    for (const runtime of runtimes) {\n      const sessions = runtime.latestRemotePayload?.aiSessions;\n      if (sessions !== undefined) aiSessions = mergeAiSessionLists(aiSessions, sessions);\n    }\n    return materializedPayload(mergeStates(first, rest), Date.now(), undefined, aiSessions);",
     `    const [first, ...rest] = remoteStates;
+    let aiSessions: SyncPayload['aiSessions'];
+    for (const runtime of runtimes) {
+      const sessions = runtime.latestRemotePayload?.aiSessions;
+      if (sessions !== undefined) aiSessions = mergeAiSessionLists(aiSessions, sessions);
+    }
     let cmdbSnapshot: SyncPayload['cmdbSnapshot'];
     for (const runtime of runtimes) {
       cmdbSnapshot = mergeOptionalCmdbSnapshots(
@@ -707,37 +719,37 @@ update("infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts", (sou
         runtime.verifiedPayload?.cmdbSnapshot ?? runtime.latestRemotePayload?.cmdbSnapshot,
       );
     }
-    return materializedPayload(mergeStates(first, rest), Date.now(), undefined, cmdbSnapshot);`,
+    return materializedPayload(mergeStates(first, rest), Date.now(), undefined, aiSessions, cmdbSnapshot);`,
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
     output,
-    "  pluginSidecars?: SyncPayload['pluginSidecars'],\n): Promise<{ state:",
-    "  pluginSidecars?: SyncPayload['pluginSidecars'],\n  cmdbSnapshot?: SyncPayload['cmdbSnapshot'],\n): Promise<{ state:",
+    "  pluginSidecars?: SyncPayload['pluginSidecars'],\n  aiSessions?: SyncPayload['aiSessions'],\n): Promise<{ state:",
+    "  pluginSidecars?: SyncPayload['pluginSidecars'],\n  aiSessions?: SyncPayload['aiSessions'],\n  cmdbSnapshot?: SyncPayload['cmdbSnapshot'],\n): Promise<{ state:",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
     output,
-    "    payload: materializedPayload(resolved, now, pluginSidecars),",
-    "    payload: materializedPayload(resolved, now, pluginSidecars, cmdbSnapshot),",
+    "    payload: materializedPayload(resolved, now, pluginSidecars, aiSessions),",
+    "    payload: materializedPayload(resolved, now, pluginSidecars, aiSessions, cmdbSnapshot),",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
     output,
-    "  options?: {\n    pluginSidecars?: SyncPayload['pluginSidecars'];\n  },\n): Promise<{ payload:",
-    "  options?: {\n    pluginSidecars?: SyncPayload['pluginSidecars'];\n    cmdbSnapshot?: SyncPayload['cmdbSnapshot'];\n  },\n): Promise<{ payload:",
+    "  options?: {\n    pluginSidecars?: SyncPayload['pluginSidecars'];\n    aiSessions?: SyncPayload['aiSessions'];\n  },\n): Promise<{ payload:",
+    "  options?: {\n    pluginSidecars?: SyncPayload['pluginSidecars'];\n    aiSessions?: SyncPayload['aiSessions'];\n    cmdbSnapshot?: SyncPayload['cmdbSnapshot'];\n  },\n): Promise<{ payload:",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
     output,
-    "      Date.now(),\n      options?.pluginSidecars,\n    );",
-    "      Date.now(),\n      options?.pluginSidecars,\n      options?.cmdbSnapshot,\n    );",
+    "      Date.now(),\n      options?.pluginSidecars,\n      options?.aiSessions,\n    );",
+    "      Date.now(),\n      options?.pluginSidecars,\n      options?.aiSessions,\n      options?.cmdbSnapshot,\n    );",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
     output,
-    "      Date.now(),\n      sidecarBundleFromPayload(prepared.payload),\n    );",
-    "      Date.now(),\n      sidecarBundleFromPayload(prepared.payload),\n      prepared.payload.cmdbSnapshot,\n    );",
+    "      Date.now(),\n      sidecarBundleFromPayload(prepared.payload),\n      [...results.values()].find((result) => result.mergedPayload)?.mergedPayload?.aiSessions\n        ?? prepared.payload.aiSessions,\n    );",
+    "      Date.now(),\n      sidecarBundleFromPayload(prepared.payload),\n      [...results.values()].find((result) => result.mergedPayload)?.mergedPayload?.aiSessions\n        ?? prepared.payload.aiSessions,\n      prepared.payload.cmdbSnapshot,\n    );",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   output = replaceOnce(
@@ -769,28 +781,28 @@ update("infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts", (sou
     }
     const withLocalWrites = applyLegacySyncPayload(
       replica.state,
-      materializedPayload(replica.state, now, downgradeSidecars, downgradeCmdbSnapshot),`,
+      materializedPayload(replica.state, now, downgradeSidecars, undefined, downgradeCmdbSnapshot),`,
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
   return replaceOnce(
     output,
-    "    const outgoing = materializedPayload(canonical, now, downgradeSidecars);",
-    "    const outgoing = materializedPayload(canonical, now, downgradeSidecars, downgradeCmdbSnapshot);",
+    "    const outgoing = materializedPayload(canonical, now, downgradeSidecars, downgradeAiSessions);",
+    "    const outgoing = materializedPayload(canonical, now, downgradeSidecars, downgradeAiSessions, downgradeCmdbSnapshot);",
     "infrastructure/services/cloudSync/convergentSyncRuntimeMethods.ts",
   );
 });
 
 update("infrastructure/services/CloudSyncManager.ts", (source) => replaceOnce(
   source,
-  "    options?: {\n      pluginSidecars?: SyncPayload['pluginSidecars'];\n    },\n  ): Promise<{ payload:",
-  "    options?: {\n      pluginSidecars?: SyncPayload['pluginSidecars'];\n      cmdbSnapshot?: SyncPayload['cmdbSnapshot'];\n    },\n  ): Promise<{ payload:",
+  "    options?: {\n      pluginSidecars?: SyncPayload['pluginSidecars'];\n      aiSessions?: SyncPayload['aiSessions'];\n    },\n  ): Promise<{ payload:",
+  "    options?: {\n      pluginSidecars?: SyncPayload['pluginSidecars'];\n      aiSessions?: SyncPayload['aiSessions'];\n      cmdbSnapshot?: SyncPayload['cmdbSnapshot'];\n    },\n  ): Promise<{ payload:",
   "infrastructure/services/CloudSyncManager.ts",
 ));
 
 update("application/state/useCloudSync.ts", (source) => replaceOnce(
   source,
-  "    return manager.resolveConvergentConflict(addressKey, candidateDot, applyPayload, {\n      pluginSidecars,\n    });",
-  "    const { collectCmdbCloudSnapshot } = await import('../CmdbCloudSync');\n    const cmdbSnapshot = await collectCmdbCloudSnapshot();\n    return manager.resolveConvergentConflict(addressKey, candidateDot, applyPayload, {\n      pluginSidecars,\n      cmdbSnapshot,\n    });",
+  "    return manager.resolveConvergentConflict(addressKey, candidateDot, applyPayload, {\n      pluginSidecars,\n      aiSessions: (await import('../syncPayload')).collectAiSessionsForSync(),\n    });",
+  "    const { collectCmdbCloudSnapshot } = await import('../CmdbCloudSync');\n    const cmdbSnapshot = await collectCmdbCloudSnapshot();\n    return manager.resolveConvergentConflict(addressKey, candidateDot, applyPayload, {\n      pluginSidecars,\n      aiSessions: (await import('../syncPayload')).collectAiSessionsForSync(),\n      cmdbSnapshot,\n    });",
   "application/state/useCloudSync.ts",
 ));
 
@@ -865,5 +877,25 @@ update("application/app/AppSideEffects.tsx", (source) => replaceOnce(
   // Update check hook`,
   "application/app/AppSideEffects.tsx",
 ));
+
+// AsidePanel remains the sole numeric-width and persistence owner; callers only observe its rendered width.
+update("components/ui/aside-panel.tsx", patchAsidePanel);
+
+// Windows Hello 辅助程序在中文路径 + VS 18 环境下需要两处修正，否则打包直接失败：
+// 生成的 .cmd 必须按 GBK 写入（cmd.exe 默认代码页），且需要识别 Visual Studio 18 安装目录。
+update("scripts/build-windows-hello-helper.cjs", (source) => {
+  let output = replaceOnce(
+    source,
+    'const versions = ["2026", "2022", "2019"];',
+    'const versions = ["2026", "2022", "2019", "18"];',
+    "scripts/build-windows-hello-helper.cjs",
+  );
+  return replaceOnce(
+    output,
+    'writeFile(scriptPath, `@echo off\\r\\n${compileCommand}\\r\\n`, "utf8");',
+    'writeFile(scriptPath, require("iconv-lite").encode(`@echo off\\r\\n${compileCommand}\\r\\n`, "gbk"));',
+    "scripts/build-windows-hello-helper.cjs",
+  );
+});
 
 console.log(`Prepared Netcatty Cmdb integration at ${target}`);

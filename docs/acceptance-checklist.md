@@ -166,3 +166,25 @@ Get-NetTCPConnection -LocalPort 18974 -State Listen | ForEach-Object { Stop-Proc
 - 未改Go后端协议；沿用已验证分支后端与独立测试库，不触碰正式安装或业务数据。真实客户远程SSH、Linux远端、S3服务端和跨平台安装未在本轮验证。
 - 当前隔离测试构建 `build/netcatty-prototype-restored`，独立库 `build/prototype-restored-smoke.db`。不将旧测试窗口或旧dist当作新界面。
 
+## 八、五页视觉对齐复核（2026-10-17）
+
+本轮只调整 Netcatty 原生 Cmdb 中的终端资产、基础设施、业务系统、机柜和网络页布局；以隔离装配目录 `build/netcatty-five-page-visual` 和隔离库 `build/five-page-visual-review/assets.db` 启动真实 Electron 客户端，窗口内容区 1568×751，按本目录原型图片对照。以下截图均为本机 `build/` 下的验收产物，未纳入版本控制。
+
+| 页面 | 客户端实测 | 截图 |
+| --- | --- | --- |
+| 终端资产 | 紧凑顶栏、固定列表表头与行高，设备 IP、网络类型、状态及操作独立列；台式机、笔记本可从设备名称打开原有详情 | [终端资产](../build/five-page-visual-evidence/terminal.png) |
+| 基础设施 | 资产类别切换后，设备类型、品牌／型号、IP、网络类型、位置、负责人及状态保持独立列 | [基础设施](../build/five-page-visual-evidence/infrastructure.png) |
+| 业务系统 | 独立访问地址列在业务 IP 前，原有地址文本完整；资产类型、版本、承载设备、网络类型和状态可见 | [业务系统](../build/five-page-visual-evidence/systems.png) |
+| 机柜 | 54px 单排页头容纳横向二级导航、机房／机柜选择及搜索；机柜图／设备属性／机房机柜管理三栏同时显示，右栏管理不覆盖设备属性 | [机柜](../build/five-page-visual-evidence/rack.png) |
+| 网络 | 56px 页头、完整 `/24` 方格和底部分页；点击 `192.168.10.201` 后右侧详情同时可见。680px 窄窗口详情移至方格下方，可滚动查看并操作 | [网络桌面](../build/five-page-visual-evidence/network.png) / [网络窄屏详情](../build/five-page-visual-evidence/network-narrow-detail.png) |
+
+验证：锁定宿主装配测试 1/1 通过；三类资产、地址池及机柜布局模型测试 31/31 通过；装配后 `npx eslint components/cmdb` 和 `npm run build` 通过。Vite 仍提示宿主既有的大分包。机柜在 1150px 时管理区下置、680px 时三区域单列顺排；680px 下方 IP 详情实际高度 220px，地址区域可滚动到详情。此轮未修改 Go 后端，未对正式安装目录、生产数据、远端连接或跨平台安装进行验证；不将视觉验证等同于全功能人工验收。
+
+## 九、工单流转恢复原设计（2026-10-18）
+
+- 用户明确撤销圆环节点与能量动画方案，恢复改版前“四张横向阶段卡片＋箭头＋右侧独立弱化已取消”的布局。
+- 实现：[WorkOrders.jsx](../integrations/netcatty/cmdb/WorkOrders.jsx) 恢复原阶段区 JSX 和 `ArrowRight`，沿用真实阶段统计与点击筛选。删除本轮新增的 `WorkOrderFlow.jsx` 动画组件，并撤销 [装配脚本](../scripts/prepare-netcatty.mjs) 中仅供动画使用的 animejs 依赖注入。
+- 客户端实测：重新构建并替换本机安装客户端前端包，正常重启后检查四阶段卡片及独立已取消卡片均为 48px 高；当前数量为 0／0／0／4／0。点击新建显示暂无数据且已关闭数量仍为 4，再次点击恢复 4 条工单。未修改工单记录。
+- 验证：锁定宿主装配测试 1/1 通过；装配宿主 `npx eslint components/cmdb/WorkOrders.jsx` 和 `npx vite build` 通过。保留宿主既有分包体积、混合导入和浏览器兼容提示。本次恢复未改后端，未运行 Go 测试。
+- 视觉证据：[原设计恢复后的客户端](../build/work-order-original-restored.png)。源码与安装客户端均已恢复，版本号不变；安装前备份为 `resources/app.asar.pre-original-flow-restore`。
+

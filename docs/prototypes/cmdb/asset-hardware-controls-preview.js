@@ -7,6 +7,30 @@
   const units = { MB: 1, GB: 1024, TB: 1024 ** 2, PB: 1024 ** 3 };
   const models = ['Intel Core i5-12500', 'Intel Core i5-1345U', 'Intel Core i7-13700', 'Intel Xeon Gold 6330', 'Intel Xeon Silver 4310', 'AMD Ryzen 7 7700', 'AMD EPYC 7313'];
   const media = ['SATA', 'SSD', 'U.2', 'SAS', 'NVMe', 'HDD', 'SATA SSD', 'SAS SSD'];
+  // 与原生 hardwarePresetModel 一致的常用预设：只含分项，说明/RAID 保留在当前草稿；仅存本机浏览器，不写业务数据。
+  const presetKey = 'cmdb-prototype-hardware-presets';
+  const presetParts = { cpu_info: ['count', 'model'], memory_mb: ['amount', 'unit'], disk_info: ['count', 'capacity', 'unit', 'medium'] };
+  const defaultPresets = {
+    cpu_info: [{ count: '1', model: 'Intel Core i5-12500' }, { count: '1', model: 'Intel Core i7-13700' }, { count: '2', model: 'Intel Xeon Gold 6330' }, { count: '2', model: 'Intel Xeon Silver 4310' }, { count: '2', model: 'AMD EPYC 7313' }],
+    memory_mb: [{ amount: '8', unit: 'GB' }, { amount: '16', unit: 'GB' }, { amount: '32', unit: 'GB' }, { amount: '64', unit: 'GB' }, { amount: '128', unit: 'GB' }],
+    disk_info: [{ count: '', capacity: '512', unit: 'GB', medium: 'SSD' }, { count: '', capacity: '1', unit: 'TB', medium: 'SSD' }, { count: '2', capacity: '960', unit: 'GB', medium: 'SATA SSD' }, { count: '4', capacity: '4', unit: 'TB', medium: 'SAS' }],
+  };
+  const presetLabel = (key, preset) => key === 'memory_mb' ? `${preset.amount} ${preset.unit}`
+    : key === 'cpu_info' ? `${preset.count ? preset.count + ' × ' : ''}${preset.model}`
+      : `${preset.count ? preset.count + ' × ' : ''}${preset.capacity} ${preset.unit}${preset.medium ? ' ' + preset.medium : ''}`;
+  const usablePreset = (key, parts) => key === 'cpu_info' ? !!String(parts.model || '').trim()
+    : key === 'memory_mb' ? /[1-9]/.test(parts.amount || '') && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(parts.amount || '')
+      : /[1-9]/.test(parts.capacity || '') && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(parts.capacity || '');
+  const readPresets = (key) => {
+    try { const stored = JSON.parse(localStorage.getItem(presetKey) || 'null'); if (stored && Object.prototype.hasOwnProperty.call(stored, key)) return stored[key]; } catch { /* 原型偏好读取失败时使用默认 */ }
+    return defaultPresets[key];
+  };
+  const savePresets = (key, list) => {
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem(presetKey) || '{}') || {}; } catch { stored = {}; }
+    stored[key] = list;
+    try { localStorage.setItem(presetKey, JSON.stringify(stored)); } catch { /* 仅原型示意 */ }
+  };
   const node = (tag, className, text) => {
     const result = document.createElement(tag);
     if (className) result.className = className;
@@ -121,6 +145,46 @@
       }
       add('note', key === 'cpu_info' ? '补充说明' : '阵列 / 其他说明');
     }
+    const presetBar = node('div', 'asset-hardware-presets');
+    presetBar.setAttribute('role', 'group');
+    presetBar.setAttribute('aria-label', field.label + ' · 常用预设');
+    const renderPresets = () => {
+      presetBar.replaceChildren(node('span', 'asset-hardware-presets-title', '常用'));
+      const list = readPresets(key);
+      const current = draft.recognized && usablePreset(key, draft.parts) ? presetLabel(key, draft.parts) : '';
+      for (const preset of list) {
+        const label = presetLabel(key, preset);
+        const chip = node('span', 'asset-hardware-preset');
+        if (label === current) chip.dataset.active = 'true';
+        const apply = node('button', '', label);
+        apply.type = 'button';
+        apply.title = '应用常用预设：' + label;
+        apply.addEventListener('click', () => {
+          for (const part of presetParts[key]) { draft.parts[part] = preset[part] ?? ''; inputs[part].value = draft.parts[part]; }
+          if (draft.recognized) commit();
+          else status.textContent = '完整原文保持不变。已按预设填写分项，点击“用分项替换完整文本”才会替换。';
+          renderPresets();
+        });
+        const remove = node('button', '', '×');
+        remove.type = 'button';
+        remove.setAttribute('aria-label', '删除常用预设：' + label);
+        remove.title = '删除此常用预设';
+        remove.addEventListener('click', () => { savePresets(key, list.filter((item) => presetLabel(key, item) !== label)); renderPresets(); });
+        chip.append(apply, remove);
+        presetBar.append(chip);
+      }
+      if (!list.length) presetBar.append(node('span', 'asset-hardware-presets-title', '暂无常用预设'));
+      const save = node('button', 'asset-hardware-preset-save', '+ 存为常用');
+      save.type = 'button';
+      save.disabled = !current || list.some((item) => presetLabel(key, item) === current);
+      save.title = current ? '把“' + current + '”存为常用预设' : '填写完整分项后可存为常用预设';
+      save.addEventListener('click', () => {
+        const preset = Object.fromEntries(presetParts[key].map((part) => [part, String(draft.parts[part] ?? '').trim()]));
+        savePresets(key, [preset, ...list.filter((item) => presetLabel(key, item) !== current)].slice(0, 16));
+        renderPresets();
+      });
+      presetBar.append(save);
+    };
     const rawLabel = node('label', 'asset-hardware-raw-label', key === 'memory_mb' ? '原始 MB 值' : '完整配置');
     rawLabel.htmlFor = id;
     const raw = node(key === 'memory_mb' ? 'input' : 'textarea', 'asset-hardware-raw');
@@ -164,6 +228,7 @@
       raw.value = value;
       replace.hidden = true;
       showStatus();
+      renderPresets();
     }
     function showStatus() {
       status.textContent = !draft.recognized ? '原文无法可靠拆分，已原样保留；可直接编辑完整文本，或填写分项后明确替换。'
@@ -180,9 +245,11 @@
       for (const [part, input] of Object.entries(inputs)) input.value = draft.parts[part];
       replace.hidden = draft.recognized;
       showStatus();
+      renderPresets();
     });
     advancedBody.append(rawLabel, raw, replace, status);
-    control.append(components, advanced);
+    control.append(presetBar, components, advanced);
+    renderPresets();
     showStatus();
     return wrapper;
   }

@@ -40,6 +40,10 @@ func TestLegacyAssetNameRoundTripAndActualFilters(t *testing.T) {
 		t.Fatalf("assets 表必须迁移独立资产名称列，实际=%d", assetNameColumn)
 	}
 
+	if _, err := s.CreateIPSubnet(&IPSubnet{Name: "办公内网", Category: "内网", CIDR: "10.20.30.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+
 	matchingID := createLegacyAsset(t, s, Asset{
 		AssetName: "执行局办公终端", AssetCode: "PC-100", DeviceType: "台式电脑",
 		UserName: "张三", Department: "执行局", Room: "502室", IP: "10.20.30.100",
@@ -116,26 +120,94 @@ func TestLegacyAssetUnsetFiltersAndIPAMNetworkTypes(t *testing.T) {
 	}
 }
 
+func TestLegacyAssetBusinessNetworkUsesOwnIPAMAcrossQueries(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustLegacyExec(t, s, `INSERT INTO ip_subnets(project_id,name,category,cidr) VALUES
+		(?, '大业务池', '内网', '198.51.100.0/23'),
+		(?, '小业务池', '专网', '198.51.100.0/24'),
+		(?, '物理池', '外网', '10.0.0.0/24')`, scope.ProjectID, scope.ProjectID, scope.ProjectID)
+	// The old registered pool and sort order must not beat a more specific CIDR.
+	mustLegacyExec(t, s, `INSERT INTO ip_pool(project_id,subnet,ip,remark) VALUES
+		(?, '大业务池', '198.51.100.10', ''),
+		(?, '物理池', '10.0.0.10', ''),
+		(?, '小业务池', '198.51.100.20', '盒子 10.0.0.50')`, scope.ProjectID, scope.ProjectID, scope.ProjectID)
+	fixtures := []struct {
+		code, ip, terminalIP, business, physical string
+	}{
+		{"REGISTERED-OVERLAP", "198.51.100.10", "10.0.0.10", "专网", "外网"},
+		{"CIDR-ONLY", "198.51.100.11", "10.0.0.11", "专网", "外网"},
+		{"UNKNOWN-BUSINESS", "203.0.113.50", "10.0.0.50", "", "外网"},
+		{"NO-BUSINESS", "", "10.0.0.60", "", "外网"},
+	}
+	for _, fixture := range fixtures {
+		mustLegacyExec(t, s, `INSERT INTO assets(project_id,asset_code,ip,terminal_ip,net_type,status) VALUES (?,?,?,?, '手工网络', '在用')`, scope.ProjectID, fixture.code, fixture.ip, fixture.terminalIP)
+	}
+	assets, err := s.AllAssetsForProject(scope)
+	if err != nil || len(assets) != len(fixtures) {
+		t.Fatalf("读取终端列表失败: assets=%+v err=%v", assets, err)
+	}
+	for _, fixture := range fixtures {
+		for _, asset := range assets {
+			if asset.AssetCode != fixture.code {
+				continue
+			}
+			if asset.IP != fixture.ip || asset.IPNetworkType != fixture.business || asset.TerminalIPNetworkType != fixture.physical {
+				t.Fatalf("业务与物理网络必须按各自地址解析: fixture=%+v asset=%+v", fixture, asset)
+			}
+			detail, _, err := s.GetAssetForProject(scope, asset.ID)
+			if err != nil || detail.IPNetworkType != asset.IPNetworkType || detail.TerminalIPNetworkType != asset.TerminalIPNetworkType || detail.IP != asset.IP {
+				t.Fatalf("列表详情网络不一致: list=%+v detail=%+v err=%v", asset, detail, err)
+			}
+		}
+	}
+	for _, networkType := range []string{"专网", "内网", "外网", "手工网络", AssetUnconfiguredFilter} {
+		want := make(map[string]bool)
+		for _, fixture := range fixtures {
+			if fixture.business == networkType || networkType == AssetUnconfiguredFilter && fixture.business == "" {
+				want[fixture.code] = true
+			}
+		}
+		query := AssetQuery{NetType: networkType, Page: 1, PageSize: 1}
+		page, total, err := s.QueryAssetsForProject(scope, query)
+		if err != nil || total != len(want) || len(page) > 1 {
+			t.Fatalf("网络筛选或分页错误: network=%q total=%d page=%+v err=%v", networkType, total, page, err)
+		}
+		exported, err := s.AllAssetsMatchingQueryForProject(scope, query)
+		if err != nil || len(exported) != len(want) {
+			t.Fatalf("导出必须使用相同网络条件且包含全部匹配资产: network=%q assets=%+v err=%v", networkType, exported, err)
+		}
+		for _, asset := range exported {
+			if !want[asset.AssetCode] {
+				t.Fatalf("借用了物理或手工网络分类: network=%q asset=%+v", networkType, asset)
+			}
+		}
+	}
+}
+
 func TestLegacyCloudDesktopResolvesBusinessIPFromIPAMBoxRemark(t *testing.T) {
 	s := newCmdbTestStore(t)
 	scope, err := s.DefaultProjectScope()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "外网", Category: "外网", CIDR: "191.162.17.0/24"}); err != nil {
+	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "外网", Category: "外网", CIDR: "198.51.100.0/24"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateAssetForProject(scope, &Asset{AssetCode: "CLOUD-001", DeviceType: "云桌面终端", IP: "外网", TerminalIP: "180.161.30.63"}, "测试"); err != nil {
+	if _, err := s.CreateAssetForProject(scope, &Asset{AssetCode: "CLOUD-001", DeviceType: "云桌面终端", IP: "外网", TerminalIP: "10.0.0.20"}, "测试"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateIPEntryForProject(scope, &IPEntry{Subnet: "外网", IP: "191.162.17.63", Remark: "外网云桌面｜盒子 180.161.30.63"}); err != nil {
+	if _, err := s.CreateIPEntryForProject(scope, &IPEntry{Subnet: "外网", IP: "198.51.100.20", Remark: "外网云桌面｜盒子 10.0.0.20"}); err != nil {
 		t.Fatal(err)
 	}
 	assets, err := s.AllAssetsForProject(scope)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(assets) != 1 || assets[0].IP != "191.162.17.63" || assets[0].IPNetworkType != "外网" {
+	if len(assets) != 1 || assets[0].IP != "198.51.100.20" || assets[0].IPNetworkType != "外网" {
 		t.Fatalf("云桌面业务 IP 未从 IPAM 备注恢复: %+v", assets)
 	}
 }

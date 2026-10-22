@@ -28,32 +28,58 @@
     node.setAttribute('aria-hidden', 'true');
     return node;
   };
+  // 与原生列表一致：名称后显示网络类型色点，颜色取设置中的网络类型颜色。
+  const networkColor = (name) => {
+    const entries = window.cmdbSettingsPreviewCatalogs?.network?.entries || [];
+    const color = entries.find((entry) => entry.name === name)?.color;
+    return /^#[0-9A-Fa-f]{6}$/.test(String(color || '')) ? color : '#94A3B8';
+  };
+  const networkDot = (name) => {
+    const label = text(name);
+    const dot = element('span', 'asset-type-dot');
+    dot.style.backgroundColor = networkColor(label);
+    dot.title = '网络类型：' + label;
+    dot.setAttribute('aria-label', '网络类型：' + label);
+    return dot;
+  };
+  function showNetcattyHint(line, address) {
+    document.querySelectorAll('.asset-netcatty-notice').forEach((notice) => notice.remove());
+    const notice = element('span', 'asset-netcatty-notice dialog-note', '请在 Netcatty 客户端中打开 ' + address + ' 的连接。');
+    notice.setAttribute('role', 'status');
+    line.after(notice);
+  }
   const matches = (row, query) => Object.values(row).filter((value) => typeof value === 'string' || typeof value === 'number').join(' ').toLowerCase().includes(query);
-  function netcattyAddress(row, address, prefix = '') {
+  function netcattyAddress(address, prefix = '') {
     const line = element('span', 'asset-address-line');
     const value = element('span', 'asset-address-value', prefix + text(address));
     value.title = prefix + text(address);
     line.append(value);
     if (address) {
-      const connect = button('', () => {
-        const root = byId('asset-operation-body');
-        root.replaceChildren();
-        byId('asset-operation-title').textContent = 'Netcatty 连接预览';
-        const values = element('dl', 'asset-detail-values');
-        for (const [label, content] of [['设备名称', row.name], ['连接地址', address], ['Netcatty 主机', '未关联'], ['密钥库引用', '未关联']]) {
-          const entry = document.createElement('div');
-          entry.append(element('dt', '', label), element('dd', '', content));
-          values.append(entry);
-        }
-        const associate = element('button', '', '关联主机与密钥库（示意）');
-        associate.disabled = true;
-        root.append(values, associate, element('p', 'dialog-note', '设计原型，仅展示此 IP 的连接入口；不读取凭证或发起真实连接。'));
-        byId('asset-operation').showModal();
-      }, 'asset-netcatty-link');
+      const connect = button('', () => showNetcattyHint(line, address), 'asset-netcatty-link');
       connect.prepend(svg('square-terminal'));
-      connect.title = '使用 Netcatty 连接 ' + address + '（原型预览）';
+      connect.title = '使用 Netcatty 连接 ' + address + '（需在客户端打开）';
       connect.setAttribute('aria-label', connect.title);
       line.append(connect);
+    }
+    return line;
+  }
+  function showNetcattyBrowserHint(line, address) {
+    document.querySelectorAll('.asset-netcatty-notice').forEach((notice) => notice.remove());
+    const notice = element('span', 'asset-netcatty-notice dialog-note', '请在 Netcatty 浏览器中打开 ' + address + ' 的访问地址（需已关联主机）。');
+    notice.setAttribute('role', 'status');
+    line.after(notice);
+  }
+  function netcattyBrowserUrl(address) {
+    const line = element('span', 'asset-address-line asset-browser-url');
+    const value = element('span', 'asset-address-value', text(address || '未配置'));
+    value.title = text(address || '未配置');
+    line.append(value);
+    if (address && /^https?:\/\//i.test(address)) {
+      const open = button('', () => showNetcattyBrowserHint(line, address), 'asset-netcatty-link');
+      open.prepend(svg('globe'));
+      open.title = '在 Netcatty 浏览器中打开 ' + address;
+      open.setAttribute('aria-label', open.title);
+      line.append(open);
     }
     return line;
   }
@@ -158,7 +184,9 @@
     config.columns.forEach((column) => {
       const col = document.createElement('col');
       colgroup.append(col);
-      head.append(element('th', '', column.label));
+      const th = element('th', column.headerTitle ? 'asset-identity-header' : '', column.label);
+      th.title = column.headerTitle || column.label;
+      head.append(th);
     });
     const actionCol = document.createElement('col');
     actionCol.style.width = '80px';
@@ -181,16 +209,19 @@
         let value = text(row[column.key]);
         if (column.key === 'ip' && row.physical_ip) value = '业务 ' + value;
         if (column.kind === 'asset') {
+          const nameRow = element('div', 'asset-name-row');
           const link = button(value, () => openDetail(row), 'asset-primary');
           link.title = value;
-          cell.append(link);
+          const network = state.view === 'terminal' ? row.network : state.view === 'infrastructure' ? row.net_type : row.network_type;
+          nameRow.append(link, networkDot(network));
+          cell.append(nameRow);
         } else if (column.kind === 'status') {
           const tone = /注销/.test(value) ? 'archived' : /故障|维修|维护|离线|停用/.test(value) ? 'warning' : /闲置|在库|待上线/.test(value) ? 'idle' : '';
           cell.append(element('span', 'asset-status ' + tone, value));
         } else if (column.kind === 'address') {
-          cell.append(element('span', 'asset-access-address', value));
-        } else if (state.view === 'terminal' && column.key === 'ip') {
-          cell.append(netcattyAddress(row, row.ip, row.physical_ip ? '业务 ' : ''));
+          cell.append(netcattyBrowserUrl(value));
+        } else if (['ip', 'mgmt_ip', 'biz_ip', 'service_ip'].includes(column.key)) {
+          cell.append(netcattyAddress(row[column.key], column.key === 'ip' && row.physical_ip ? '业务 ' : column.key === 'mgmt_ip' ? '管理 ' : ''));
         } else {
           const primary = element('span', 'asset-primary' + (/ip$/i.test(column.key) ? ' asset-ip' : ''), value);
           primary.title = value;
@@ -205,9 +236,10 @@
           cell.append(primary);
         }
         if (column.secondary && row[column.secondary]) {
-          const secondaryText = column.secondary === 'physical_ip' ? '终端 ' + row[column.secondary] : String(row[column.secondary]);
-          const secondary = column.secondary === 'physical_ip' && state.view === 'terminal'
-            ? netcattyAddress(row, row.physical_ip, '终端 ')
+          const addressPrefix = column.secondary === 'physical_ip' ? '终端 ' : column.secondary === 'biz_ip' ? '业务 ' : '';
+          const secondaryText = addressPrefix + String(row[column.secondary]);
+          const secondary = ['physical_ip', 'biz_ip'].includes(column.secondary)
+            ? netcattyAddress(row[column.secondary], addressPrefix)
             : element('span', 'asset-secondary', secondaryText);
           secondary.classList.add('asset-secondary');
           secondary.title = secondaryText;
@@ -216,15 +248,13 @@
         tr.append(cell);
       }
       const actions = element('td', 'action-cell');
-      const edit = button('', () => openEditor(row));
-      edit.setAttribute('aria-label', '编辑 ' + row.name);
-      edit.title = '编辑';
-      edit.append(svg('edit'));
-      const more = button('', () => openActions(row));
-      more.setAttribute('aria-label', '更多操作 ' + row.name);
-      more.title = '更多操作';
-      more.append(svg('more'));
-      actions.append(edit, more);
+      // 与原生一致：每行一个紧凑“操作”按钮，菜单分组列出查看、编辑、业务流程和注销归档。
+      const more = button('操作', (event) => openActions(row, event.currentTarget), 'asset-row-actions');
+      more.setAttribute('aria-label', row.name + ' 的操作');
+      more.setAttribute('aria-haspopup', 'menu');
+      more.title = row.name + ' 的操作';
+      more.append(svg('down'));
+      actions.append(more);
       tr.append(actions);
       body.append(tr);
     }
@@ -274,7 +304,7 @@
     }
     root.append(section);
   }
-  const detailHelpers = { element, button, svg, text, addHistory, netcattyAddress };
+  const detailHelpers = { element, button, svg, text, addHistory, netcattyAddress, netcattyBrowserUrl };
   function openDetail(row) {
     const config = pages[state.view];
     window.assetPrototypeDetail.show({
@@ -302,16 +332,6 @@
       section.append(fields);
       root.append(section);
     }
-    if (prefix === 'asset-field') {
-      root.prepend(element('p', 'dialog-note', '表单可调整以预览布局；保存未接入，不修改业务资产。'));
-      if (state.view === 'infrastructure' && !/虚拟机|virtual|云主机|容器/i.test(values.type || '')) {
-        const photos = element('section', 'asset-section');
-        window.assetPrototypeForm.appendPhotos(photos);
-        root.append(photos);
-      }
-      if (state.view !== 'systems') window.assetPrototypeForm.appendCollection(root, values, () => buildFields(root, groups, values, prefix));
-      window.assetPrototypeForm.appendCredentials(root, values, prefix);
-    }
   }
   function openEditor(row = null) {
     const config = pages[state.view];
@@ -321,10 +341,11 @@
     }
     const values = { ...row };
     window.assetPrototypeDetail.prepareEditor({ view: state.view, row: values, title: '编辑' + config.label, helpers: detailHelpers });
-    buildFields(byId('asset-sheet-body'), config.groups, values, 'asset-field');
-    const save = element('button', 'primary', '保存（原型示意）');
+    const form = window.assetPrototypeForm.renderForm({ root: byId('asset-sheet-body'), view: state.view, config, values, prefix: 'asset-field', mode: 'edit' });
+    const save = element('button', 'primary', '保存（离线不可用）');
     save.disabled = true;
-    byId('asset-sheet-footer').replaceChildren(button('取消', () => byId('asset-sheet').close()), save);
+    save.title = '离线原型未接入保存，不会修改资产';
+    byId('asset-sheet-footer').replaceChildren(element('span', 'asset-form-offline', '离线原型 · 不会保存'), button('取消', form.requestClose), save);
     if (!byId('asset-sheet').open) byId('asset-sheet').showModal();
   }
   function openOperation(row, operation) {
@@ -341,12 +362,34 @@
     root.append(element('p', 'dialog-note', '设计示例，确认操作未接入。'));
     byId('asset-operation').showModal();
   }
-  function openActions(row) {
+  function openActions(row, anchor) {
+    const dialog = byId('asset-actions');
     const root = byId('asset-actions-body');
     root.replaceChildren();
-    root.append(button('查看详情', () => { byId('asset-actions').close(); openDetail(row); }));
-    for (const operation of pages[state.view].operations) root.append(button(operation.label, () => openOperation(row, operation)));
-    byId('asset-actions').showModal();
+    const operations = pages[state.view].operations;
+    const groups = [
+      [{ label: '查看详情', run: () => { dialog.close(); openDetail(row); } }, ...operations.filter((operation) => operation.id === 'edit').map((operation) => ({ label: '编辑资产', run: () => openOperation(row, operation) }))],
+      operations.filter((operation) => !['edit', 'archive'].includes(operation.id)).map((operation) => ({ label: operation.label, run: () => openOperation(row, operation) })),
+      operations.filter((operation) => operation.id === 'archive').map((operation) => ({ label: operation.label, run: () => openOperation(row, operation), danger: true })),
+    ].filter((group) => group.length);
+    groups.forEach((group) => {
+      const section = element('div', 'asset-actions-group');
+      section.setAttribute('role', 'group');
+      for (const item of group) {
+        const entry = button(item.label, item.run, item.danger ? 'danger' : '');
+        entry.setAttribute('role', 'menuitem');
+        section.append(entry);
+      }
+      root.append(section);
+    });
+    if (dialog.open) dialog.close();
+    dialog.show();
+    const rect = anchor?.getBoundingClientRect();
+    if (rect) {
+      dialog.style.top = Math.min(rect.bottom + 4, window.innerHeight - dialog.offsetHeight - 8) + 'px';
+      dialog.style.left = Math.max(8, rect.right - dialog.offsetWidth) + 'px';
+    }
+    root.querySelector('button')?.focus();
   }
 
   byId('asset-view').addEventListener('change', () => switchView(byId('asset-view').value, true));
@@ -364,11 +407,29 @@
   });
   document.querySelectorAll('[data-create]').forEach((node) => node.addEventListener('click', () => { switchView(node.dataset.create); openEditor(); }));
   document.querySelectorAll('[data-close]').forEach((node) => node.addEventListener('click', () => byId(node.dataset.close).close()));
+  // 行操作菜单为非模态浮层：点击外部或按 Esc 关闭。
+  document.addEventListener('pointerdown', (event) => {
+    const menu = byId('asset-actions');
+    if (menu.open && !menu.contains(event.target) && !event.target.closest('.asset-row-actions')) menu.close();
+  });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && byId('asset-actions').open) byId('asset-actions').close(); });
+  // 设置原型保存网络类型颜色后，列表色点按新颜色重绘。
+  window.addEventListener('cmdb-prototype-network-types-changed', () => renderTable());
   document.querySelectorAll('details').forEach((detail) => detail.addEventListener('toggle', () => {
     if (detail.open) document.querySelectorAll('details[open]').forEach((other) => { if (other !== detail) other.open = false; });
   }));
   window.addEventListener('hashchange', () => switchView(location.hash.slice(1)));
   window.addEventListener('resize', sizeColumns);
+  // 详情侧栏打开/关闭会改变列表可用宽度；列宽按当前容器重算，避免末列被侧栏遮住。
+  const tableWrap = document.querySelector('.asset-table-wrap');
+  if (tableWrap && typeof ResizeObserver === 'function') {
+    let lastWidth = tableWrap.clientWidth;
+    new ResizeObserver(() => {
+      if (tableWrap.clientWidth === lastWidth) return;
+      lastWidth = tableWrap.clientWidth;
+      sizeColumns();
+    }).observe(tableWrap);
+  }
   switchView(location.hash.slice(1));
   const linkedAssetId = new URLSearchParams(location.search).get('asset');
   if (linkedAssetId) {

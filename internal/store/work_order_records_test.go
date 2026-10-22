@@ -139,9 +139,7 @@ func TestWorkOrderHistorySnapshotRemapsOrderReferences(t *testing.T) {
 		}
 	}
 	target, targetScope := openSnapshotTestStore(t)
-	if _, err := target.db.Exec(`UPDATE cmdb_projects SET sync_id=? WHERE id=?`, snapshot.ProjectSyncID, targetScope.ProjectID); err != nil {
-		t.Fatal(err)
-	}
+	alignSnapshotProject(t, target, targetScope, snapshot.ProjectSyncID)
 	if _, err := target.ApplyCmdbSnapshot(targetScope, snapshot); err != nil {
 		t.Fatal(err)
 	}

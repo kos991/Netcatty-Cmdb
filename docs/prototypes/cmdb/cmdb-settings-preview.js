@@ -59,7 +59,7 @@
             </div>
             ${groups.map(([glyph, name]) => `<span class="cmdb-host-setting${name === 'Cmdb' ? ' cmdb-host-setting--active' : ''}"${name === 'Cmdb' ? ' aria-current="page"' : ''}>${icon(glyph)}${name}</span>`).join('')}
           </aside>
-          <main class="cmdb-settings-main"><header class="cmdb-settings-heading"><div>${icon('database')}<h2>Cmdb</h2></div><span>Netcatty 当前项目</span></header>
+          <main class="cmdb-settings-main"><header class="cmdb-settings-heading"><div>${icon('database')}<h2>Cmdb</h2><span class="cmdb-version-badge" data-version-kind="unknown"><span class="cmdb-version-tag" title="正式客户端读取内置服务的真实发布 tag（如 v1.3.1）；未打 tag 的构建显示“开发构建”。原型不读取版本。">${icon('tag')}<span>版本未读取（原型）</span></span>${button(icon('refresh') + '<span>检查更新</span>', 'id="cmdb-version-check" class="cmdb-version-check"')}<span id="cmdb-version-note" class="cmdb-version-note" role="status"></span></span></div><span>Netcatty 当前项目</span></header>
             <nav class="cmdb-settings-tabs" role="tablist" aria-label="Cmdb 配置分区">${panels.map((panel, index) => button(icon(panel.icon) + panel.label, `role="tab" id="cmdb-settings-tab-${panel.id}" data-settings-tab="${panel.id}" aria-controls="cmdb-settings-panel-${panel.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}"`)).join('')}</nav>
             <div class="cmdb-settings-panels">${panels.map((panel, index) => `<div class="cmdb-settings-panel" id="cmdb-settings-panel-${panel.id}" data-settings-panel="${panel.id}" role="tabpanel" aria-labelledby="cmdb-settings-tab-${panel.id}" tabindex="0"${index ? ' hidden' : ''}>${panel.content}</div>`).join('')}</div>
           </main>
@@ -70,6 +70,8 @@
     const helpers = { host, catalogs, icon, escape, button, close, projectLabel };
     const catalogController = window.cmdbSettingsCatalogPreview.mount(helpers);
     const operations = window.cmdbSettingsOperationsPreview.mount(helpers);
+    // 原型不联网：检查更新只提示正式客户端行为，不伪造“已是最新”或新版本号。
+    $('cmdb-version-check').addEventListener('click', () => { $('cmdb-version-note').textContent = '原型不联网；正式客户端通过 Netcatty 更新通道检查'; });
 
     function showPanel(id, focus = false) {
       for (const panel of panels) {

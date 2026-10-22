@@ -90,12 +90,15 @@ func TestAppDetailReturnsScopedAppAndTransactionalHistory(t *testing.T) {
 
 func TestAppListExportArchivedFiltersAndIndependentFields(t *testing.T) {
 	_, st, mux := newLegacyHandlerTestServer(t)
-	active := &store.ServerApp{AppName: "在用系统", AssetCode: "APP-EXPORT", Version: "v9", Middleware: "Nginx", Description: "独立说明", Remark: "独立备注", Department: "信息处", NetworkType: "专网", Deployment: "托管服务", DeploymentLocation: "供应商环境", Status: "正常运行"}
+	if _, err := st.CreateIPSubnet(&store.IPSubnet{Name: "业务系统网段", Category: "专网", CIDR: "10.131.0.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+	active := &store.ServerApp{AppName: "在用系统", ServiceIP: "10.131.0.10", AssetCode: "APP-EXPORT", Version: "v9", Middleware: "Nginx", Description: "独立说明", Remark: "独立备注", Department: "信息处", NetworkType: "旧网络", Deployment: "托管服务", DeploymentLocation: "供应商环境", Status: "正常运行"}
 	if _, err := st.CreateApp(active); err != nil {
 		t.Fatal(err)
 	}
-	for _, status := range []string{"已归档", "已注销"} {
-		if _, err := st.CreateApp(&store.ServerApp{AppName: status + "系统", Department: "信息处", NetworkType: "专网", Status: status}); err != nil {
+	for index, status := range []string{"已归档", "已注销"} {
+		if _, err := st.CreateApp(&store.ServerApp{AppName: status + "系统", ServiceIP: fmt.Sprintf("10.131.0.%d", index+11), Department: "信息处", NetworkType: "旧网络", Status: status}); err != nil {
 			t.Fatal(err)
 		}
 	}

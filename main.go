@@ -11,6 +11,9 @@ import (
 	"czfy-assets/internal/store"
 )
 
+// version 由构建注入，未注入时回退为开发版本。
+var version = "dev"
+
 func newHTTPHandler(srv *internal.Server, _ bool) (http.Handler, error) {
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
@@ -43,7 +46,7 @@ func main() {
 	}
 	defer st.Close()
 
-	srv := &internal.Server{Store: st}
+	srv := &internal.Server{Store: st, Version: version}
 	handler, err := newHTTPHandler(srv, *apiOnly)
 	if err != nil {
 		log.Fatalf("创建 HTTP 服务失败: %v", err)

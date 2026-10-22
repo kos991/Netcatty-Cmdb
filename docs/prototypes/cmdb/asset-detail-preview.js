@@ -17,48 +17,171 @@
     if (/系统|配置/.test(title)) return 'settings';
     return 'cpu';
   }
-  function prepareHeader({ view, row, title, editing, helpers, onEdit, onOperation }) {
+  let panelWidth = 420;
+  function prepareResizeHandle(sheet) {
+    if (sheet.querySelector('.asset-panel-resizer')) return;
+    const handle = document.createElement('div');
+    handle.className = 'asset-panel-resizer';
+    handle.tabIndex = 0;
+    handle.setAttribute('role', 'separator');
+    handle.setAttribute('aria-orientation', 'vertical');
+    handle.setAttribute('aria-label', '调整资产详情面板宽度');
+    handle.setAttribute('aria-controls', 'asset-sheet');
+    handle.title = '拖动调整宽度；方向键微调，双击恢复默认宽度';
+    sheet.prepend(handle);
+    const maxWidth = () => Math.min(720, Math.max(360, window.innerWidth - 460));
+    const setWidth = (value) => {
+      panelWidth = Math.max(360, Math.min(maxWidth(), value));
+      document.body.style.setProperty('--asset-detail-width', panelWidth + 'px');
+      handle.setAttribute('aria-valuemin', '360');
+      handle.setAttribute('aria-valuemax', String(maxWidth()));
+      handle.setAttribute('aria-valuenow', String(Math.round(panelWidth)));
+      handle.setAttribute('aria-valuetext', Math.round(panelWidth) + ' 像素');
+    };
+    const canResize = () => window.innerWidth >= 980 && !sheet.classList.contains('expanded');
+    let drag = null;
+    const finish = () => {
+      if (!drag) return;
+      const pointerId = drag.pointerId;
+      drag = null;
+      sheet.classList.remove('resizing');
+      if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+    };
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || !canResize()) return;
+      event.preventDefault();
+      drag = { x: event.clientX, width: sheet.getBoundingClientRect().width, pointerId: event.pointerId };
+      handle.setPointerCapture(event.pointerId);
+      sheet.classList.add('resizing');
+    });
+    handle.addEventListener('pointermove', (event) => {
+      if (drag && event.pointerId === drag.pointerId) setWidth(drag.width + drag.x - event.clientX);
+    });
+    for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(eventName, finish);
+    handle.addEventListener('dblclick', () => { if (canResize()) setWidth(420); });
+    handle.addEventListener('keydown', (event) => {
+      if (!canResize() || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 360 : event.key === 'End' ? maxWidth() : panelWidth + (event.key === 'ArrowLeft' ? 20 : -20);
+      setWidth(next);
+    });
+    sheet.addEventListener('close', finish);
+    window.addEventListener('resize', () => { finish(); setWidth(panelWidth); });
+    setWidth(panelWidth);
+  }
+  function prepareHeader({ view, row, title, editing, helpers, onEdit, onOperation, operations = [] }) {
     const { button, svg } = helpers;
     const sheet = byId('asset-sheet');
-    sheet.classList.remove('expanded');
-    byId('asset-sheet-title').textContent = title;
-    byId('asset-sheet-title').title = title;
+    sheet.classList.add('record-shell');
+    sheet.dataset.recordMode = editing ? 'edit' : 'detail';
+    prepareResizeHandle(sheet);
+    if (!editing) sheet.classList.remove('expanded');
+    const header = sheet.querySelector('header');
+    header.classList.add('record-header');
+    let toolbar = byId('asset-detail-toolbar');
+    if (!toolbar) {
+      toolbar = document.createElement('div');
+      toolbar.id = 'asset-detail-toolbar';
+      toolbar.setAttribute('role', 'toolbar');
+      toolbar.setAttribute('aria-label', '资产业务操作');
+      header.after(toolbar);
+    }
+    toolbar.hidden = editing;
+    byId('asset-detail-tabs').classList.add('record-tabs');
+    byId('asset-sheet-body').classList.add('record-body');
+    byId('asset-sheet-footer').classList.add('record-footer');
+    const name = editing ? title : row.name || row.code || title;
+    byId('asset-sheet-title').textContent = name;
+    byId('asset-sheet-title').title = name;
     byId('asset-sheet-icon').replaceChildren(svg(deviceIcon(view, row)));
-    const subtitle = [...new Set([row.name, row.code, row.type].filter((value) => value && value !== title))].join(' · ');
-    byId('asset-sheet-subtitle').textContent = subtitle;
-    byId('asset-sheet-subtitle').title = subtitle;
     const status = byId('asset-sheet-status');
     status.textContent = row.status || '';
-    status.hidden = editing || !row.status;
+    status.hidden = !row.status;
     status.className = 'asset-status' + (/注销/.test(row.status || '') ? ' archived' : /故障|维修|维护|离线|停用/.test(row.status || '') ? ' warning' : '');
+    const subtitle = [...new Set([editing ? row.name : '', row.code, row.type].filter((value) => value && value !== name))].join(' · ');
+    const subtitleNode = byId('asset-sheet-subtitle');
+    subtitleNode.textContent = subtitle;
+    subtitleNode.title = [row.status, subtitle].filter(Boolean).join(' · ');
+    // 状态保持在标题行；副标题只显示编号与类型，避免状态被移出标题栏。
+    if (status.parentElement !== byId('asset-sheet-title').parentElement) byId('asset-sheet-title').parentElement.append(status);
+    const expand = byId('asset-header-expand');
     const edit = byId('asset-header-edit');
+    expand.hidden = false;
     edit.hidden = editing;
     edit.onclick = onEdit || null;
-    const expand = byId('asset-header-expand');
-    expand.hidden = editing;
-    expand.setAttribute('aria-expanded', 'false');
-    expand.setAttribute('aria-label', '最大化详情');
-    expand.title = '最大化详情';
-    expand.replaceChildren(svg('maximize'));
-    expand.onclick = () => {
-      const expanded = sheet.classList.toggle('expanded');
-      const label = expanded ? '还原面板' : '最大化详情';
+    const updateExpand = () => {
+      const expanded = sheet.classList.contains('expanded');
+      const label = expanded ? '还原面板宽度' : '放大为全宽';
       expand.setAttribute('aria-label', label);
-      expand.setAttribute('aria-expanded', String(expanded));
+      expand.setAttribute('aria-pressed', String(expanded));
+      expand.removeAttribute('aria-expanded');
       expand.title = label;
-      expand.replaceChildren(svg(expanded ? 'minimize' : 'maximize'));
+      expand.replaceChildren(svg(expanded ? 'shrink' : 'expand-diagonal'));
     };
+    updateExpand();
+    // 放大/还原只切换面板全宽；还原后保留拖动调节的宽度。
+    expand.onclick = () => {
+      sheet.classList.toggle('expanded');
+      updateExpand();
+    };
+    // 标题栏窗口按钮：放大/还原、左右分栏（正文单/双列，独立状态）、关闭。
+    const actionsBar = byId('asset-header-actions') || (() => {
+      const bar = document.createElement('div');
+      bar.id = 'asset-header-actions';
+      bar.className = 'sheet-header-actions';
+      return bar;
+    })();
+    actionsBar.replaceChildren();
+    actionsBar.append(expand);
+    const split = document.createElement('button');
+    split.type = 'button';
+    split.className = 'icon quiet';
+    split.dataset.panelControl = 'columns';
+    const columnsKey = 'cmdb-prototype-asset-panel-columns';
+    const readColumns = () => { try { return localStorage.getItem(columnsKey) === '1' ? 1 : 2; } catch { return 2; } };
+    const updateSplit = () => {
+      const single = sheet.classList.contains('single-column');
+      split.title = single ? '正文改为左右双列' : '正文改为单列';
+      split.setAttribute('aria-label', split.title);
+      split.setAttribute('aria-pressed', String(!single));
+    };
+    sheet.classList.toggle('single-column', readColumns() === 1);
+    updateSplit();
+    split.onclick = () => {
+      const single = !sheet.classList.contains('single-column');
+      sheet.classList.toggle('single-column', single);
+      try { localStorage.setItem(columnsKey, single ? '1' : '2'); } catch { /* 仅原型偏好，读写失败时保持当前显示 */ }
+      updateSplit();
+    };
+    split.append(svg('columns-2'));
+    actionsBar.append(split);
     const extra = byId('asset-header-extra');
     extra.replaceChildren();
-    if (!editing && view === 'terminal') {
-      for (const [id, label, icon] of [['transfer', '调换使用人', 'swap'], ['maintenance', '维修换件', 'wrench']]) {
-        const control = button('', () => onOperation(id), 'icon quiet');
-        control.setAttribute('aria-label', label);
-        control.title = label;
-        control.append(svg(icon));
-        extra.append(control);
-      }
+    extra.hidden = editing;
+    // 历史资料由第三栏的履历页签提供，第二栏只放当前对象适用的业务操作。
+    for (const operation of operations.filter((entry) => !['edit', 'history'].includes(entry.id))) {
+      const control = button('', () => onOperation(operation.id), 'icon quiet');
+      control.title = operation.label;
+      control.setAttribute('aria-label', operation.label);
+      control.append(svg(({ transfer: 'swap', maintenance: 'wrench', clone: 'clone', archive: 'archive' })[operation.id] || 'more'));
+      extra.append(control);
     }
+    header.onclick = null;
+    const close = header.querySelector('[data-close="asset-sheet"]');
+    close.title = editing ? '关闭编辑' : '关闭详情';
+    if (!close.dataset.recordClose) {
+      close.dataset.recordClose = 'true';
+      close.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (sheet._requestFormClose) sheet._requestFormClose();
+        else sheet.close();
+      }, true);
+    }
+    // 编辑与业务操作放第二条栏；标题栏只留放大/还原、左右分栏和关闭。
+    toolbar.append(edit, extra);
+    // 标题栏右侧固定三个窗口控件，不恢复对角展开和右栏分栏的重复入口。
+    header.querySelector('.sheet-header-actions').append(actionsBar, close);
     byId('asset-detail-tabs').hidden = editing;
     byId('asset-sheet-footer').hidden = !editing;
   }
@@ -69,9 +192,13 @@
     root.removeAttribute('aria-labelledby');
     delete root.dataset.detailPanel;
     const tabBar = byId('asset-detail-tabs');
-    prepareHeader({ view, row, title: (view === 'infrastructure' ? row.code : row.name) || row.name || row.code || config.label, editing: false, helpers, onEdit, onOperation });
+    byId('asset-sheet')._disposeForm?.();
+    delete byId('asset-sheet')._requestFormClose;
+    byId('asset-sheet').querySelectorAll('[data-form-tabs]').forEach((nav) => nav.remove());
+    prepareHeader({ view, row, title: config.label, editing: false, helpers, onEdit, onOperation, operations: config.operations || [] });
     const section = (title, icon, pairs, action) => {
-      const card = element('section', 'asset-section detail-section');
+      const card = element('section', 'asset-section detail-section record-section');
+      card.dataset.sectionTitle = title;
       const header = element('div', 'detail-section-heading');
       const heading = element('h3', '', title);
       heading.prepend(svg(icon));
@@ -79,9 +206,11 @@
       if (action) header.append(action);
       card.append(header);
       if (pairs?.length) {
-        const values = element('dl', 'asset-detail-values');
-        for (const [label, value] of pairs) {
+        const values = element('dl', 'asset-detail-values record-fields');
+        for (const [label, value, full] of pairs) {
           const entry = document.createElement('div');
+          const content = value instanceof Node ? value.textContent : String(value ?? '');
+          if (full || content.length > 32 || /\n/.test(content)) entry.classList.add('full');
           entry.append(element('dt', '', label));
           const dd = document.createElement('dd');
           if (value instanceof Node) dd.append(value);
@@ -96,7 +225,8 @@
     };
     const fieldValue = (field) => {
       const value = row[field.key];
-      if (view === 'terminal' && ['ip', 'physical_ip'].includes(field.key)) return helpers.netcattyAddress(row, value);
+      if (['ip', 'physical_ip', 'mgmt_ip', 'biz_ip', 'service_ip'].includes(field.key)) return helpers.netcattyAddress(value);
+      if (field.key === 'access_url' && helpers.netcattyBrowserUrl) return helpers.netcattyBrowserUrl(value);
       const logos = window.assetPrototypeLogos;
       const logo = /^(vendor|provider)$/.test(field.key) ? logos?.vendor?.(value)
         : /^(os|os_type)$/.test(field.key) ? logos?.operatingSystem?.(value) : null;
@@ -109,7 +239,7 @@
     const fields = (title, icon, keys) => {
       const names = new Set(keys);
       const selected = config.groups.flatMap((group) => group.fields.filter((field) => names.has(field.key) && (!field.when || field.when(row))));
-      return section(title, icon, selected.map((field) => [field.label, fieldValue(field)]));
+      return section(title, icon, selected.map((field) => [field.label, fieldValue(field), field.kind === 'textarea' || /^(name|code|cpu_info|disk_info|access_url|description|remark|network_source|deployment_location|ipam)$/.test(field.key)]));
     };
     const related = (title, icon, predicate) => {
       const relations = (row.relations || []).filter(predicate);
@@ -191,7 +321,7 @@
       if (kind(row) === 'server') {
         related('承载业务', 'activity', (relation) => /系统|业务|应用/.test(relation.label));
       } else {
-        const card = fields('端口与配置', 'activity', ['name', 'vendor', 'model', 'mgmt_ip', 'net_type']);
+        const card = fields(kind(row) === 'router' ? '接口运行' : '端口与配置', 'activity', ['name', 'vendor', 'model', 'mgmt_ip', 'net_type']);
         const read = element('button', '', '读取配置（原型示意）');
         read.disabled = true;
         card.append(element('p', 'dialog-note', '尚无配置快照。原型不连接设备或采集端口状态。'), read);
@@ -200,7 +330,7 @@
     const systems = view === 'systems';
     const terminal = view === 'terminal';
     const cabinetPhotos = !systems && !terminal && !virtual(row) && ['switch', 'server'].includes(kind(row));
-    const operationLabel = terminal ? '' : kind(row) === 'switch' || kind(row) === 'router' ? '端口与配置' : kind(row) === 'server' ? '承载业务' : '';
+    const operationLabel = terminal ? '' : kind(row) === 'switch' ? '端口与配置' : kind(row) === 'router' ? '接口运行' : kind(row) === 'server' ? '承载业务' : '';
     const tabs = systems ? [
       { key: 'system', label: '系统信息', icon: 'settings' },
       { key: 'network', label: '网络配置', icon: 'network' },
@@ -219,7 +349,8 @@
       { key: 'records', label: '设备履历', icon: 'history' },
       { key: 'relations', label: '凭证中心', icon: 'key' },
     ];
-    let active = systems ? 'system' : !terminal && (kind(row) === 'switch' || kind(row) === 'router') ? 'operations' : 'hardware';
+    const defaultTab = systems ? 'system' : terminal || !['switch', 'router'].includes(kind(row)) ? 'hardware' : 'operations';
+    let active = defaultTab;
     const renderTab = (key) => {
       active = key;
       tabBar.querySelectorAll('[role=tab]').forEach((tab) => {
@@ -232,7 +363,7 @@
       root.setAttribute('aria-labelledby', 'detail-tab-' + key);
       root.tabIndex = 0;
       switch (key) {
-        case 'hardware': fields('硬件信息', 'cpu', ['name', 'code', 'type', 'sn', 'display_sn', 'vendor', 'model', 'provider', 'status', 'cpu_info', 'vcpu', 'memory_mb', 'disk_info']); break;
+        case 'hardware': fields('硬件信息', 'cpu', ['sn', 'display_sn', 'vendor', 'model', 'cpu_info', 'vcpu', 'memory_mb', 'disk_info']); break;
         case 'operations': operations(); break;
         case 'network':
           fields('网络配置', 'network', systems
@@ -253,13 +384,23 @@
         case 'cabinet': cabinet(); if (cabinetPhotos) photos('机柜设备照片'); break;
         case 'system':
           fields('系统信息', systems ? 'settings' : 'system', systems
-            ? ['name', 'code', 'type', 'version', 'provider', 'deployment', 'middleware', 'database_info', 'status']
+            ? ['version', 'provider', 'deployment', 'middleware', 'database_info']
             : ['os', 'os_type', 'os_version', 'provider', 'remark']);
           break;
         case 'photos': photos(); break;
         case 'records': addHistory(root, row); break;
         case 'relations': credentials(); break;
       }
+      const activeTab = tabs.find((tab) => tab.key === key);
+      root.querySelectorAll('.asset-section').forEach((card) => {
+        card.classList.add('record-section');
+        const heading = card.querySelector('h3');
+        if (heading?.textContent.trim() === activeTab.label) {
+          heading.classList.add('record-redundant-title');
+          card.dataset.redundantTitle = 'true';
+        }
+      });
+      byId('detail-tab-' + key)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       root.scrollTop = 0;
     };
     tabBar.replaceChildren();
@@ -275,7 +416,7 @@
       control.setAttribute('aria-label', tab.label);
       control.setAttribute('aria-controls', 'asset-sheet-body');
       control.title = tab.label;
-      control.append(svg(tab.icon));
+      control.append(svg(tab.icon), element('span', 'record-tab-label', tab.label));
       control.addEventListener('keydown', (event) => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();

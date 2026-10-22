@@ -52,8 +52,8 @@ func TestTerminalNameBackfillUsesConfiguredShortCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	categoryID, err := s.CreateCmdbTaxonomyForProject(scope, "terminal-categories", "云桌面终端", 0, 0)
-	if err != nil {
+	var categoryID int64
+	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_categories WHERE project_id=? AND asset_scope='terminal' AND name='云桌面终端'`, scope.ProjectID).Scan(&categoryID); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetTerminalCategoryShortCodeForProject(scope, categoryID, "yzm"); err != nil {

@@ -72,8 +72,8 @@ func TestAttachCmdbAssetBusinessNetworkTypesUsesBusinessIPAMSubnet(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assetID := insertCmdbAsset(t, s, CmdbAsset{Name: "业务服务器", AssetCode: "INFRA-001", BizIP: "138.64.7.20", MgmtIP: "10.0.0.20", NetType: "外网"})
-	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "政法专网", Category: "专网", CIDR: "138.64.7.0/24"}); err != nil {
+	assetID := insertCmdbAsset(t, s, CmdbAsset{Name: "业务服务器", AssetCode: "INFRA-001", BizIP: "192.0.2.20", MgmtIP: "10.0.0.20", NetType: "外网"})
+	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "政法专网", Category: "专网", CIDR: "192.0.2.0/24"}); err != nil {
 		t.Fatal(err)
 	}
 	list, _, err := s.QueryCmdbAssetsForProject(scope, CmdbAssetQuery{Page: 1, PageSize: 20})
@@ -88,7 +88,7 @@ func TestAttachCmdbAssetBusinessNetworkTypesUsesBusinessIPAMSubnet(t *testing.T)
 	}
 }
 
-func TestAttachCmdbAssetBusinessNetworkTypesUsesManagementIPAMSubnet(t *testing.T) {
+func TestAttachCmdbAssetBusinessNetworkTypesDoesNotUseManagementIPAMSubnet(t *testing.T) {
 	s := newCmdbTestStore(t)
 	scope, err := s.DefaultProjectScope()
 	if err != nil {
@@ -105,8 +105,8 @@ func TestAttachCmdbAssetBusinessNetworkTypesUsesManagementIPAMSubnet(t *testing.
 	if err := s.AttachCmdbAssetBusinessNetworkTypesForProject(scope, list); err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || list[0].ID != assetID || list[0].BusinessNetworkType != "内网" {
-		t.Fatalf("管理 IP 网络归属错误: %+v", list)
+	if len(list) != 1 || list[0].ID != assetID || list[0].BusinessNetworkType != "" {
+		t.Fatalf("仅管理 IP 不应提供业务网络归属: %+v", list)
 	}
 }
 
@@ -140,6 +140,67 @@ func TestAttachCmdbAssetBusinessNetworkTypesMatchesUnregisteredIPBySubnetCIDR(t 
 	}
 }
 
+func TestBusinessNetworkSourcesStayConsistentForListFilterAndExport(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, subnet := range []IPSubnet{
+		{Name: "管理", Category: "外网", CIDR: "10.42.0.0/24"},
+		{Name: "业务大段", Category: "内网", CIDR: "172.24.0.0/16"},
+		{Name: "业务小段", Category: "专网", CIDR: "172.24.8.0/24"},
+	} {
+		subnet := subnet
+		if _, err := s.CreateIPSubnetForProject(scope, &subnet); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, asset := range []CmdbAsset{
+		{Name: "业务管理分离", BizIP: "172.24.8.10", MgmtIP: "10.42.0.10", NetType: "外网"},
+		{Name: "仅管理", MgmtIP: "10.42.0.11", NetType: "外网"},
+		{Name: "接口业务", MgmtIP: "10.42.0.12", Interfaces: []CmdbAssetInterface{{Name: "eth0", IP: "172.24.8.12", AdditionalIPsJSON: `[{"ip":"172.24.8.12","purpose":"business"},{"ip":"10.42.0.12","purpose":"management"}]`}}},
+		{Name: "附加业务", Interfaces: []CmdbAssetInterface{{Name: "eth1", IP: "10.42.0.13", AdditionalIPsJSON: `[{"ip":"10.42.0.13","purpose":"management"},{"ip":"172.24.8.13","purpose":["out_of_band","business"]}]`}}},
+		{Name: "仅带外", Interfaces: []CmdbAssetInterface{{Name: "ilo", IP: "10.42.0.14", AdditionalIPsJSON: `[{"ip":"10.42.0.14","purpose":"out_of_band"}]`}}},
+		{Name: "用途未知", Interfaces: []CmdbAssetInterface{{Name: "eth2", IP: "172.24.8.15"}}},
+	} {
+		asset := asset
+		if _, err := s.CreateCmdbAssetManual(&asset); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 精确台账曾归大段时，新增的小段仍按最长前缀决定网络类型。
+	if _, err := s.db.Exec(`UPDATE ip_pool SET subnet='业务大段' WHERE project_id=? AND ip LIKE '172.24.8.%'`, scope.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	for _, filter := range []struct {
+		value string
+		want  int
+	}{{"专网", 3}, {CmdbAssetUnconfiguredFilter, 3}, {"外网", 0}} {
+		query := CmdbAssetQuery{NetType: filter.value, Page: 1, PageSize: 1}
+		list, total, err := s.QueryCmdbAssetsForProject(scope, query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		exported, err := s.AllCmdbAssetsForProject(scope, query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if total != filter.want || len(exported) != filter.want || (filter.want > 0 && len(list) != 1) {
+			t.Fatalf("网络筛选与全部导出不一致: filter=%s total=%d list=%+v export=%+v", filter.value, total, list, exported)
+		}
+		for _, asset := range exported {
+			want := filter.value
+			if want == CmdbAssetUnconfiguredFilter {
+				want = ""
+			}
+			if asset.BusinessNetworkType != want {
+				t.Fatalf("导出网络来源不一致: %+v", asset)
+			}
+		}
+	}
+}
+
 func TestQueryCmdbAssetsSortWhitelistRejectsUnknownField(t *testing.T) {
 	s := newCmdbTestStore(t)
 	insertCmdbAsset(t, s, CmdbAsset{Name: "A", AssetCode: "ZC1", Status: "在线"})
@@ -160,21 +221,16 @@ func TestQueryCmdbAssetsSortWhitelistRejectsUnknownField(t *testing.T) {
 func TestQueryCmdbAssetsInfrastructureScope(t *testing.T) {
 	s := newCmdbTestStore(t)
 	// 分类必须显式声明 asset_scope：基础设施范围以该字段为准，名称启发式不再参与判定。
-	result, err := s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order, asset_scope) VALUES ('交换机', 0, 0, 'infrastructure')`)
+	scope, err := s.DefaultProjectScope()
 	if err != nil {
-		t.Fatalf("插入交换机分类失败: %v", err)
+		t.Fatal(err)
 	}
-	switchCategoryID, err := result.LastInsertId()
-	if err != nil {
-		t.Fatalf("读取交换机分类 ID 失败: %v", err)
+	var switchCategoryID, terminalCategoryID int64
+	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_categories WHERE project_id=? AND asset_scope='infrastructure' AND name='交换机'`, scope.ProjectID).Scan(&switchCategoryID); err != nil {
+		t.Fatal(err)
 	}
-	result, err = s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order, asset_scope) VALUES ('云桌面终端', 0, 0, 'terminal')`)
-	if err != nil {
-		t.Fatalf("插入终端分类失败: %v", err)
-	}
-	terminalCategoryID, err := result.LastInsertId()
-	if err != nil {
-		t.Fatalf("读取终端分类 ID 失败: %v", err)
+	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_categories WHERE project_id=? AND asset_scope='terminal' AND name='云桌面终端'`, scope.ProjectID).Scan(&terminalCategoryID); err != nil {
+		t.Fatal(err)
 	}
 	insertCmdbAsset(t, s, CmdbAsset{Name: "核心交换机", CategoryID: switchCategoryID})
 	insertCmdbAsset(t, s, CmdbAsset{Name: "云桌面终端", CategoryID: terminalCategoryID})
@@ -246,18 +302,18 @@ func TestQueryCmdbAssetsInfrastructureScopeIncludesHyperconverged(t *testing.T) 
 
 func TestQueryCmdbAssetsCategoryFilterDoesNotORLegacyDeviceType(t *testing.T) {
 	s := newCmdbTestStore(t)
-	result, err := s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('交换机', 0, 0)`)
+	scope, err := s.DefaultProjectScope()
 	if err != nil {
 		t.Fatal(err)
 	}
-	categoryID, err := result.LastInsertId()
-	if err != nil {
+	var categoryID int64
+	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_categories WHERE project_id=? AND asset_scope='infrastructure' AND name='交换机'`, scope.ProjectID).Scan(&categoryID); err != nil {
 		t.Fatal(err)
 	}
 	categoryAssetID := insertCmdbAsset(t, s, CmdbAsset{Name: "分类交换机", CategoryID: categoryID})
 	legacyAssetID := insertCmdbAsset(t, s, CmdbAsset{Name: "历史交换机", DeviceType: "switch"})
 	insertCmdbAsset(t, s, CmdbAsset{Name: "历史路由器", DeviceType: "router"})
-	result, err = s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('网络设备', 0, 0)`)
+	result, err := s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('网络设备', 0, 0)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,9 +379,12 @@ func TestQueryCmdbAssetsUnassignedGroup(t *testing.T) {
 
 func TestCmdbAssetFiltersMatchActualOwnerBrandModelAndNetworkFields(t *testing.T) {
 	s := newCmdbTestStore(t)
+	if _, err := s.CreateIPSubnet(&IPSubnet{Name: "业务地址池", CIDR: "192.0.2.0/24", Category: "专网"}); err != nil {
+		t.Fatal(err)
+	}
 	managedID := insertCmdbAsset(t, s, CmdbAsset{
 		Name: "边界交换机", DeviceType: "switch", Vendor: "华三", Model: "S5560X",
-		Owner: "张三", Department: "信息处", Status: "在线",
+		Owner: "张三", Department: "信息处", Status: "在线", BizIP: "192.0.2.30", NetType: "外网",
 	})
 	if _, err := s.db.Exec(`INSERT INTO cmdb_asset_interfaces(asset_id,name,network_zone,net_zone) VALUES (?, '管理口', '设备管理网', '')`, managedID); err != nil {
 		t.Fatal(err)
@@ -336,10 +395,10 @@ func TestCmdbAssetFiltersMatchActualOwnerBrandModelAndNetworkFields(t *testing.T
 
 	list, total, err := s.QueryCmdbAssets(CmdbAssetQuery{
 		Owner: "张三", Department: "信息处", Vendor: "华三", Model: "S5560X",
-		NetType: "设备管理网", Page: 1, PageSize: 20,
+		NetType: "专网", Page: 1, PageSize: 20,
 	})
 	if err != nil || total != 1 || len(list) != 1 || list[0].ID != managedID {
-		t.Fatalf("负责人、部门、品牌、型号和接口网络筛选必须取交集: total=%d list=%+v err=%v", total, list, err)
+		t.Fatalf("负责人、部门、品牌、型号和业务网络筛选必须取交集: total=%d list=%+v err=%v", total, list, err)
 	}
 	scope, err := s.DefaultProjectScope()
 	if err != nil {
@@ -353,7 +412,7 @@ func TestCmdbAssetFiltersMatchActualOwnerBrandModelAndNetworkFields(t *testing.T
 	}
 	list, total, err = s.QueryCmdbAssets(CmdbAssetQuery{NetType: CmdbAssetUnconfiguredFilter, Page: 1, PageSize: 20})
 	if err != nil || total != 1 || len(list) != 1 || list[0].ID != unconfiguredID {
-		t.Fatalf("未配置网络筛选未按管理字段和接口字段判断: total=%d list=%+v err=%v", total, list, err)
+		t.Fatalf("未配置网络筛选必须按业务地址归属判断: total=%d list=%+v err=%v", total, list, err)
 	}
 }
 

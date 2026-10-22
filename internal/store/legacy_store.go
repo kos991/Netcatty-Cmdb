@@ -58,36 +58,22 @@ func (s *Store) AllAssetsForProject(scope ProjectScope) ([]Asset, error) {
 }
 
 func (s *Store) resolveAssetNetworksForProject(scope ProjectScope, list []Asset) error {
-	// Load the project's IP directory once. Correlated subqueries here previously
-	// rescanned the complete IP pool up to four times for every asset.
-	type networkEntry struct {
-		ip       string
-		remark   string
-		category string
-		subnetID sql.NullInt64
-	}
-	networkRows, err := s.db.Query(`SELECT IFNULL(ip.ip,''), IFNULL(ip.remark,''), IFNULL(n.category,''), n.id
-		FROM ip_pool ip
-		LEFT JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet
-		WHERE ip.project_id=? ORDER BY ip.id`, scope.ProjectID)
+	// Historical cloud desktops may store a network label in IP; only an exact
+	// box remark can recover their business IP, never their network category.
+	networkRows, err := s.db.Query(`SELECT IFNULL(ip,''), IFNULL(remark,'') FROM ip_pool WHERE project_id=? ORDER BY id`, scope.ProjectID)
 	if err != nil {
 		return err
 	}
-	entries := make([]networkEntry, 0)
-	categoryByIP := make(map[string]string)
-	seenCategoryIP := make(map[string]struct{})
+	businessIPByBox := make(map[string]string)
 	for networkRows.Next() {
-		var entry networkEntry
-		if err := networkRows.Scan(&entry.ip, &entry.remark, &entry.category, &entry.subnetID); err != nil {
+		var ip, remark string
+		if err := networkRows.Scan(&ip, &remark); err != nil {
 			networkRows.Close()
 			return err
 		}
-		entries = append(entries, entry)
-		if entry.subnetID.Valid {
-			if _, seen := seenCategoryIP[entry.ip]; !seen {
-				seenCategoryIP[entry.ip] = struct{}{}
-				categoryByIP[entry.ip] = entry.category
-			}
+		boxIP := BoxIPFromRemark(remark)
+		if boxIP != "" && businessIPByBox[boxIP] == "" && net.ParseIP(strings.TrimSpace(ip)) != nil {
+			businessIPByBox[boxIP] = ip
 		}
 	}
 	if err := networkRows.Err(); err != nil {
@@ -98,42 +84,24 @@ func (s *Store) resolveAssetNetworksForProject(scope ProjectScope, list []Asset)
 		return err
 	}
 
+	ips := make([]string, 0, len(list)*2)
 	for index := range list {
 		asset := &list[index]
-		asset.IPNetworkType = categoryByIP[asset.IP]
-		asset.TerminalIPNetworkType = categoryByIP[asset.TerminalIP]
-
-		needsBoxCategory := asset.IPNetworkType == ""
-		needsResolvedIP := net.ParseIP(strings.TrimSpace(asset.IP)) == nil
-		if asset.TerminalIP == "" || (!needsBoxCategory && !needsResolvedIP) {
-			continue
-		}
-
-		var boxCategory, resolvedBusinessIP string
-		boxCategoryFound := false
-		resolvedIPFound := false
-		for _, entry := range entries {
-			if BoxIPFromRemark(entry.remark) != asset.TerminalIP {
-				continue
-			}
-			if !resolvedIPFound {
-				resolvedIPFound = true
-				resolvedBusinessIP = entry.ip
-			}
-			if !boxCategoryFound && entry.subnetID.Valid {
-				boxCategoryFound = true
-				boxCategory = entry.category
-			}
-			if resolvedIPFound && (!needsBoxCategory || boxCategoryFound) {
-				break
+		if net.ParseIP(strings.TrimSpace(asset.IP)) == nil {
+			if ip := businessIPByBox[strings.TrimSpace(asset.TerminalIP)]; ip != "" {
+				asset.IP = ip
 			}
 		}
-		if needsBoxCategory {
-			asset.IPNetworkType = boxCategory
-		}
-		if needsResolvedIP && resolvedBusinessIP != "" {
-			asset.IP = resolvedBusinessIP
-		}
+		ips = append(ips, strings.TrimSpace(asset.IP), strings.TrimSpace(asset.TerminalIP))
+	}
+	categoryByIP, err := s.networkTypesForIPsForProject(scope, ips)
+	if err != nil {
+		return err
+	}
+	for index := range list {
+		asset := &list[index]
+		asset.IPNetworkType = categoryByIP[strings.TrimSpace(asset.IP)]
+		asset.TerminalIPNetworkType = categoryByIP[strings.TrimSpace(asset.TerminalIP)]
 	}
 	return nil
 }
@@ -244,24 +212,7 @@ func matchesAssetQueryValue(actual, expected string) bool {
 }
 
 func matchesAssetNetworkType(asset Asset, expected string) bool {
-	if expected == "" {
-		return true
-	}
-	values := []string{asset.IPNetworkType, asset.NetType, asset.TerminalIPNetworkType}
-	if expected == AssetUnconfiguredFilter {
-		for _, value := range values {
-			if strings.TrimSpace(value) != "" {
-				return false
-			}
-		}
-		return true
-	}
-	for _, value := range values {
-		if value == expected {
-			return true
-		}
-	}
-	return false
+	return matchesAssetQueryValue(asset.IPNetworkType, expected)
 }
 
 func (s *Store) QueryAssetsWithArchived(kw, dept, status, secSoft string, page, pageSize int, includeArchived bool) ([]Asset, int, error) {
@@ -1228,6 +1179,20 @@ func (s *Store) GetAppsByServerIDForProject(scope ProjectScope, id int64) ([]Ser
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	ips := make([]string, 0, len(apps))
+	for _, app := range apps {
+		ips = append(ips, app.ServiceIP)
+	}
+	networkTypes, err := s.networkTypesForIPsForProject(scope, ips)
+	if err != nil {
+		return nil, err
+	}
+	for index := range apps {
+		apps[index].NetworkType = networkTypes[apps[index].ServiceIP]
+	}
 	return apps, nil
 }
 
@@ -1591,17 +1556,6 @@ func (s *Store) QueryServerAppsForProject(scope ProjectScope, q ServerAppQuery) 
 	if !q.IncludeArchived {
 		where = append(where, "IFNULL(app.status,'') NOT IN ('已归档','已注销')")
 	}
-	if q.Keyword = strings.TrimSpace(q.Keyword); q.Keyword != "" {
-		pattern := "%" + q.Keyword + "%"
-		where = append(where, `(app.app_name LIKE ? OR app.app_type LIKE ? OR app.access_url LIKE ?
-			OR app.middleware LIKE ? OR app.database_info LIKE ? OR app.provider LIKE ? OR app.owner LIKE ? OR app.remark LIKE ?
-			OR app.service_ip LIKE ? OR server.device_name LIKE ? OR asset.name LIKE ?
-			OR app.asset_code LIKE ? OR app.version LIKE ? OR app.department LIKE ? OR app.description LIKE ?
-			OR app.deployment LIKE ? OR app.deployment_location LIKE ? OR app.network_type LIKE ?)`)
-		for i := 0; i < 18; i++ {
-			args = append(args, pattern)
-		}
-	}
 	if q.AppType = strings.TrimSpace(q.AppType); q.AppType != "" {
 		if q.AppType == AssetUnconfiguredFilter {
 			where = append(where, "TRIM(IFNULL(app.app_type,'')) = ''")
@@ -1651,22 +1605,8 @@ func (s *Store) QueryServerAppsForProject(scope ProjectScope, q ServerAppQuery) 
 	case "unlinked":
 		where = append(where, "app.cmdb_asset_id = 0 AND app.server_id = 0")
 	}
-	if q.NetworkType = strings.TrimSpace(q.NetworkType); q.NetworkType == AssetUnconfiguredFilter {
-		where = append(where, "TRIM("+serverAppNetworkTypeExpr+") = ''")
-	} else if q.NetworkType != "" {
-		where = append(where, serverAppNetworkTypeExpr+" = ?")
-		args = append(args, q.NetworkType)
-	}
-	whereSQL := strings.Join(where, " AND ")
-	var total int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM server_apps app
-		LEFT JOIN servers server ON server.id=app.server_id AND server.project_id=app.project_id
-		LEFT JOIN cmdb_assets asset ON asset.id=app.cmdb_asset_id AND asset.project_id=app.project_id
-		WHERE `+whereSQL, args...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
-	queryArgs := append(append([]interface{}{}, args...), q.PageSize, (q.Page-1)*q.PageSize)
-	rows, err := s.db.Query(serverAppDetailSelect+` WHERE `+whereSQL+` ORDER BY app.id DESC LIMIT ? OFFSET ?`, queryArgs...)
+	// 网络类型按当前 IPAM 解析后再筛选和分页，避免旧登记值参与统计或导出。
+	rows, err := s.db.Query(serverAppDetailSelect+` WHERE `+strings.Join(where, " AND ")+` ORDER BY app.id DESC`, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1682,7 +1622,39 @@ func (s *Store) QueryServerAppsForProject(scope ProjectScope, q ServerAppQuery) 
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	return apps, total, nil
+	if err := rows.Close(); err != nil {
+		return nil, 0, err
+	}
+	ips := make([]string, 0, len(apps))
+	for _, app := range apps {
+		ips = append(ips, app.ServiceIP)
+	}
+	networkTypes, err := s.networkTypesForIPsForProject(scope, ips)
+	if err != nil {
+		return nil, 0, err
+	}
+	keyword := strings.ToLower(strings.TrimSpace(q.Keyword))
+	filtered := apps[:0]
+	for _, app := range apps {
+		app.NetworkType = networkTypes[app.ServiceIP]
+		if !matchesAssetQueryValue(app.NetworkType, strings.TrimSpace(q.NetworkType)) {
+			continue
+		}
+		if keyword != "" && !serverAppMatchesKeyword(app, keyword) {
+			continue
+		}
+		filtered = append(filtered, app)
+	}
+	total := len(filtered)
+	start := (q.Page - 1) * q.PageSize
+	if start >= total {
+		return []ServerApp{}, total, nil
+	}
+	end := start + q.PageSize
+	if end > total {
+		end = total
+	}
+	return filtered[start:end], total, nil
 }
 
 func (s *Store) QueryLogs(assetID int64, logType, kw string, page, pageSize int) ([]AssetLog, int, error) {

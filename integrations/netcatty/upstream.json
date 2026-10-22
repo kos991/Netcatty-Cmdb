@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/binaricat/Netcatty.git",
-  "release": "v1.1.83",
-  "commit": "d7a0c8ed8d238dcf1c82d786da53037a1f1496b1",
+  "release": "v1.1.85",
+  "commit": "4e2b17283f5609e9cba52c6200c1dcfcb568237c",
   "moshRelease": "moshcatty-0.1.8",
   "etOwner": "binaricat",
   "etRelease": "et-bin-6.2.10-1"

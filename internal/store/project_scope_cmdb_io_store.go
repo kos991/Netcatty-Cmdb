@@ -32,7 +32,28 @@ func (s *Store) AllCmdbAssetsForProject(scope ProjectScope, q CmdbAssetQuery) ([
 		}
 		out = append(out, item)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := s.AttachCmdbAssetInterfacesForProject(scope, out); err != nil {
+		return nil, err
+	}
+	if err := s.AttachCmdbAssetBusinessNetworkTypesForProject(scope, out); err != nil {
+		return nil, err
+	}
+	if expected := strings.TrimSpace(q.NetType); expected != "" && expected != "全部" {
+		filtered := out[:0]
+		for _, asset := range out {
+			if (expected == CmdbAssetUnconfiguredFilter && asset.BusinessNetworkType == "") || asset.BusinessNetworkType == expected {
+				filtered = append(filtered, asset)
+			}
+		}
+		out = filtered
+	}
+	return out, nil
 }
 
 func (s *Store) CmdbAssetFilterOptionsForProject(scope ProjectScope) (map[string][]string, error) {
@@ -71,30 +92,17 @@ func (s *Store) CmdbAssetFilterOptionsForProject(scope ProjectScope) (map[string
 		}
 		out[key] = vals
 	}
-	zoneRows, err := s.db.Query(`SELECT DISTINCT zone FROM (
-		SELECT IFNULL(a.net_type,'') AS zone FROM cmdb_assets a WHERE a.project_id=?
-		UNION
-		SELECT COALESCE(NULLIF(i.network_zone,''),IFNULL(i.net_zone,'')) AS zone
-		FROM cmdb_asset_interfaces i JOIN cmdb_assets a ON a.id=i.asset_id WHERE a.project_id=?
-	) WHERE TRIM(zone) <> '' ORDER BY zone`, scope.ProjectID, scope.ProjectID)
+	assets, err := s.AllCmdbAssetsForProject(scope, CmdbAssetQuery{})
 	if err != nil {
 		return nil, err
 	}
 	networkTypes := []string{}
-	for zoneRows.Next() {
-		var value string
-		if err := zoneRows.Scan(&value); err != nil {
-			zoneRows.Close()
-			return nil, err
+	seenNetworks := map[string]bool{}
+	for _, asset := range assets {
+		if value := asset.BusinessNetworkType; value != "" && !seenNetworks[value] {
+			seenNetworks[value] = true
+			networkTypes = append(networkTypes, value)
 		}
-		networkTypes = append(networkTypes, value)
-	}
-	if err := zoneRows.Err(); err != nil {
-		zoneRows.Close()
-		return nil, err
-	}
-	if err := zoneRows.Close(); err != nil {
-		return nil, err
 	}
 	out["net_type"] = networkTypes
 	locationRows, err := s.db.Query(`SELECT DISTINCT TRIM(location) FROM (

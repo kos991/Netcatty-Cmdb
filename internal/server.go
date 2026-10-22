@@ -16,7 +16,8 @@ import (
 )
 
 type Server struct {
-	Store *store.Store
+	Store   *store.Store
+	Version string
 }
 
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {
@@ -792,7 +793,7 @@ func legacyAssetExportValues(a store.Asset) []interface{} {
 		terminalIP = ""
 	}
 	return []interface{}{
-		a.ID, a.AssetName, a.AssetCode, a.DeviceType, a.BoxSN, displaySN, a.UserName, a.Department, a.Room, a.IP, terminalIP, a.OSType, a.OSVersion, a.Status, a.NetType, a.Remark,
+		a.ID, a.AssetName, a.AssetCode, a.DeviceType, a.BoxSN, displaySN, a.UserName, a.Department, a.Room, a.IP, terminalIP, a.OSType, a.OSVersion, a.Status, a.IPNetworkType, a.Remark,
 		a.Vendor, a.Model, a.CPUInfo, a.MemoryMB, a.DiskInfo,
 	}
 }
@@ -828,6 +829,9 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"version": s.Version})
 	})
 	mux.HandleFunc("GET /api/cmdb/projects", s.handleListCmdbProjects)
 	mux.HandleFunc("POST /api/cmdb/projects", s.handleCreateCmdbProject)

@@ -287,16 +287,18 @@
   function makeDialog(id, title, body, footerMarkup = '') {
     const dialog = document.createElement('dialog');
     dialog.id = id;
-    dialog.className = 'rack-prototype-dialog';
+    dialog.className = 'rack-prototype-dialog record-shell record-dialog';
     dialog.setAttribute('aria-labelledby', `${id}-title`);
-    dialog.innerHTML = `<header class="dialog-header"><h2 id="${id}-title"></h2><button type="button" class="icon quiet" aria-label="关闭">×</button></header>${body}${footerMarkup}`;
+    dialog.innerHTML = `<header class="dialog-header record-header"><h2 id="${id}-title"></h2><button type="button" class="icon quiet" aria-label="关闭">×</button></header>${body}${footerMarkup}`;
     dialog.querySelector('h2').textContent = title;
+    dialog.querySelector('.dialog-body')?.classList.add('record-body');
+    dialog.querySelector('.dialog-footer')?.classList.add('record-footer');
     dialog.querySelector('.dialog-header button').addEventListener('click', () => dialog.close());
     document.body.append(dialog);
     return dialog;
   }
   const unitDialog = makeDialog('rack-unit-actions', '空 U 位操作', '<div class="dialog-body"><p class="dialog-note">仅在本页预览中编辑，保存前不改变机柜占用。</p><div class="rack-unit-actions"></div><label class="field rack-mount-choice">选择未上架设备<select id="rack-mount-device"></select></label><p id="rack-unit-feedback" role="status"></p></div>');
-  const newDeviceButton = button('新增设备', () => stageDevice(null));
+  const newDeviceButton = button('新增设备', () => stageDevice(null), 'primary');
   const mountDeviceButton = button('上架已有设备', () => stageDevice($('rack-mount-device').value));
   unitDialog.querySelector('.rack-unit-actions').append(newDeviceButton, mountDeviceButton);
   function openUnit(unit) {
@@ -382,16 +384,19 @@
   });
   const manager = document.createElement('section');
   manager.id = 'rack-manager';
+  manager.className = 'record-shell record-inline';
   manager.setAttribute('aria-labelledby', 'rack-manager-title');
   manager.innerHTML = `
-    <header class="rack-manager-head"><h2 id="rack-manager-title">机房 / 机柜管理</h2><div class="rack-management-actions"></div></header>
-    <div class="rack-manager-body">
+    <header class="rack-manager-head record-header"><h2 id="rack-manager-title">机房 / 机柜管理</h2><div class="rack-management-actions"></div></header>
+    <div class="rack-manager-body record-body">
       <nav class="rack-directory" aria-label="机房与机柜目录"></nav>
-      <form id="rack-management-form" class="rack-management-form">
-        <h3 id="rack-management-title"></h3>
-        <div class="field"><label for="rack-management-room">所属机房</label><select id="rack-management-room"></select></div>
-        <div class="field"><label for="rack-management-name">名称</label><input id="rack-management-name" required maxlength="80"></div>
-        <div id="rack-management-capacity" class="field"><label for="rack-management-number">机柜总 U 数（1–60）</label><div class="rack-capacity-controls"><input id="rack-management-range" type="range" min="1" max="60" step="1" value="42" aria-label="机柜总 U 数滑块"><input id="rack-management-number" type="number" min="1" max="60" step="1" required value="42" aria-label="机柜总 U 数"></div></div>
+      <form id="rack-management-form" class="rack-management-form record-section">
+        <h3 id="rack-management-title" class="section-title"></h3>
+        <div class="record-fields fields">
+        <div class="field full"><label for="rack-management-room">所属机房</label><select id="rack-management-room"></select></div>
+        <div class="field full"><label for="rack-management-name">名称</label><input id="rack-management-name" required maxlength="80"></div>
+        <div id="rack-management-capacity" class="field full"><label for="rack-management-number">机柜总 U 数（1–60）</label><div class="rack-capacity-controls"><input id="rack-management-range" type="range" min="1" max="60" step="1" value="42" aria-label="机柜总 U 数滑块"><input id="rack-management-number" type="number" min="1" max="60" step="1" required value="42" aria-label="机柜总 U 数"></div></div>
+        </div>
         <p class="dialog-note">机柜容量不是设备高度。新建机柜始终为空；修改总 U 数会保留当前设备，且不能小于最高占用 U 位。同名机柜按所属机房隔离。</p>
         <p id="rack-management-error" class="rack-editor-error" role="alert" hidden></p>
         <button type="submit" class="primary" id="rack-management-save">保存到预览</button>
@@ -439,8 +444,8 @@
     $('rack-management-save').textContent = roomNew ? '新建机房（预览）' : editing ? '保存机柜（预览）' : '创建空机柜（预览）';
   }
   manager.querySelector('.rack-management-actions').append(
-    button('新建机房', () => { managerMode = 'room-new'; renderManager(); }),
-    button('新建机柜', () => { managerMode = 'cabinet-new'; renderManager(); }),
+    button('新建机房', () => { managerMode = 'room-new'; renderManager(); }, 'primary'),
+    button('新建机柜', () => { managerMode = 'cabinet-new'; renderManager(); }, 'primary'),
     button('编辑选中机柜', () => {
       if (!managerCabinetId) { $('rack-management-error').hidden = false; $('rack-management-error').textContent = '请先在目录中选择一个机柜。'; return; }
       managerMode = 'cabinet-edit'; renderManager();

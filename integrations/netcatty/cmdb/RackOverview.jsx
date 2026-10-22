@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronRight, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,8 +67,8 @@ function RoomDevices({ bucket, cabinets, onOpenAsset, onChanged, onBeforeChange,
     <div className="mt-3 flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-border p-2">
       <span className="text-[11px] text-muted-foreground">已选 {selected.length} 台</span>
       {existing.length ? <SelectControl aria-label="选择本机房机柜" className="min-w-0 max-w-full" value={existing.some((item) => item.name === cabinet) ? cabinet : ''} onChange={setCabinet} options={[{ value: '', label: '选择本机房已有机柜' }, ...existing.map((item) => ({ value: item.name, label: item.name }))]} /> : null}
-      <Input aria-label="目标机柜名称" value={cabinet} onChange={(event) => setCabinet(event.target.value)} placeholder="机柜名称（可新建，勿填写机房）" className="h-8 min-w-0 flex-1 basis-44 text-xs" />
-      <Button size="sm" className="h-8" disabled={busy || !selected.length || !cabinet.trim()} onClick={assign}>{busy ? '分配中…' : '批量分配机柜'}</Button>
+      <Input aria-label="目标机柜名称" value={cabinet} onChange={(event) => setCabinet(event.target.value)} placeholder="机柜名称（可新建，勿填写机房）" className="h-[34px] min-w-0 flex-1 basis-44 text-[13px]" />
+      <Button size="sm" className="cmdb-primary-action h-[34px]" disabled={busy || !selected.length || !cabinet.trim()} onClick={assign}>{busy ? '分配中…' : '批量分配机柜'}</Button>
       <p className="w-full text-[11px] text-muted-foreground">仅分配到当前机房；U 位统一重置为 0，避免沿用旧位置。机房未登记的设备保持未登记。</p>
     </div>
     {error ? <p role="alert" className="mt-2 text-xs text-destructive">{error}</p> : null}
@@ -75,7 +76,7 @@ function RoomDevices({ bucket, cabinets, onOpenAsset, onChanged, onBeforeChange,
   </section>
 }
 
-export default function RackOverview({ keyword = '', onOpenAsset, focusTarget, onDirtyChange }) {
+export default function RackOverview({ keyword = '', selectorHost, onOpenAsset, focusTarget, onDirtyChange }) {
   const query = useDirectory(loadOverview)
   const [selection, setSelection] = useState({ key: '', deviceID: 0 })
   const [dirty, setDirty] = useState(false)
@@ -206,7 +207,8 @@ export default function RackOverview({ keyword = '', onOpenAsset, focusTarget, o
   }
   if (query.error && !query.data) return <ErrorBanner message={query.error} onRetry={query.reload} />
   if (!query.data) return <p className="p-4 text-xs text-muted-foreground">正在汇总机房与机柜…</p>
-  return <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-card" data-section="rack-overview">
+  return <div className="rack-overview flex min-h-0 min-w-0 flex-1 flex-col bg-background" data-section="rack-overview">
+    {selectorHost && createPortal(<><select aria-label="选择机房" className="h-[34px] w-[min(120px,18vw)] rounded-md border border-input bg-background px-2 text-[13px] text-foreground" value={current?.room || ''} disabled={saving || managementBusy || mountBusy || !!migrationBusy} onChange={(event) => { const room = directoryRooms.find((item) => item.key === event.target.value); if (room) selectCabinet(defaultRack(room.cabinets)) }}><option value="" disabled>选择机房</option>{directoryRooms.map((room) => <option key={room.key} value={room.key}>{room.name}</option>)}</select><select aria-label="选择机柜" className="h-[34px] w-[min(112px,19vw)] rounded-md border border-input bg-background px-2 text-[13px] text-foreground" value={current?.key || ''} disabled={saving || managementBusy || mountBusy || !!migrationBusy} onChange={(event) => selectCabinet(cabinets.find((item) => item.key === event.target.value))}><option value="" disabled>选择机柜</option>{(directoryRooms.find((room) => room.key === current?.room)?.cabinets || []).map((item) => <option key={item.key} value={item.key}>{item.name}</option>)}</select></>, selectorHost)}
     {query.error ? <ErrorBanner message={query.error} onRetry={query.reload} /> : null}
     <main aria-label="机柜与设备" className="rack-management-layout">
       <section className="rack-management-rack flex min-h-0 min-w-0 flex-col border-r border-border/60 px-3.5 pb-3 pt-4">

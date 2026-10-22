@@ -9,15 +9,16 @@ import {
   normalizeGroupFilterValue,
   numericOrganizationPath,
   terminalBusinessNetworkType,
+  terminalBrandFields,
   terminalHardwareFields,
-  validIPv4,
   terminalNetworkRows,
+  validIPv4,
   visibleAssetColumnKeys,
 } from './assetTableModel.js'
 
 test('三类资产将 IP 与网络分列并保留原型必要字段', () => {
   assert.deepEqual(TERMINAL_COLUMN_KEYS, [
-    'asset_code', 'device_type', 'owner_department', 'room', 'ip',
+    'asset_code', 'device_type', 'vendor_model', 'owner_department', 'room', 'ip',
     'network_type', 'operating_system', 'status', 'actions',
   ])
   assert.deepEqual(INFRASTRUCTURE_COLUMN_KEYS, [
@@ -25,7 +26,7 @@ test('三类资产将 IP 与网络分列并保留原型必要字段', () => {
     'location', 'owner_department', 'status', 'actions',
   ])
   assert.deepEqual(SYSTEM_COLUMN_KEYS, [
-    'name_code', 'app_type', 'version', 'host', 'service_ip', 'network_type',
+    'name_code', 'app_type', 'version', 'host', 'access_url', 'service_ip', 'network_type',
     'owner', 'status', 'actions',
   ])
 })
@@ -59,10 +60,8 @@ test('云桌面保留业务和终端地址但网络类型只认业务 IP 的 IPA
   assert.equal(terminalBusinessNetworkType({ net_type: '外网' }), '未配置')
 })
 
-test('非法业务 IP 不作为地址展示', () => {
-  assert.deepEqual(terminalNetworkRows({ device_type: '云桌面终端', ip: '外网', terminal_ip: '180.161.30.63' }), [
-    { key: 'terminal', label: '终端物理 IP', ip: '180.161.30.63' },
-  ])
+test('非法业务和物理 IP 不作为地址展示', () => {
+  assert.deepEqual(terminalNetworkRows({ device_type: '云桌面终端', ip: '外网', terminal_ip: '10.0.0.256' }), [])
 })
 
 test('只有台式机和笔记本提供可保存的计算硬件字段', () => {
@@ -71,6 +70,14 @@ test('只有台式机和笔记本提供可保存的计算硬件字段', () => {
     assert.equal(terminalHardwareFields(type).find(({ key }) => key === 'memory_mb').type, 'number')
   }
   for (const type of ['打印机', '网络打印机', '云桌面', '云盒', '']) assert.deepEqual(terminalHardwareFields(type), [])
+})
+
+test('打印机只提供品牌与型号，不提供计算硬件', () => {
+  for (const type of ['打印机', '网络打印机']) {
+    assert.deepEqual(terminalBrandFields(type).map(({ key }) => key), ['vendor', 'model'])
+  }
+  assert.deepEqual(terminalBrandFields('云桌面'), [])
+  assert.deepEqual(terminalBrandFields(''), [])
 })
 
 test('终端连接入口只接受完整有效的已填写 IPv4 地址', () => {
@@ -105,4 +112,44 @@ test('未分组筛选保留负一语义', () => {
   assert.equal(normalizeGroupFilterValue('-1'), -1)
   assert.equal(normalizeGroupFilterValue('12'), 12)
   assert.equal(normalizeGroupFilterValue(''), '')
+})
+
+test('凭据文本在展示层脱敏但保留账号', async () => {
+  const { maskCredentialText, maskCredentialFields } = await import('./assetTableModel.js')
+  assert.equal(maskCredentialText('admin/Czcourt@6288'), 'admin/******')
+  assert.equal(maskCredentialText('root@192.168.0.1'), 'root@192.168.0.1')
+  assert.equal(maskCredentialText('密码：Abc123'), '密码：******')
+  assert.equal(maskCredentialText(''), '')
+  assert.deepEqual(maskCredentialFields({ owner: 'admin/Admin@1234', name: '系统' }, ['owner']), { owner: 'admin/******', name: '系统' })
+})
+
+test('系统网络展示不从承载或管理字段回填，缺自身地址时无网络类型', () => {
+  assert.equal(applicationNetworkPresentation({
+    service_ip: '192.0.2.8', network_type: '专网', server_network_type: '外网', net_type: '内网',
+  }).networkType, '专网')
+  assert.equal(applicationNetworkPresentation({
+    server_biz_ip: '192.0.2.9', server_network_type: '外网', network_type: '专网',
+  }).networkType, '未配置')
+  assert.equal(applicationNetworkPresentation({
+    service_ip: '192.0.2.8', server_network_type: '外网', net_type: '内网',
+  }).networkType, '未配置')
+})
+
+test('已配置的自定义网络分类保留原名，只有缺失来源才标记未配置', () => {
+  assert.equal(applicationNetworkPresentation({ service_ip: '192.0.2.10', network_type: '测试专线' }).networkType, '测试专线')
+  assert.equal(applicationNetworkPresentation({ service_ip: '192.0.2.10' }).networkType, '未配置')
+})
+
+test('网络类型圆点使用配置颜色，缺色或未命中时回退中性灰', async () => {
+  const { networkTypeColor, networkTypeDefinition } = await import('./assetTableModel.js')
+  const definitions = [
+    { name: '专网', color: '#2563EB' },
+    { name: '外网', color: '' },
+  ]
+  assert.equal(networkTypeColor('专网', definitions), '#2563EB')
+  assert.equal(networkTypeColor('外网', definitions), 'rgb(148 163 184)')
+  assert.equal(networkTypeColor('未配置', definitions), 'rgb(148 163 184)')
+  assert.equal(networkTypeColor('专网', ['专网']), 'rgb(148 163 184)')
+  assert.deepEqual(networkTypeDefinition('专网', definitions), { name: '专网', color: '#2563EB' })
+  assert.equal(networkTypeDefinition('', definitions), null)
 })

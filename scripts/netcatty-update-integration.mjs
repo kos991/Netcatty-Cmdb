@@ -1,6 +1,7 @@
 const UPSTREAM_REPOSITORY = "binaricat/Netcatty";
 const PROJECT_REPOSITORY = "kos991/Netcatty-Cmdb";
 
+// 集成版客户端只从本仓库 Release 获取安装包和 latest.yml；指回上游会被替换成不含 Cmdb 的原版。
 export function patchUpdateRepositoryConfig(source) {
   return source
     .replaceAll(`api.github.com/repos/${UPSTREAM_REPOSITORY}/releases/latest`, `api.github.com/repos/${PROJECT_REPOSITORY}/releases/latest`)
@@ -13,11 +14,58 @@ export function patchApplicationRepositoryLinks(source) {
   return source.replaceAll("https://github.com/binaricat/Netcatty", "https://github.com/kos991/Netcatty-Cmdb");
 }
 
+export function patchUpdateConsumers(path, source) {
+  if (path.endsWith('SettingsApplicationTab.tsx')) {
+    return source.replace('  isUpdateDemoMode: boolean;\n', '')
+      .replace(', isUpdateDemoMode }', ' }')
+      .replace('    // In demo mode, allow checking even for dev builds\n', '')
+      .replace("if (!isUpdateDemoMode && (!appInfo.version || appInfo.version === '0.0.0'))", "if (!appInfo.version || appInfo.version === '0.0.0')")
+      .replace('    if (result?.hasUpdate && result.latestRelease) {', "    if (result?.error) {\n      toast.error(result.error);\n    } else if (result?.hasUpdate && result.latestRelease) {");
+  }
+  if (path.endsWith('SettingsPage.tsx')) return source.replace(', isUpdateDemoMode }', ' }').replace('                                isUpdateDemoMode={isUpdateDemoMode}\n', '');
+  if (path.endsWith('AppSideEffects.tsx')) return source.replace('updateState, dismissUpdate, installUpdate }', 'updateState, installUpdate, startDownload }').replace('    dismissUpdate,\n', '    startDownload,\n');
+  if (path.endsWith('useAppStartupEffects.ts')) return source.replace('const {dismissUpdate, enabled = true,', 'const {enabled = true,');
+  if (path.endsWith('storageKeys.ts')) return source.replace(/^export const STORAGE_KEY_UPDATE_DISMISSED_VERSION = .*\n/m, '').replace(/^export const STORAGE_KEY_UPDATE_LATEST_RELEASE = .*\n/m, '').replace(/^export const STORAGE_KEY_DEBUG_UPDATE_DEMO = .*\n/m, '');
+  if (path.endsWith('netcatty-bridge-app.d.ts')) {
+    return source.replace('declare global {', `export interface UpdateStatusSnapshot {
+  status: 'idle' | 'available' | 'downloading' | 'ready' | 'error';
+  percent: number;
+  error: string | null;
+  checkError: string | null;
+  version: string | null;
+  releaseNotes: string;
+  releaseDate: string | null;
+  checkedAt: number | null;
+  isChecking: boolean;
+}
+declare global {`).replace(/    getUpdateStatus\?\(\): Promise<\{[^\n]+\}>;/, '    getUpdateStatus?(): Promise<UpdateStatusSnapshot>;');
+  }
+  if (path.endsWith('strictModeIdempotency.test.ts')) {
+    source = source.replace(/\r\n/g, '\n');
+    const start = source.indexOf("test('cancelled startup update check resets its latch instead of skipping forever'");
+    const end = source.indexOf("test('terminal popup config", start);
+    if (start < 0 || end < 0) throw new Error('更新 StrictMode 测试锚点不存在');
+    return source.slice(0, start) + `test('update subscriptions cancel hydration on StrictMode cleanup', () => {
+  assert.match(updateCheckSource, /cancelled = true; cleanups.forEach/);
+  assert.doesNotMatch(updateCheckSource, /startupCheckTimeoutRef|fetch\\(/);
+});
+
+` + source.slice(end);
+  }
+  if (path.endsWith('autoUpdateBridge.test.cjs')) return source.replace('        updateInfo: {', '        isUpdateAvailable: true,\n        updateInfo: {').replace('      assert.deepEqual(await ipcMain.invoke("netcatty:update:getStatus"), {\n        status: "error",\n        percent: 100,\n        error: "authorization cancelled",\n        version: "1.1.18",\n        isChecking: false,\n      });', `      const status = await ipcMain.invoke("netcatty:update:getStatus");
+      assert.equal(status.status, 'error');
+      assert.equal(status.percent, 100);
+      assert.match(status.error, /authorization cancelled/);
+      assert.equal(status.version, '1.1.18');
+      assert.equal(status.isChecking, false);`);
+  throw new Error(`Unknown update consumer: ${path}`);
+}
+
 export function patchUpdateTranslations(source) {
   return source
     .replace("  'settings.update.currentVersion': '当前版本',", "  'settings.update.currentVersion': '当前版本',\n  'settings.update.latestVersion': '最新版本',\n  'settings.update.releaseDate': '发布日期',\n  'settings.update.releaseNotes': '更新说明',\n  'settings.update.upgradeTo': '升级到 {version}',\n  'settings.update.retry': '重新尝试',")
-    .replace("  'settings.update.hint': 'Netcatty 从 GitHub Releases 检查更新。',", "  'settings.update.hint': 'Netcatty 从 Cmdb 项目 Releases 检查更新。',")
-    .replace("  'settings.update.manualDownloadHint': '当前平台不支持自动更新，请前往 GitHub 下载最新版本。',", "  'settings.update.manualDownloadHint': '当前平台不支持自动更新，请前往 Cmdb 项目发布页下载最新版本。',")
+    .replace("  'settings.update.hint': 'Netcatty 从 GitHub Releases 检查更新。',", "  'settings.update.hint': 'Netcatty 从官方 GitHub Releases 检查更新。',")
+    .replace("  'settings.update.manualDownloadHint': '当前平台不支持自动更新，请前往 GitHub 下载最新版本。',", "  'settings.update.manualDownloadHint': '当前平台不支持自动更新，请前往 Netcatty 发布页下载最新版本。',")
     .replace("  'update.available.message': '新版本 {version} 已发布，点击前往下载。',", "  'update.available.message': '新版本 {version} 已发布，点击即可开始升级。',\n  'update.available.details': '当前版本 {currentVersion}，发布日期 {date}',\n  'update.upgradeTo': '升级到 {version}',")
     .replace("  'update.downloadFailed.message': '下载更新失败，可前往 GitHub 手动下载。',", "  'update.downloadFailed.message': '下载更新失败，请重试或前往项目发布页手动下载。',");
 }

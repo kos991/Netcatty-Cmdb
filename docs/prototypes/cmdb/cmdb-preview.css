@@ -81,8 +81,11 @@ details > summary::-webkit-details-marker { display: none; }
 .search { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 170px; max-width: 300px; flex: 1; background: var(--muted-surface); border: 1px solid var(--border); border-radius: 7px; padding: 0 10px; height: 34px; color: var(--muted); }
 .search input { width: 100%; min-width: 0; border: 0; background: transparent; font-size: 12px; }
 .search:focus-within { border-color: var(--accent); }
-.toolbar .new-menu > summary { color: var(--fg); background: var(--muted-surface); border-color: var(--border); font-weight: 500; }
-.toolbar .new-menu > summary:hover { background: #e3e8ef; }
+.toolbar .new-menu > summary:not(.primary) { color: var(--fg); background: var(--muted-surface); border-color: var(--border); font-weight: 500; }
+.toolbar .new-menu > summary:not(.primary):hover { background: #e3e8ef; }
+.toolbar .new-menu > summary.primary { color: white; background: var(--accent); border-color: var(--accent); font-weight: 500; }
+.toolbar .new-menu > summary.primary:hover { background: #0878e2; }
+.toolbar .new-menu > summary.primary .chevron { color: inherit; }
 .content { display: grid; grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr); grid-template-rows: minmax(0, 1fr); min-height: 0; flex: 1; }
 .rack-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 16px 20px 12px; border-right: 1px solid var(--border); }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -184,6 +187,7 @@ button:disabled { cursor: default; opacity: .5; }
 .pool-selector .group-label { margin: 9px 8px 3px; color: var(--muted); font-size: 10px; }
 .pool-selector .menu button { justify-content: space-between; font-size: 11px; }
 .pool-selector .menu button span { color: var(--muted); font-size: 10px; }
+.pool-selector .menu #pool-selector-edit { margin-top: 7px; border-top: 1px solid var(--border); border-radius: 0; padding-top: 7px; color: var(--accent); font-weight: 600; }
 .pool-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
 .pool-identity { margin-right: auto; min-width: 220px; }
 .pool-identity h1 { margin: 0; font-size: 14px; }

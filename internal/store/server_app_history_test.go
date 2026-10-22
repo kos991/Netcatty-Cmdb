@@ -24,7 +24,7 @@ func TestServerAppIndependentFieldsAndArchiveHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.AssetCode != app.AssetCode || got.Version != "2.3" || got.Middleware != "Tomcat 10" || got.Department != "审管办" || got.NetworkType != "专网" || got.Description != "系统说明" || got.Remark != "单独备注" || got.Deployment != "容器部署" || got.DeploymentLocation != "cluster/ns" {
+	if got.AssetCode != app.AssetCode || got.Version != "2.3" || got.Middleware != "Tomcat 10" || got.Department != "审管办" || got.NetworkType != "" || got.Description != "系统说明" || got.Remark != "单独备注" || got.Deployment != "容器部署" || got.DeploymentLocation != "cluster/ns" {
 		t.Fatalf("independent fields did not round trip: %+v", got)
 	}
 	if len(logs) != 1 || logs[0].LogType != "创建" || logs[0].AppID != id || logs[0].ProjectID != scope.ProjectID {
@@ -209,9 +209,84 @@ func TestServerAppLegacyNetworkFallbackUsesOwnProjectAndServiceIP(t *testing.T) 
 	if err := s.migrateServerAppPrototypeFields(); err != nil {
 		t.Fatal(err)
 	}
-	rows, total, err := s.QueryServerAppsForProject(scope, ServerAppQuery{NetworkType: "系统自有网络"})
-	if err != nil || total != 1 || len(rows) != 1 || rows[0].ID != id {
-		t.Fatalf("independent network filter failed: %+v %d %v", rows, total, err)
+	rows, total, err := s.QueryServerAppsForProject(scope, ServerAppQuery{NetworkType: "旧专网"})
+	if err != nil || total != 1 || len(rows) != 1 || rows[0].ID != id || rows[0].NetworkType != "旧专网" {
+		t.Fatalf("network filter must use current service IPAM: %+v %d %v", rows, total, err)
+	}
+	rows, total, err = s.QueryServerAppsForProject(scope, ServerAppQuery{Keyword: "系统自有网络"})
+	if err != nil || total != 0 || len(rows) != 0 {
+		t.Fatalf("stale explicit network must not be searchable: %+v %d %v", rows, total, err)
+	}
+}
+
+func TestServerAppNetworkUsesOwnServiceIPAndLongestSubnet(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, subnet := range []IPSubnet{
+		{Name: "承载业务网", Category: "承载网络", CIDR: "10.132.0.0/24"},
+		{Name: "承载管理网", Category: "管理网络", CIDR: "10.133.0.0/24"},
+		{Name: "服务大网段", Category: "外网", CIDR: "172.22.0.0/16"},
+		{Name: "服务小网段", Category: "专网", CIDR: "172.22.5.0/24"},
+	} {
+		subnet := subnet
+		if _, err := s.CreateIPSubnetForProject(scope, &subnet); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hostID := insertCmdbAsset(t, s, CmdbAsset{Name: "承载设备", BizIP: "10.132.0.10", MgmtIP: "10.133.0.10", NetType: "承载网络"})
+	// 旧记录可能携带承载网络或手工网络，读取时必须仅解析自己的 service_ip。
+	want := make(map[int64]string)
+	for _, tc := range []struct {
+		name, serviceIP, network string
+	}{
+		{"独立服务一", "172.22.5.20", "专网"},
+		{"独立服务二", "172.22.5.21", "专网"},
+		{"仅承载地址", "", ""},
+		{"来源缺失", "203.0.113.20", ""},
+	} {
+		result, err := s.db.Exec(`INSERT INTO server_apps(project_id,cmdb_asset_id,app_name,service_ip,network_type,status)
+			VALUES(?,?,?,?,?,'正常运行')`, scope.ProjectID, hostID, tc.name, tc.serviceIP, "承载网络")
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want[id] = tc.network
+	}
+	// 故意把一个 IP 登记在大网段；另一个完全未登记，二者均应匹配最长 CIDR。
+	if _, err := s.db.Exec(`INSERT INTO ip_pool(project_id,subnet,ip) VALUES(?,'服务大网段','172.22.5.20')`, scope.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	apps, total, err := s.QueryServerAppsForProject(scope, ServerAppQuery{PageSize: 20})
+	if err != nil || total != len(want) || len(apps) != len(want) {
+		t.Fatalf("list failed: apps=%+v total=%d err=%v", apps, total, err)
+	}
+	for _, app := range apps {
+		detail, _, err := s.GetAppForProject(scope, app.ID)
+		if err != nil || app.NetworkType != want[app.ID] || detail.NetworkType != app.NetworkType || detail.ServiceIP != app.ServiceIP {
+			t.Fatalf("own service source differs between list/detail: app=%+v detail=%+v want=%q err=%v", app, detail, want[app.ID], err)
+		}
+	}
+	for _, tc := range []struct {
+		network string
+		count   int
+	}{
+		{"专网", 2}, {AssetUnconfiguredFilter, 2}, {"承载网络", 0}, {"管理网络", 0}, {"外网", 0},
+	} {
+		rows, total, err := s.QueryServerAppsForProject(scope, ServerAppQuery{NetworkType: tc.network, PageSize: 1})
+		if err != nil || total != tc.count || len(rows) != min(tc.count, 1) {
+			t.Fatalf("derived filter %q: rows=%+v total=%d err=%v", tc.network, rows, total, err)
+		}
+	}
+	first, total, err := s.QueryServerAppsForProject(scope, ServerAppQuery{Keyword: "专网", Page: 1, PageSize: 1})
+	second, secondTotal, secondErr := s.QueryServerAppsForProject(scope, ServerAppQuery{Keyword: "专网", Page: 2, PageSize: 1})
+	if err != nil || secondErr != nil || total != 2 || secondTotal != 2 || len(first) != 1 || len(second) != 1 || first[0].ID == second[0].ID {
+		t.Fatalf("resolved keyword must filter before pagination: first=%+v second=%+v totals=%d/%d errors=%v/%v", first, second, total, secondTotal, err, secondErr)
 	}
 }
 
@@ -267,7 +342,7 @@ func TestServerAppSnapshotHistoryRemapsReferencesAndScopesProjects(t *testing.T)
 		t.Fatal("fixture must exercise different local app IDs")
 	}
 	app, logs, err := local.GetAppForProject(localScope, apps[0].ID)
-	if err != nil || app.AssetCode != "SYNC-APP" || app.Version != "v2" || app.Middleware != "Nginx" || app.Description != "说明" || app.Remark != "备注" || app.Department != "信息处" || app.NetworkType != "专网" || app.Deployment != "托管服务" || app.DeploymentLocation != "远端环境" || app.Status != "已归档" || len(logs) != 2 {
+	if err != nil || app.AssetCode != "SYNC-APP" || app.Version != "v2" || app.Middleware != "Nginx" || app.Description != "说明" || app.Remark != "备注" || app.Department != "信息处" || app.NetworkType != "" || app.Deployment != "托管服务" || app.DeploymentLocation != "远端环境" || app.Status != "已归档" || len(logs) != 2 {
 		t.Fatalf("snapshot lost independent app fields/history: %+v %+v %v", app, logs, err)
 	}
 	for _, entry := range logs {

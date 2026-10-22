@@ -14,6 +14,7 @@ const put = (path, body = {}) => req(path, { method: 'PUT', body: JSON.stringify
 const del = (path, body) => req(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) })
 
 export const api = {
+  version: () => req('/api/version'),
   meta: () => req('/api/meta'),
   projects: () => req('/api/cmdb/projects'),
   currentProject: () => req('/api/cmdb/projects/current'),

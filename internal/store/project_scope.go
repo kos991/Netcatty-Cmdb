@@ -107,6 +107,9 @@ func (s *Store) CreateCmdbProject(project *CmdbProject) (*CmdbProject, error) {
 	if err := insertDefaultNetworkTypes(tx, id, now); err != nil {
 		return nil, err
 	}
+	if err := insertDefaultAssetCategories(tx, id); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

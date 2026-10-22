@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // ServerAppLog uses the same timeline vocabulary as terminal asset history.
@@ -30,11 +31,6 @@ func (s *Store) InitServerAppHistorySchema() error {
 	return err
 }
 
-// 业务系统网络类型由自身业务 IP 所属地址池确认；仅当系统存有明确值时优先使用该值。
-// 相关性查询使用 LIMIT 1，避免同一 IP 出现在多个地址池时放大结果行。
-const serverAppNetworkTypeExpr = `COALESCE(NULLIF(app.network_type,''),(SELECT subnet.category FROM ip_pool ip
-		JOIN ip_subnets subnet ON subnet.project_id=ip.project_id AND subnet.name=ip.subnet
-		WHERE ip.project_id=app.project_id AND ip.ip=app.service_ip LIMIT 1),'')`
 
 // NULL marks a pre-prototype value. Once migrated, explicit empty values stay empty
 // across edits and restarts rather than being aliased back to middleware/remark.
@@ -66,7 +62,7 @@ func (s *Store) migrateServerAppPrototypeFields() error {
 const serverAppDetailSelect = `SELECT app.id,app.project_id,IFNULL(app.server_id,0),IFNULL(app.cmdb_asset_id,0),app.group_id,IFNULL(g.name,''),IFNULL(app.app_name,''),IFNULL(app.app_type,''),
 	IFNULL(app.port,''),IFNULL(app.access_url,''),IFNULL(app.middleware,''),IFNULL(app.database_info,''),
 	IFNULL(app.provider,''),IFNULL(app.owner,''),IFNULL(app.status,''),IFNULL(app.remark,''),IFNULL(app.created_at,''),IFNULL(app.updated_at,''),IFNULL(app.service_ip,''),
-	IFNULL(app.asset_code,''),COALESCE(app.version,app.middleware,''),IFNULL(app.department,''),` + serverAppNetworkTypeExpr + `,COALESCE(app.description,app.remark,''),IFNULL(app.deployment,''),IFNULL(app.deployment_location,''),
+	IFNULL(app.asset_code,''),COALESCE(app.version,app.middleware,''),IFNULL(app.department,''),'',COALESCE(app.description,app.remark,''),IFNULL(app.deployment,''),IFNULL(app.deployment_location,''),
 	COALESCE(NULLIF(server.device_name,''),NULLIF(asset.name,''),''),IFNULL(app.service_ip,'')
 	FROM server_apps app
 	LEFT JOIN servers server ON server.id=app.server_id AND server.project_id=app.project_id
@@ -79,6 +75,20 @@ func scanServerAppDetail(scanner interface{ Scan(...interface{}) error }, app *S
 		&app.Status, &app.Remark, &app.CreatedAt, &app.UpdatedAt, &app.ServiceIP,
 		&app.AssetCode, &app.Version, &app.Department, &app.NetworkType, &app.Description, &app.Deployment, &app.DeploymentLocation,
 		&app.ServerName, &app.ServerBizIP)
+}
+
+func serverAppMatchesKeyword(app ServerApp, keyword string) bool {
+	for _, value := range []string{
+		app.AppName, app.AppType, app.AccessURL, app.Middleware, app.DatabaseInfo,
+		app.Provider, app.Owner, app.Remark, app.ServiceIP, app.ServerName,
+		app.AssetCode, app.Version, app.Department, app.Description,
+		app.Deployment, app.DeploymentLocation, app.NetworkType,
+	} {
+		if strings.Contains(strings.ToLower(value), keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) GetAppForProject(scope ProjectScope, id int64) (*ServerApp, []ServerAppLog, error) {
@@ -116,6 +126,11 @@ func (s *Store) GetAppForProject(scope ProjectScope, id int64) (*ServerApp, []Se
 	if err := tx.Commit(); err != nil {
 		return nil, nil, err
 	}
+	networkTypes, err := s.networkTypesForIPsForProject(scope, []string{app.ServiceIP})
+	if err != nil {
+		return nil, nil, err
+	}
+	app.NetworkType = networkTypes[app.ServiceIP]
 	return &app, logs, nil
 }
 

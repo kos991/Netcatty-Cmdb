@@ -7,18 +7,18 @@ import {
   infrastructureNetworkZoneOptions,
 } from './infrastructureTableModel.js'
 
-test('基础设施身份展示以设备名称为主并在摘要中显示资产编码和 SN', () => {
+test('基础设施首列以设备名称为主，副行只显示资产编号', () => {
   assert.deepEqual(infrastructureNamePresentation({ name: '核心服务器', asset_code: 'INFRA-001', sn: 'SN-001' }), {
     name: '核心服务器',
-    secondary: 'INFRA-001 · SN：SN-001',
+    secondary: 'INFRA-001',
   })
-  assert.deepEqual(infrastructureNamePresentation({ name: '备用服务器', asset_code: 'INFRA-002' }), {
+  assert.deepEqual(infrastructureNamePresentation({ name: '备用服务器', asset_code: '' }), {
     name: '备用服务器',
-    secondary: 'INFRA-002 · 未配置 SN',
+    secondary: '未配置编码',
   })
-  assert.deepEqual(infrastructureNamePresentation({ name: '核心交换机', asset_code: '' }), {
-    name: '核心交换机',
-    secondary: '未配置编码 · 未配置 SN',
+  assert.deepEqual(infrastructureNamePresentation({ asset_code: 'INFRA-003' }), {
+    name: '未命名设备',
+    secondary: 'INFRA-003',
   })
 })
 
@@ -51,10 +51,25 @@ test('管理 IP 的网络标识优先读取匹配管理接口的真实网络区�
   })
 })
 
-test('基础设施网络类型只展示业务 IP 的 IPAM 归属且保留专网', () => {
-  assert.equal(infrastructureNetworkSummary({ biz_ip: '138.64.7.20', business_network_type: '专网', net_type: '外网' }).businessNetworkType, '专网')
-  assert.equal(infrastructureNetworkSummary({ biz_ip: '191.162.17.20', business_network_type: '外网', net_type: '内网' }).businessNetworkType, '外网')
+test('基础设施网络类型只读服务端业务归属，不用网络区域兜底', () => {
+  assert.equal(infrastructureNetworkSummary({ biz_ip: '192.0.2.30', business_network_type: '专网', net_type: '外网' }).businessNetworkType, '专网')
+  assert.equal(infrastructureNetworkSummary({ biz_ip: '192.0.2.31', business_network_type: '外网', net_type: '内网' }).businessNetworkType, '外网')
   assert.equal(infrastructureNetworkSummary({ mgmt_ip: '10.0.0.10', net_type: '外网' }).businessNetworkType, '未配置')
+})
+
+test('接口业务网络使用服务端归属，管理及带外网络不作为业务回退', () => {
+  const interfaces = [{
+    ip: '10.0.0.10', network_zone: '外网', is_primary: 1,
+    additional_ips_json: JSON.stringify([
+      { ip: '10.0.0.10', purpose: 'management' },
+      { ip: '172.20.8.10', purpose: ['out_of_band', 'business'] },
+    ]),
+  }]
+  const summary = infrastructureNetworkSummary({ mgmt_ip: '10.0.0.10', net_type: '外网', business_network_type: '专网', interfaces })
+  assert.equal(summary.businessNetworkType, '专网')
+  assert.deepEqual(summary.secondary, [{ ip: '172.20.8.10', purpose: '带外 / 业务', zone: '外网' }])
+  assert.equal(infrastructureNetworkSummary({ mgmt_ip: '10.0.0.10', net_type: '外网', interfaces }).businessNetworkType, '未配置')
+  assert.equal(infrastructureNetworkSummary({ biz_net_type: '专网', net_type: '外网' }).businessNetworkType, '未配置')
 })
 
 test('网络区域选项同时覆盖内网、外网、专网和现有历史值', () => {

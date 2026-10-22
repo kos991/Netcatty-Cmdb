@@ -9,11 +9,8 @@ func TestGlobalSearchSixGroups(t *testing.T) {
 	if _, err := s.CreateAsset(&Asset{UserName: keyword + "终端", Department: "信息处", IP: "10.0.0.11", Status: "在用"}, "测试"); err != nil {
 		t.Fatalf("插入终端失败: %v", err)
 	}
-	if _, err := s.db.Exec(`INSERT INTO cmdb_device_categories(name, parent_id, sort_order) VALUES ('交换机', 0, 0)`); err != nil {
-		t.Fatalf("插入交换机分类失败: %v", err)
-	}
 	var switchCategoryID int64
-	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_categories WHERE name = '交换机'`).Scan(&switchCategoryID); err != nil {
+	if err := s.db.QueryRow(`SELECT id FROM cmdb_device_categories WHERE name = '交换机' AND asset_scope = 'infrastructure'`).Scan(&switchCategoryID); err != nil {
 		t.Fatalf("读取交换机分类失败: %v", err)
 	}
 	insertCmdbAsset(t, s, CmdbAsset{Name: keyword + "交换机", CategoryID: switchCategoryID, ManageIP: "10.0.0.12"})

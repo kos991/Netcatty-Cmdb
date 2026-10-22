@@ -1,6 +1,9 @@
+.rack-overview, [data-section='device-rack'] { --rack-face: hsl(150 55% 30%); --rack-face-hover: hsl(150 55% 25%); }
+.dark :is(.rack-overview, [data-section='device-rack']) { --rack-face: hsl(150 45% 32%); --rack-face-hover: hsl(150 45% 27%); }
+.rack-overview { container: cmdb-rack / inline-size; background: hsl(var(--background)); }
 .rack-management-layout {
   display: grid;
-  grid-template-columns: clamp(300px, 23vw, 400px) minmax(0, 1fr) clamp(310px, 24vw, 380px);
+  grid-template-columns: clamp(330px, 23cqw, 380px) minmax(0, 1fr) clamp(340px, 24cqw, 380px);
   grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
@@ -8,24 +11,51 @@
   overflow: hidden;
 }
 .rack-management-rack { max-width: 400px; }
-.rack-management-device { overflow: hidden; }
+.rack-device-editor.cmdb-record-shell, .rack-management-panel.cmdb-record-shell { position: static; width: auto; height: auto; max-width: none; border-radius: 0; background: hsl(var(--background)); box-shadow: none; }
+.rack-device-editor > .cmdb-record-header, .rack-management-panel > .cmdb-record-header { display: block; }
+.rack-device-editor > .cmdb-record-header > div { min-width: 0; }
+.rack-device-editor > :is(.cmdb-record-header, .cmdb-record-body, .cmdb-record-footer) { padding-left: 20px; padding-right: 20px; }
+.rack-device-editor > .cmdb-record-header { padding-top: 12px; padding-bottom: 12px; }
+.rack-device-editor > .cmdb-record-footer { padding-top: 11px; padding-bottom: 11px; }
+.rack-management-panel > .cmdb-record-header { padding: 12px 16px; }
+.rack-management-panel > .cmdb-record-body { padding: 18px 20px; background: hsl(var(--background)); }
+.rack-management-panel :is(input:not([type='range']), button[role='combobox']) { height: 34px; font-size: 13px; }
+.rack-management-panel input[type='range'] { accent-color: hsl(var(--primary)); }
+
+.rack-device-face { color: #fff; background: var(--rack-face, hsl(150 55% 30%)); }
+.rack-device-face:enabled:hover, .rack-device-face.rack-device-selected { background: var(--rack-face-hover, hsl(150 55% 25%)); }
+.rack-management-directory button { min-height: 34px; font-size: 13px; }
+
 .rack-management-panel {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border-left: 1px solid hsl(var(--border));
-  background: hsl(var(--card));
+  border-left: 1px solid hsl(var(--border) / 0.6);
+  background: hsl(var(--background));
 }
 .rack-management-directory {
-  flex: 0 1 190px;
+  flex: 0 0 auto;
+  max-height: 190px;
   min-height: 80px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
+
+/* 机柜内容直接继承 Netcatty 原生背景，编辑分区只用轻量弱表面。 */
+.rack-management-rack,
+.rack-management-directory { background: hsl(var(--background)); }
+.rack-device-editor > .cmdb-record-body { padding-top: 18px; padding-bottom: 18px; }
+.rack-device-editor .cmdb-record-section { padding: 13px 14px; border-color: hsl(var(--border) / 0.55); border-radius: 10px; background: hsl(var(--secondary) / 0.28); }
+.rack-device-editor .cmdb-record-section h3 { margin-bottom: 12px; font-size: 12px; line-height: 18px; }
+.rack-management-panel .cmdb-record-fields { gap: 14px; }
+.rack-management-panel form { padding: 13px 14px; border: 1px solid hsl(var(--border) / 0.55); border-radius: 10px; background: hsl(var(--secondary) / 0.28); }
+.rack-management-panel form > h3 { margin-bottom: 14px; }
+.rack-management-panel .cmdb-record-header h2 { line-height: 20px; }
+.rack-management-panel .cmdb-record-header > div { margin-top: 12px; gap: 8px; }
 .rack-device-selected {
-  outline: 2px solid hsl(var(--primary) / .7);
+  outline: 2px solid var(--cmdb-accent, hsl(var(--primary)));
   outline-offset: -2px;
   z-index: 1;
 }
@@ -35,7 +65,7 @@
   position: absolute;
   inset: 0;
   padding: 2px;
-  background: linear-gradient(110deg, hsl(var(--primary)), hsl(var(--primary) / .5), hsl(var(--primary) / .95), hsl(var(--primary) / .35), hsl(var(--primary)));
+  background: linear-gradient(110deg, var(--cmdb-accent, hsl(var(--primary))), color-mix(in srgb, var(--cmdb-accent, hsl(var(--primary))) 50%, transparent), hsl(var(--foreground)), color-mix(in srgb, var(--cmdb-accent, hsl(var(--primary))) 35%, transparent), var(--cmdb-accent, hsl(var(--primary))));
   background-size: 300% 100%;
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -48,9 +78,9 @@
   to { background-position: 300% 50%; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rack-device-selected::after { animation: none; background: hsl(var(--primary)); }
+  .rack-device-selected::after { animation: none; background: var(--cmdb-accent, hsl(var(--primary))); }
 }
-@media (min-width: 721px) and (max-width: 1240px) {
+@container cmdb-rack (min-width: 721px) and (max-width: 1240px) {
   .rack-management-layout {
     grid-template-columns: minmax(300px, 36%) minmax(0, 1fr);
     grid-template-rows: 610px 520px;
@@ -59,9 +89,10 @@
   }
   .rack-management-panel { grid-column: 1 / -1; border-left: 0; border-top: 1px solid hsl(var(--border)); }
 }
-@media (max-width: 720px) {
+@container cmdb-rack (max-width: 720px) {
   .rack-management-layout { display: flex; flex-direction: column; overflow-y: auto; }
   .rack-management-rack { width: 100%; max-width: none; height: 610px; flex-shrink: 0; border-right: 0; border-bottom: 1px solid hsl(var(--border)); }
   .rack-management-device { height: 720px; flex-shrink: 0; }
-  .rack-management-panel { height: 600px; flex-shrink: 0; border-left: 0; border-top: 1px solid hsl(var(--border)); }
+  .rack-management-panel.cmdb-record-shell { height: 600px; flex-shrink: 0; border-left: 0; border-top: 1px solid hsl(var(--border)); }
+  .rack-device-editor > :is(.cmdb-record-header, .cmdb-record-body, .cmdb-record-footer) { padding-left: 14px; padding-right: 14px; }
 }

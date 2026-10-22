@@ -6,7 +6,7 @@
   window.assetPrototypePages.systems = {
     label: '业务系统',
     columns: [
-      { key: 'name', label: '系统名称 / 资产编号', width: 16, kind: 'asset', secondary: 'code' },
+      { key: 'name', label: '系统名称', headerTitle: '系统名称', width: 16, kind: 'asset', secondary: 'code' },
       { key: 'type', label: '系统类型', width: 8 },
       { key: 'version', label: '版本', width: 7 },
       { key: 'server_name', label: '承载设备', width: 12 },

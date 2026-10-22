@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Pencil, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { AsidePanel } from '@/components/ui/aside-panel'
+import AssetRowActions from './AssetRowActions'
+import { AssetPanelFrame, useAssetPanelLayout } from './AssetPanel'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { api } from './api'
 import DeviceWorkspace from './DeviceWorkspace'
@@ -10,7 +11,7 @@ import DeviceWorkspaceErrorBoundary from './DeviceWorkspaceErrorBoundary'
 import { requestJson } from './transport'
 import { allPages, useAction, useDirectory, useQuery } from './hooks'
 import { choices, Fields, textFields, validateFields } from './Fields'
-import { ActionIcon, AssetNameCell, DataTable, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
+import { DataTable, ErrorBanner, ModalForm, Pagination, SelectControl, StatusPill, statusTone, Toolbar } from './ui'
 import AssetTransferMenu from './AssetTransferMenu'
 import InfrastructureEditor from './InfrastructureEditor'
 import InfrastructureQuickConnect from './InfrastructureQuickConnect'
@@ -22,13 +23,13 @@ import { useNetcattyConnectionEditor } from './NetcattyConnectionFields'
 import { infrastructureListFilterParams, infrastructureTypeFilterOptions, supportsInfrastructurePhotos } from './state'
 import { VendorBrandValue } from './VendorBrandIcon'
 import AssetFilterPicker, { useAssetFilterSelection } from './AssetFilterPicker'
-import { visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
+import { networkTypeColor, visibleAssetColumnKeys, UNCONFIGURED_FILTER_VALUE } from './assetTableModel'
 
 const TYPES = [['server', '服务器'], ['virtual_machine', '虚拟机'], ['hyperconverged', '超融合'], ['switch', '交换机'], ['router', '路由器'], ['security_device', '安全设备'], ['storage', '存储设备']].map(([value, label]) => ({ value, label }))
 const DEFAULTS = { status: '在库', asset_class: 'physical', device_type: 'server', org_id: 0, category_id: 0, model_id: 0, owner_id: 0, interfaces: [] }
 const directoryLoader = async () => {
-  const [meta, people, filters, deviceTypes, customFields] = await Promise.all([requestJson('/api/cmdb/meta'), allPages(api.persons), api.infrastructureFilters(), api.taxonomy('infrastructure-categories'), api.customFields()])
-  return { meta, people, filters, deviceTypes: deviceTypes.list || [], customFields: customFields.list || [] }
+  const [meta, people, filters, deviceTypes, customFields, networkTypes] = await Promise.all([requestJson('/api/cmdb/meta'), allPages(api.persons), api.infrastructureFilters(), api.taxonomy('infrastructure-categories'), api.customFields(), api.config('network-types')])
+  return { meta, people, filters, deviceTypes: deviceTypes.list || [], customFields: customFields.list || [], networkTypes: networkTypes.list || [] }
 }
 
 function InfrastructureVendorModelCell({ record }) {
@@ -39,9 +40,15 @@ function InfrastructureVendorModelCell({ record }) {
   </div>
 }
 
-function InfrastructureNameCell({ record }) {
+function InfrastructureNameCell({ record, networkType, networkDefinitions = [] }) {
   const presentation = infrastructureNamePresentation(record)
-  return <AssetNameCell title={presentation.name} subtitle={presentation.secondary} onOpen={() => record.onOpen?.()} />
+  return <div className="min-w-0">
+    <div className="flex min-w-0 items-center gap-1.5">
+      <Button type="button" variant="link" title={presentation.name} className="h-auto min-w-0 max-w-full justify-start truncate p-0 text-left text-xs font-semibold" onClick={() => record.onOpen?.()}>{presentation.name}</Button>
+      <span className="h-2 w-2 shrink-0 rounded-full border border-border/70" style={{ backgroundColor: networkTypeColor(networkType, networkDefinitions) }} title={`网络类型：${networkType}`} aria-label={`网络类型：${networkType}`} />
+    </div>
+    {presentation.secondary ? <p title={presentation.secondary} className="mt-1 truncate text-[10px] leading-[1.45] text-muted-foreground">{presentation.secondary}</p> : null}
+  </div>
 }
 
 function InfrastructureManagementIPCell({ record }) {
@@ -54,8 +61,8 @@ function InfrastructureManagementIPCell({ record }) {
 }
 
 function InfrastructureNetworkTypeCell({ record }) {
-  const presentation = infrastructureNetworkSummary(record)
-  return <span className="block truncate text-xs text-muted-foreground" title={presentation.businessNetworkType}>{presentation.businessNetworkType}</span>
+  const resolved = infrastructureNetworkSummary(record).businessNetworkType
+  return <span className="block truncate text-xs text-muted-foreground" title={resolved}>{resolved}</span>
 }
 
 function InfrastructureLocationCell({ record }) {
@@ -79,12 +86,16 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false)
   const [workspaceRefresh, setWorkspaceRefresh] = useState(0)
   const [editor, setEditor] = useState(null)
+  const [editorExpanded, setEditorExpanded] = useState(false)
   const [photoDraft, setPhotoDraft] = useState({})
   const [values, setValues] = useState({})
   const [confirmation, setConfirmation] = useState(null)
-  useEffect(() => { onPanelOpenChange?.(!!selectedDeviceID || !!editor, editor && !editor.batch && !editor.record.id ? 0 : workspaceExpanded ? 'full' : 420) }, [selectedDeviceID, editor, workspaceExpanded, onPanelOpenChange])
+  useEffect(() => { setEditorExpanded(false) }, [editor])
+  const sideEditor = !!editor && !editor.batch && !!editor.record.id
+  const panelLayout = useAssetPanelLayout(sideEditor || !!selectedDeviceID, sideEditor ? editorExpanded : workspaceExpanded, onPanelOpenChange)
   const handledCommandId = useRef(null)
   const directory = useDirectory(directoryLoader)
+  
   const action = useAction()
   const netcatty = useNetcattyConnectionEditor('infrastructure')
   const beginNetcattyConnection = netcatty.begin
@@ -95,7 +106,35 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
   useEffect(() => { setPage(1); setSelected([]) }, [keyword])
   const showAsset = useCallback((recordOrID) => setSelectedDeviceID(typeof recordOrID === 'object' ? recordOrID.id : recordOrID), [])
   const closeWorkspace = () => { setSelectedDeviceID(null); setWorkspaceExpanded(false) }
-  useEffect(() => { if (focusTarget?.tableKey === 'cmdb_assets') showAsset(focusTarget.id) }, [focusTarget, showAsset])
+  const [focusedRowID, setFocusedRowID] = useState(null)
+  useEffect(() => {
+    if (focusTarget?.tableKey !== 'cmdb_assets') return undefined
+    showAsset(focusTarget.id)
+    setFocusedRowID(focusTarget.id)
+    const timer = setTimeout(() => setFocusedRowID(null), 8000)
+    return () => clearTimeout(timer)
+  }, [focusTarget, showAsset])
+  useEffect(() => {
+    if (focusedRowID == null) return undefined
+    const list = query.data?.list || []
+    if (!list.length) return undefined
+    if (list.some((row) => String(row.id) === String(focusedRowID))) {
+      const frame = requestAnimationFrame(() => {
+        document.querySelector(`[data-row-key="${focusedRowID}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
+      return () => cancelAnimationFrame(frame)
+    }
+    let active = true
+    const locate = async () => {
+      const total = query.data?.total || 0
+      const response = await api.infrastructure({ keyword, scope: 'infrastructure', page: 1, page_size: Math.max(total, pageSize) })
+      if (!active) return
+      const index = (response.list || []).findIndex((row) => String(row.id) === String(focusedRowID))
+      if (index >= 0) setPage(Math.floor(index / pageSize) + 1)
+    }
+    void locate().catch(() => {})
+    return () => { active = false }
+  }, [focusedRowID, query.data, page, pageSize, keyword])
   const changeFilter = (key, value) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); setSelected([]) }
   const options = (items) => choices((items || []).map((item) => ({ value: item.id, label: item.name })), '未分配')
   const open = useCallback((record = {}, batch = false) => {
@@ -143,21 +182,21 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
     setEditor(null); setPhotoDraft({}); setSelected([]); query.reload(); directory.reload(); setWorkspaceRefresh((value) => value + 1)
   }, '已保存完整资产档案')
   const columns = [
-    { key: 'asset_code', label: '设备名 / 资产编号', width: 190, sticky: 'left', className: 'whitespace-nowrap', render: (_value, record) => <InfrastructureNameCell record={{ ...record, onOpen: () => showAsset(record) }} /> },
-    { key: 'device_type', label: '设备类型', width: 90, className: 'whitespace-nowrap text-xs', render: (_value, record) => deviceTypeLabel(record) },
-    { key: 'vendor_model', label: '品牌 / 型号', width: 135, className: 'whitespace-nowrap', render: (_value, record) => <InfrastructureVendorModelCell record={record} /> },
-    { key: 'owner_department', label: '负责人', width: 105, render: (_value, record) => <span className="block truncate text-xs" title={record.owner || '未分配负责人'}>{record.owner || '未分配负责人'}</span> },
-    { key: 'location', label: '位置', width: 135, render: (_value, record) => <InfrastructureLocationCell record={record} /> },
-    { key: 'management_ip', label: 'IP 地址', width: 165, render: (_value, record) => <InfrastructureManagementIPCell record={record} /> },
-    { key: 'network_type', label: '网络类型', width: 105, render: (_value, record) => <InfrastructureNetworkTypeCell record={record} /> },
-    { key: 'status', label: '设备状态', width: 78, sticky: 'right', className: 'whitespace-nowrap', render: (value) => <StatusPill tone={statusTone(value)}>{value || '未配置'}</StatusPill> },
-    { key: 'actions', label: '操作', width: 48, sticky: 'right', className: 'whitespace-nowrap', render: (_value, record) => <ActionIcon label="编辑资产" onClick={() => open(record)}><Pencil size={14} /></ActionIcon> },
+    { key: 'asset_code', label: '名称 / 编码', headerTitle: '设备名称 / 资产编号', headerClassName: 'cmdb-asset-identity-header', width: 23, sticky: 'left', className: 'whitespace-nowrap', render: (_value, record) => <InfrastructureNameCell record={{ ...record, onOpen: () => showAsset(record) }} networkType={infrastructureNetworkSummary(record).businessNetworkType} networkDefinitions={directory.data?.networkTypes || []} /> },
+    { key: 'device_type', label: '设备类型', width: 8, className: 'whitespace-nowrap text-xs', render: (_value, record) => deviceTypeLabel(record) },
+    { key: 'vendor_model', label: '品牌 / 型号', width: 13, className: 'whitespace-nowrap', render: (_value, record) => <InfrastructureVendorModelCell record={record} /> },
+    { key: 'owner_department', label: '负责人', width: 9, render: (_value, record) => <span className="block truncate text-xs" title={record.owner || '未分配负责人'}>{record.owner || '未分配负责人'}</span> },
+    { key: 'location', label: '位置', width: 20, render: (_value, record) => <InfrastructureLocationCell record={record} /> },
+    { key: 'management_ip', label: 'IP 地址', width: 12, render: (_value, record) => <InfrastructureManagementIPCell record={record} /> },
+    { key: 'network_type', label: '网络类型', width: 8, render: (_value, record) => <InfrastructureNetworkTypeCell record={record} /> },
+    { key: 'status', label: '设备状态', width: 7, sticky: 'right', className: 'whitespace-nowrap', render: (value) => <StatusPill tone={statusTone(value)}>{value || '未配置'}</StatusPill> },
+    { key: 'actions', label: '操作', width: 80, sticky: 'right', className: 'whitespace-nowrap text-right', render: (_value, record) => <AssetRowActions name={record.name || record.asset_code || ''} onEdit={() => open(record)} onDetail={() => showAsset(record)} onClone={() => setConfirmation({ ids: [record.id], action: 'clone' })} onArchive={() => setConfirmation({ ids: [record.id], action: 'archive' })} /> },
   ]
   const columnsByKey = Object.fromEntries(columns.map((column) => [column.key, column]))
   const visibleColumns = visibleAssetColumnKeys('infrastructure').map((key) => columnsByKey[key]).filter(Boolean)
-  return <div className="flex min-h-0 flex-1 flex-col">
+  return <div className="cmdb-asset-page flex min-h-0 min-w-0 flex-1 flex-col">
     {headerActions && createPortal(<><AssetFilterPicker expanded={filtersExpanded} onExpandedChange={onFiltersExpandedChange} items={filterItems} visible={visibleFilters} onToggle={toggleFilter} /><AssetTransferMenu importTitle="导入基础设施" importer={api.importInfrastructure} onImported={() => { query.reload(); directory.reload() }} exporter={() => api.exportInfrastructure(params)} /></>, headerActions)}
-    <Toolbar hidden={!filtersExpanded}>
+    <Toolbar className="cmdb-asset-toolbar" hidden={!filtersExpanded}>
       {leadingControl}
       {visibleFilters.includes('type_filter') && <SelectControl prefix="类型" className="w-36" value={filters.type_filter} onChange={(value) => changeFilter('type_filter', value)} options={choices(infrastructureTypeFilterOptions(meta.categories || [], directory.data?.filters.device_type || []), '全部')} />}
       {visibleFilters.includes('owner') && <SelectControl prefix="负责人" className="w-36" value={filters.owner} onChange={(value) => changeFilter('owner', value)} options={choices([...(directory.data?.filters.owner || []), { value: UNCONFIGURED_FILTER_VALUE, label: '未配置' }], '全部')} />}
@@ -173,9 +212,9 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
     </Toolbar>
     {selected.length > 0 && <Toolbar><span className="text-xs text-muted-foreground">已选 {selected.length} 项</span><Button variant="ghost" size="sm" onClick={() => open({}, true)}>批量编辑</Button><Button variant="ghost" size="sm" onClick={() => setConfirmation({ ids: selected, action: 'clone' })}>克隆</Button><Button variant="ghost" size="sm" onClick={() => setConfirmation({ ids: selected, action: 'archive' })}>注销归档</Button></Toolbar>}
     {(query.error || directory.error) && <ErrorBanner message={query.error || directory.error} onRetry={() => { query.reload(); directory.reload() }} />}
-    <DataTable rows={query.error ? [] : query.data?.list || []} loading={query.loading} selected={selected} onSelectedChange={setSelected} compact columns={visibleColumns} />
+    <DataTable rows={query.error ? [] : query.data?.list || []} loading={query.loading} selected={selected} onSelectedChange={setSelected} pinSelection assetLayout columns={visibleColumns} highlightKey={focusedRowID} />
     <Pagination page={page} pageSize={pageSize} total={query.data?.total || 0} onChange={(nextPage, nextPageSize) => { setPage(nextPage); setPageSize(nextPageSize); setSelected([]) }} />
-    <AsidePanel open={!!selectedDeviceID} onClose={closeWorkspace} width={workspaceExpanded ? 'w-full' : 'w-[420px]'} dataSection="device-workspace-panel">
+    <AssetPanelFrame open={!!selectedDeviceID && !editor} onClose={closeWorkspace} expanded={workspaceExpanded} onWidthChange={panelLayout.onWidthChange} dataSection="device-workspace-panel" className="cmdb-device-workspace-panel">
       {selectedDeviceID ? <DeviceWorkspaceErrorBoundary resetKey={`${selectedDeviceID}-${workspaceRefresh}`} onRetry={() => setWorkspaceRefresh((value) => value + 1)} onClose={closeWorkspace}>
         <DeviceWorkspace key={`${selectedDeviceID}-${workspaceRefresh}`} id={selectedDeviceID} projects={workspaceMeta?.projects || []} expanded={workspaceExpanded} onExpandedChange={setWorkspaceExpanded} onClose={closeWorkspace}
           onEdit={() => open({ id: selectedDeviceID })}
@@ -187,9 +226,9 @@ export default function Infrastructure({ keyword, focusTarget, onNavigate, comma
           onOpenApplication={(applicationID) => { closeWorkspace(); onNavigate?.({ tableKey: 'server_apps', id: applicationID }) }}
         />
       </DeviceWorkspaceErrorBoundary> : null}
-    </AsidePanel>
+    </AssetPanelFrame>
     {editor?.batch && <ModalForm title="批量编辑资产（留空保持不变）" open onOpenChange={(value) => { if (!value) setEditor(null) }} busy={action.busy} onSubmit={save} wide><Fields fields={fields} value={values} onChange={setValues} /></ModalForm>}
-    <InfrastructureEditor open={!!editor && !editor.batch} onOpenChange={(value) => { if (!value) setEditor(null) }} record={!editor?.batch ? editor?.record : null} directory={directory.data} busy={action.busy || netcatty.loading} onSubmit={saveFull} netcatty={netcatty} photoDraft={photoDraft} onPhotoDraftChange={setPhotoDraft} />
+    <InfrastructureEditor open={!!editor && !editor.batch} expanded={editorExpanded} onExpandedChange={setEditorExpanded} onWidthChange={panelLayout.onWidthChange} onOpenChange={(value) => { if (!value) setEditor(null) }} record={!editor?.batch ? editor?.record : null} directory={directory.data} busy={action.busy || netcatty.loading} onSubmit={saveFull} netcatty={netcatty} photoDraft={photoDraft} onPhotoDraftChange={setPhotoDraft} />
     <ConfirmDialog open={!!confirmation} onOpenChange={(value) => { if (!value) setConfirmation(null) }} title={confirmation?.action === 'clone' ? '克隆资产' : '注销归档'} message={`处理 ${confirmation?.ids.length || 0} 项资产。归档会保留资产记录。`} confirmLabel="确认" busy={action.busy} onConfirm={() => action.run(async () => { await api.batchInfrastructure(confirmation.ids, confirmation.action); if (confirmation.action === 'archive' && confirmation.ids.includes(selectedDeviceID)) closeWorkspace(); setConfirmation(null); setSelected([]); query.reload() }, '操作完成')} />
   </div>
 }

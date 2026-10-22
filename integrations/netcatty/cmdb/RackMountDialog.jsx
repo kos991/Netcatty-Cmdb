@@ -92,14 +92,16 @@ export default function RackMountDialog({ cabinet, unit, devices, onClose, onSav
     finally { setBusy(false) }
   }
   return <>
-    <Dialog open={mode === 'choose'} onOpenChange={(open) => { if (!open) close() }}><DialogContent className="sm:max-w-lg" data-section="rack-mount-dialog">
-      <DialogHeader><DialogTitle>{cabinet.roomLabel} / {cabinet.name} · {unit}U 上架设备</DialogTitle></DialogHeader>
-      <p className="text-xs text-muted-foreground">新增基础设施档案，或选择尚未上架的实体设备。保存前会重新检查机柜高度与 U 位冲突。</p>
-      {error ? <ErrorBanner message={error} /> : null}
-      <Button type="button" data-rack-create-device variant="outline" disabled={busy} onClick={beginCreate}>新增基础设施并上架</Button>
-      <Field label="选择已有未上架设备"><SelectControl searchable className="w-full" aria-label="选择已有设备上架" disabled={busy} value={deviceID} onChange={setDeviceID} options={[{ value: '', label: '选择已有设备' }, ...available.map((item) => ({ value: String(item.id), label: [item.name || `资产 #${item.id}`, item.asset_code, item.mgmt_ip].filter(Boolean).join(' · ') }))]} /></Field>
-      {!available.length ? <p className="text-xs text-muted-foreground">没有尚未上架的实体设备，可直接新增基础设施。</p> : null}
-      <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={close}>取消</Button><Button type="button" data-rack-mount-existing disabled={busy || !deviceID} onClick={mountExisting}>{busy ? '处理中…' : `上架到 ${unit}U`}</Button></DialogFooter>
+    <Dialog open={mode === 'choose'} onOpenChange={(open) => { if (!open) close() }}><DialogContent className="cmdb-record-shell cmdb-modal-form flex flex-col gap-0 overflow-hidden rounded-lg p-0 sm:max-w-lg" data-section="rack-mount-dialog">
+      <DialogHeader className="cmdb-record-header pr-12"><DialogTitle className="text-sm">{cabinet.roomLabel} / {cabinet.name} · {unit}U 上架设备</DialogTitle></DialogHeader>
+      <div className="cmdb-record-body space-y-3">
+        <p className="text-xs text-muted-foreground">新增基础设施档案，或选择尚未上架的实体设备。保存前会重新检查机柜高度与 U 位冲突。</p>
+        {error ? <ErrorBanner message={error} /> : null}
+        <Button type="button" data-rack-create-device className="cmdb-primary-action w-full justify-start" disabled={busy} onClick={beginCreate}>新增基础设施并上架</Button>
+        <Field label="选择已有未上架设备"><SelectControl searchable className="w-full" aria-label="选择已有设备上架" disabled={busy} value={deviceID} onChange={setDeviceID} options={[{ value: '', label: '选择已有设备' }, ...available.map((item) => ({ value: String(item.id), label: [item.name || `资产 #${item.id}`, item.asset_code, item.mgmt_ip].filter(Boolean).join(' · ') }))]} /></Field>
+        {!available.length ? <p className="text-xs text-muted-foreground">没有尚未上架的实体设备，可直接新增基础设施。</p> : null}
+      </div>
+      <DialogFooter className="cmdb-record-footer"><Button type="button" variant="outline" disabled={busy} onClick={close}>取消</Button><Button type="button" className="cmdb-primary-action" data-rack-mount-existing disabled={busy || !deviceID} onClick={mountExisting}>{busy ? '处理中…' : `上架到 ${unit}U`}</Button></DialogFooter>
     </DialogContent></Dialog>
     {mode === 'new' ? <><InfrastructureEditor open record={record} directory={directory} busy={busy || netcatty.loading} onBusyChange={setPhotoBusy} onOpenChange={(open) => { if (!open) close() }} onSubmit={create} netcatty={netcatty} photoDraft={photoDraft} onPhotoDraftChange={setPhotoDraft} />{error ? <div role="alert" className="fixed bottom-5 left-1/2 z-[100] w-[min(90vw,680px)] -translate-x-1/2 rounded-md border border-destructive bg-background p-3 text-xs text-destructive">{error}</div> : null}</> : null}
   </>

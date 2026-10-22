@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, ci/native-settings-test-20261009]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:

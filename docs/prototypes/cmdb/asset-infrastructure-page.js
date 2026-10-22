@@ -15,10 +15,10 @@
   window.assetPrototypePages.infrastructure = {
     label: '基础设备',
     columns: [
-      { key: 'name', label: '设备名 / 资产编号', width: 23, kind: 'asset', secondary: 'code' },
+      { key: 'name', label: '名称 / 编码', headerTitle: '设备名称 / 资产编号', width: 23, kind: 'asset', secondary: 'code' },
       { key: 'type', label: '设备类型', width: 8 },
       { key: 'vendor_model', label: '品牌 / 型号', width: 13 },
-      { key: 'mgmt_ip', label: 'IP 地址', width: 12 },
+      { key: 'mgmt_ip', label: 'IP 地址', width: 12, secondary: 'biz_ip' },
       { key: 'net_type', label: '网络类型', width: 8 },
       { key: 'location', label: '位置', width: 20 },
       { key: 'person', label: '负责人', width: 9 },

@@ -1,0 +1,166 @@
+/* Cmdb 直接继承 Netcatty 宿主主题，不维护第二套颜色或字体。 */
+.cmdb-theme-scope, .cmdb-record-shell, .cmdb-primary-action {
+  --cmdb-accent: hsl(var(--primary));
+  --cmdb-accent-foreground: hsl(var(--primary-foreground));
+  font-family: inherit;
+}
+.cmdb-theme-scope { font-size: 12px; color: hsl(var(--foreground)); }
+.cmdb-primary-action.cmdb-primary-action {
+  height: 34px;
+  min-height: 34px;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid hsl(var(--primary));
+  border-radius: 7px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.cmdb-primary-action.cmdb-primary-action:hover:not(:disabled) {
+  background: hsl(var(--primary) / 0.9);
+  border-color: hsl(var(--primary) / 0.9);
+  color: hsl(var(--primary-foreground));
+}
+.cmdb-primary-action.cmdb-primary-action:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.cmdb-page-header { min-height: 54px; }
+.cmdb-toolbar { min-width: 0; }
+.cmdb-toolbar > * { max-width: 100%; }
+.cmdb-field > :is(input:not([type="checkbox"]), textarea, button[role="combobox"]) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.cmdb-field > :is(input:not([type="checkbox"]), button[role="combobox"]) { height: 34px; }
+.cmdb-field > textarea { min-height: 76px; line-height: 1.5; }
+.cmdb-record-shell {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  font-family: inherit;
+  font-size: 13px;
+}
+.cmdb-record-header.cmdb-record-header {
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 62px;
+  padding: 10px 14px;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+  background: hsl(var(--background));
+  text-align: left;
+}
+.cmdb-modal-form .cmdb-record-header { padding-right: 48px; }
+.cmdb-record-header :is(h1,h2,h3) { min-width: 0; margin: 0; font-size: 14px; font-weight: 600; line-height: 20px; }
+.cmdb-record-tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  min-height: 42px;
+  padding: 5px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+  background: hsl(var(--background));
+  scrollbar-width: thin;
+}
+.cmdb-record-tabs [role="tab"] { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; min-width: 28px; height: 26px; padding: 0; gap: 0; border-radius: 5px; color: hsl(var(--muted-foreground)); }
+.cmdb-record-tabs [role="tab"][aria-selected="true"] { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.cmdb-record-tabs [role="tab"] svg { width: 14px; height: 14px; }
+.cmdb-record-tab-label { display: none; }
+.cmdb-record-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  container-type: inline-size;
+  background: hsl(var(--background));
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px;
+}
+.cmdb-record-section { min-width: 0; padding: 12px; border: 1px solid hsl(var(--border) / 0.6); border-radius: 8px; background: hsl(var(--secondary) / 0.28); font-family: inherit; }
+.cmdb-record-section h3 { margin: 0 0 12px; font-size: 13px; font-weight: 600; }
+.cmdb-record-fields { display: grid; min-width: 0; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 14px; }
+.cmdb-record-footer {
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 11px 16px;
+  border-top: 1px solid hsl(var(--border) / 0.6);
+  background: hsl(var(--background));
+}
+.cmdb-record-footer button { height: 34px; min-width: 72px; font-size: 12px; }
+.cmdb-record-footer .cmdb-primary-action { min-width: 96px; }
+.cmdb-record-footer > :not([hidden]) ~ :not([hidden]) { margin-inline-start: 0 !important; }
+.cmdb-record-header > :not([hidden]) ~ :not([hidden]) { margin-block-start: 0; }
+.cmdb-record-body > * { min-width: 0; }
+.cmdb-record-more { display: grid; min-width: 180px; padding: 5px; border: 1px solid hsl(var(--border)); border-radius: 7px; background: hsl(var(--popover)); box-shadow: 0 6px 18px hsl(var(--foreground) / 0.12); }
+.cmdb-record-more button { width: 100%; height: 32px; justify-content: flex-start; gap: 7px; border: 0; font-size: 12px; }
+.cmdb-record-danger { color: hsl(var(--destructive)); }
+@container (min-width: 600px) {
+  .cmdb-record-tabs [role="tab"] { width: auto; min-width: 44px; height: 28px; padding: 0 8px; gap: 5px; }
+  .cmdb-record-tab-label { display: inline; font-size: 11px; white-space: nowrap; }
+}
+@container (max-width: 359px) {
+  .cmdb-form-grid, .cmdb-record-fields, .cmdb-definition-list { grid-template-columns: minmax(0,1fr); }
+  .cmdb-form-grid > *, .cmdb-record-fields > * { grid-column: auto; }
+}
+@media (max-width: 560px) {
+  .cmdb-record-fields { grid-template-columns: minmax(0,1fr); }
+  .cmdb-record-body { padding: 12px; }
+  .cmdb-modal-form.cmdb-record-shell,
+  .cmdb-record-shell[data-organization-maintenance] { max-width: calc(100vw - 16px); }
+  .cmdb-record-header { min-height: 54px; padding: 9px 12px; }
+  .cmdb-record-header :is(h1,h2,h3) { font-size: 13px; }
+  .cmdb-record-footer { padding: 10px 12px; gap: 7px; }
+  .cmdb-record-footer button { min-width: 0; padding: 0 10px; font-size: 11px; }
+  .cmdb-record-tab-label { display: none; }
+  .cmdb-primary-action.cmdb-primary-action { padding: 0 10px; }
+}
+/* 硬件组合录入：以字段自身宽度排版，420px 侧栏与拖宽、全宽、居中弹窗共用同一规则。 */
+[data-hardware-field] { container-type: inline-size; }
+.cmdb-hardware-parts { display: grid; min-width: 0; align-items: end; gap: 8px; }
+.cmdb-hardware-parts[data-hardware-layout="cpu_info"] { grid-template-columns: 64px minmax(0, 1fr); }
+.cmdb-hardware-parts[data-hardware-layout="memory_mb"] { grid-template-columns: minmax(0, 1fr) 88px; }
+.cmdb-hardware-parts[data-hardware-layout="disk_info"] { grid-template-columns: 64px minmax(0, 1fr) 88px; }
+.cmdb-hardware-parts[data-hardware-layout="disk_info"] > [data-hardware-slot="medium"] { grid-column: 1 / -1; }
+.cmdb-hardware-parts > * { min-width: 0; }
+.cmdb-hardware-presets { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.cmdb-hardware-presets-title { color: hsl(var(--muted-foreground)); font-size: 11px; }
+.cmdb-hardware-preset { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; border: 1px solid hsl(var(--border)); border-radius: 999px; background: hsl(var(--background)); font-size: 11px; line-height: 20px; }
+.cmdb-hardware-preset[data-active] { border-color: hsl(var(--primary)); color: hsl(var(--primary)); background: hsl(var(--primary) / 0.08); }
+.cmdb-hardware-preset > button { display: inline-flex; min-width: 0; align-items: center; border: 0; background: transparent; color: inherit; }
+.cmdb-hardware-preset > button:first-child { overflow: hidden; padding: 0 2px 0 8px; text-overflow: ellipsis; white-space: nowrap; }
+.cmdb-hardware-preset > button:last-child { flex: none; padding: 0 6px 0 2px; color: hsl(var(--muted-foreground)); }
+.cmdb-hardware-preset > button:hover:not(:disabled) { color: hsl(var(--primary)); }
+.cmdb-hardware-preset-save { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 8px; border: 1px dashed hsl(var(--border)); border-radius: 999px; background: transparent; color: hsl(var(--muted-foreground)); font-size: 11px; }
+.cmdb-hardware-preset-save:hover:not(:disabled) { border-color: hsl(var(--primary)); color: hsl(var(--primary)); }
+.cmdb-hardware-preset-save:disabled, .cmdb-hardware-preset > button:disabled { cursor: not-allowed; opacity: .5; }
+.cmdb-hardware-presets-empty { color: hsl(var(--muted-foreground)); font-size: 11px; }
+.cmdb-hardware-presets-error { flex-basis: 100%; color: hsl(var(--destructive)); font-size: 11px; }
+@container (max-width: 300px) {
+  .cmdb-hardware-parts[data-hardware-layout="cpu_info"] { grid-template-columns: minmax(0, 1fr); }
+  .cmdb-hardware-parts[data-hardware-layout="disk_info"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .cmdb-hardware-parts[data-hardware-layout="disk_info"] > [data-hardware-slot="count"] { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmdb-primary-action { transition: none; }
+}

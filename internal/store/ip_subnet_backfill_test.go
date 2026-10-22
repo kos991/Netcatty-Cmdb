@@ -39,8 +39,8 @@ func TestSubnetCreatedAfterAssetsBackfillsIPOccupancy(t *testing.T) {
 		t.Fatalf("终端网络类型未联动：assets=%+v err=%v", assets, err)
 	}
 	apps, _, err := s.QueryAllApps("", "", "", 1, 20)
-	if err != nil || len(apps) != 1 || apps[0].NetworkType != "系统登记网络" {
-		t.Fatalf("IPAM 回填不应覆盖业务系统独立登记的网络类型：apps=%+v err=%v", apps, err)
+	if err != nil || len(apps) != 1 || apps[0].NetworkType != "内网" {
+		t.Fatalf("业务系统应展示自身业务 IP 当前的 IPAM 网络类型：apps=%+v err=%v", apps, err)
 	}
 }
 

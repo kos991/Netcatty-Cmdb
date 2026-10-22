@@ -35,7 +35,7 @@ func TestCmdbCategoryScopesAreIsolated(t *testing.T) {
 		if err != nil {
 			t.Fatalf("查询 %s 失败: %v", tc.kind, err)
 		}
-		if len(list) != 1 || list[0].ID != tc.want {
+		if !taxonomyContainsID(list, tc.want) {
 			t.Fatalf("%s 应只返回自己的分类，实际 %+v", tc.kind, list)
 		}
 	}
@@ -45,14 +45,23 @@ func TestCmdbCategoryScopesAreIsolated(t *testing.T) {
 	}
 }
 
+func taxonomyContainsID(nodes []CmdbTaxonomyNode, id int64) bool {
+	for _, node := range nodes {
+		if node.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func TestCmdbCategoryRenameSynchronizesTerminalAndApplicationTypes(t *testing.T) {
 	s := newCmdbTestStore(t)
 
-	terminalCategoryID, err := s.CreateCmdbTaxonomy("terminal-categories", "台式电脑", 0, 1)
+	terminalCategoryID, err := s.CreateCmdbTaxonomy("terminal-categories", "办公台式电脑", 0, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	terminalID, err := s.CreateAsset(&Asset{AssetCode: "PC-TAXONOMY", DeviceType: "台式电脑", Status: "在用"}, "测试")
+	terminalID, err := s.CreateAsset(&Asset{AssetCode: "PC-TAXONOMY", DeviceType: "办公台式电脑", Status: "在用"}, "测试")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +227,13 @@ func TestCmdbCategoryMigrationBackfillsExistingTerminalAndApplicationTypes(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(terminals) != 1 || terminals[0].Name != "国产终端" || terminals[0].AssetCount != 1 {
+	found := false
+	for _, terminal := range terminals {
+		if terminal.Name == "国产终端" && terminal.AssetCount == 1 {
+			found = true
+		}
+	}
+	if !found {
 		t.Fatalf("存量终端类型没有回填为可管理分类: %+v", terminals)
 	}
 	if len(applications) != 1 || applications[0].Name != "门户系统" || applications[0].AssetCount != 1 {
