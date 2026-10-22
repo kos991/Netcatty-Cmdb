@@ -6,8 +6,9 @@ on:
   push:
     tags: ["v*"]
 
+# 直接在构建任务里上传到 Release，不经过 Actions 制品存储，避免占用制品配额。
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   netcatty-windows:
@@ -80,32 +81,15 @@ jobs:
           Get-ChildItem -File | Where-Object { $_.Name -match '\.(exe|blockmap)$' -or $_.Name -eq 'latest.yml' } |
             ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
             Set-Content -Encoding utf8 SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
         with:
-          name: netcatty-cmdb-windows
-          path: |
+          files: |
             build/netcatty/release/*.exe
             build/netcatty/release/*.blockmap
             build/netcatty/release/latest.yml
             build/netcatty/release/SHA256SUMS.txt
-          if-no-files-found: error
-
-  publish:
-    name: Publish GitHub release
-    needs: [netcatty-windows]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-          merge-multiple: true
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-assets/*
+          fail_on_unmatched_files: true
           draft: false
           prerelease: false
           generate_release_notes: true
