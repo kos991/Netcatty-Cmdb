@@ -27,3 +27,13 @@ test("打包前输入扫描可拦截被压缩 Portable 掩盖的数据", () => {
     rmSync(directory, { force: true, recursive: true });
   }
 });
+
+test("发布目录出现任意数据库文件时拒绝打包", () => {
+  const directory = mkdtempSync(join(tmpdir(), "cmdb-release-database-"));
+  try {
+    writeFileSync(join(directory, "assets.db"), "unknown test rows");
+    assert.deepEqual(scanTargets([directory]).map(([ruleName]) => ruleName), ["database_file"]);
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});

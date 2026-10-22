@@ -7,7 +7,7 @@ Netcatty-CMDB 将本项目的 Go + SQLite CMDB 服务作为内置服务集成到
 [Netcatty](https://github.com/binaricat/Netcatty) 桌面客户端。Netcatty 保留 SSH、SFTP、终端和主机管理能力，
 Cmdb 提供设备资产统一查询、终端资产、基础设施、业务系统、组织架构、IPAM/IP、统计与履历和配置中心，直接复用 Netcatty 原生组件。
 
-当前版本：`1.0.20261022`（格式 `1.0.YYYYMMDD`，以 `VERSION` 为准）
+当前版本：`1.0.202610221542`（格式 `1.0.YYYYMMDDHHmm`，以 `VERSION` 为准）
 
 ## 集成结构
 
@@ -78,10 +78,10 @@ npm.cmd run build
 
 - `main` 只接受 PR 合并。每个修复或新功能单独开分支并提交 PR，按类型打 `fix` 或 `feature` 标签；PR 必须通过 CI。
 - 每次推送到 `main` 和每个 PR 都会运行：版本格式校验、原生界面数据测试、Go 全量测试与服务端构建、UOS/Kylin 探针及 Python CLI、固定 Netcatty 上游装配、服务生命周期与 Bridge 测试、Netcatty lint 与完整前端构建。
-- 发布：在 PR 中把 `VERSION` 和 `netcatty/package.json` 改为当天的 `1.0.YYYYMMDD`，合并后在 `main` 上打 `v1.0.YYYYMMDD` tag 并推送。同一天只发布一次。
-- tag 必须指向已合并到 `main` 的提交，否则 Release 失败。Release 只构建 Windows x64：NSIS 安装包、`latest.yml`、`.blockmap`、离线 Cmdb 补丁包 `Netcatty-Cmdb-patch-<版本>-win-x64.zip` 和 SHA-256 校验文件。不再发布便携版。
+- 发布：在 PR 中把 `VERSION` 和 `netcatty/package.json` 改为发布时的 `1.0.YYYYMMDDHHmm`，合并后在 `main` 上打同名 tag 并推送；同一天可多次发布。
+- tag 必须指向已合并到 `main` 的提交，否则 Release 失败。Release 只构建 Windows x64：完整安装包 `Netcatty-Cmdb-<版本>-win-x64.exe`、离线补丁图形安装器 `Netcatty-Cmdb-patch-<版本>-win-x64.exe` 和 SHA-256 校验文件。宿主应用版本保持上游 Netcatty 版本，文件名使用 Cmdb 版本。
 - Release 说明按自上个 tag 以来合并的 PR 自动汇总，分为“修复”“新功能”“其他变更”（见 `.github/release.yml`）。
-- 有网络时，客户端“检查更新”读取本仓库 Release，只下载与已装版本不同的部分（`.blockmap` 差分）。无网络或内网电脑用离线补丁包：只替换 `app.asar` 和 `resources/cmdb`，安装脚本要求本机宿主 Netcatty 的上游提交与补丁一致，不一致时拒绝安装。
+- 宿主“软件更新”只检查上游 Netcatty 并提示，不下载或安装上游官方包，防止覆盖 Cmdb。Cmdb 升级用完整安装包或补丁安装器；补丁只替换 `app.asar` 和 `resources/cmdb`，安装前校验本机宿主 Netcatty 的上游提交与补丁一致。两者都不修改 `%APPDATA%\netcatty` 中的用户数据。
 - 上游同步：`upstream-sync.yml` 每天检查上游 Netcatty 最新正式版本，有新版本时更新 `upstream.json`（含 mosh/et 版本）、尝试装配并开 PR，PR 正文写明装配是否成功。不会自动合并或发布；装配失败时需要在该分支上人工适配。
 
 ## 数据与功能边界

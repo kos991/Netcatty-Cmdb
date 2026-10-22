@@ -27,15 +27,9 @@ node scripts/start-native-preview.cjs
 
 ## 客户端升级契约
 
-`update/updateService.ts`、`update/useUpdateCheck.ts` 和 `electron/autoUpdateBridge.cjs` 是受控升级源码，装配器复制到宿主服务、状态与桥接模块。主进程 electron-updater 唯一决定版本适用性、NSIS 资源及哈希校验，所有窗口从主进程状态快照回读；renderer 不再直接请求 GitHub API、不猜测 exe 下载资源、不保留演示版本或第二套版本比较。并发检查共享同一结果，检查失败明确保留错误，不显示最新版。
+`update/updateService.ts`、`update/useUpdateCheck.ts` 和 `electron/autoUpdateBridge.cjs` 是受控升级源码，装配器复制到宿主服务、状态与桥接模块。宿主“软件更新”保留上游官方发布源 `binaricat/Netcatty`，只检查并提示上游新版本：electron-updater 的自动下载与退出时安装固定关闭，下载和安装 IPC 一律拒绝，界面上不提供下载、重启或前往下载入口，防止用不含 Cmdb 的上游官方安装包覆盖集成版。错误信息只显示简短原因，不展示响应头。`electron/autoUpdateBridge.test.cjs` 替换上游同名测试，覆盖上述约束。
 
-发布配置使用 `kos991/Netcatty-Cmdb`。Release 工作流只在 `main` 上的 `v1.0.YYYYMMDD` tag 触发，上传 Windows x64 NSIS、portable、latest.yml、blockmap 与 SHA256SUMS.txt。匿名 404 无法区分仓库不存在、私有或未发布，需发布方确认权限及资源完整性。
+Cmdb 集成版通过本仓库 Release 的完整安装包 `Netcatty-Cmdb-<版本>-win-x64.exe` 或离线补丁安装器 `Netcatty-Cmdb-patch-<版本>-win-x64.exe` 升级。宿主应用版本保持上游版本，只有文件名使用 Cmdb 版本。
 
-本地升级烟测先完成统一源码测试、lint、构建和 NSIS 打包，再执行：
-
-```powershell
-& build/netcatty/node_modules/electron/dist/electron.exe scripts/verify-netcatty-update.cjs build/netcatty build/netcatty/release/Netcatty-<VERSION>-win-x64.exe
-```
-
-烟测用独立临时用户目录与回环 HTTP 发布源，验证同版、404、坏元数据、并发检查、关闭自动下载、SHA512 拒绝及真实安装包下载就绪；不将本地发布源写入正式客户端。测试中仅元数据模拟高版本，安装包保持 VERSION 所指定版本，正式覆盖安装另行执行 `/S`。
+离线补丁安装器由 `scripts/build-cmdb-patch.mjs` 用 electron-builder 缓存中的 makensis 编译 `patch/cmdb-patch-installer.nsi`，辅助脚本 `patch/patch-helper.ps1` 负责查找安装目录、校验宿主上游提交与文件哈希、备份覆盖与失败恢复。只替换安装目录中的 `resources/app.asar` 与 `resources/cmdb/*`，不触碰 `%APPDATA%\netcatty` 用户数据。
 

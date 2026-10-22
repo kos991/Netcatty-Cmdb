@@ -7,7 +7,6 @@ import {
   patchSettingsPageWithCmdb,
   patchSettingsSystemTab,
   patchStartupUpdateAction,
-  patchUpdateRepositoryConfig,
   patchUpdateTranslations,
   patchUpdateConsumers,
 } from "./netcatty-update-integration.mjs";
@@ -17,7 +16,7 @@ import { patchAsidePanel } from "./netcatty-aside-panel-integration.mjs";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const integrationRoot = join(repositoryRoot, "integrations", "netcatty");
 const upstream = JSON.parse(readFileSync(join(integrationRoot, "upstream.json"), "utf8"));
-const netcattyVersion = String(upstream.release || "").replace(/^v/, "");
+
 const targetFlag = process.argv.indexOf("--target");
 const target = resolve(targetFlag >= 0 ? process.argv[targetFlag + 1] : "");
 
@@ -91,6 +90,8 @@ cpSync(join(integrationRoot, "electron", "cmdbAttachmentCloud.test.cjs"), join(t
 cpSync(join(integrationRoot, 'update', 'updateService.ts'), join(target, 'infrastructure', 'services', 'updateService.ts'));
 cpSync(join(integrationRoot, 'update', 'useUpdateCheck.ts'), join(target, 'application', 'state', 'useUpdateCheck.ts'));
 cpSync(join(integrationRoot, 'electron', 'autoUpdateBridge.cjs'), join(target, 'electron', 'bridges', 'autoUpdateBridge.cjs'));
+// 上游测试覆盖的下载/安装流程在集成版中已移除，换成集成版自己的升级桥测试。
+cpSync(join(integrationRoot, 'electron', 'autoUpdateBridge.test.cjs'), join(target, 'electron', 'bridges', 'autoUpdateBridge.test.cjs'));
 
 const cmdbMainBlock = `let cmdbService = null;
 let cmdbStartupError = null;
@@ -379,16 +380,17 @@ update("electron-builder.config.cjs", (source) => {
   );
 });
 
-for (const relativePath of ['components/SettingsApplicationTab.tsx', 'components/SettingsPage.tsx', 'application/app/AppSideEffects.tsx', 'application/app/useAppStartupEffects.ts', 'infrastructure/config/storageKeys.ts', 'types/global/netcatty-bridge-app.d.ts', 'application/app/strictModeIdempotency.test.ts', 'electron/bridges/autoUpdateBridge.test.cjs']) {
+for (const relativePath of ['components/SettingsApplicationTab.tsx', 'components/SettingsPage.tsx', 'application/app/AppSideEffects.tsx', 'application/app/useAppStartupEffects.ts', 'infrastructure/config/storageKeys.ts', 'types/global/netcatty-bridge-app.d.ts', 'application/app/strictModeIdempotency.test.ts']) {
   update(relativePath, source => patchUpdateConsumers(relativePath, source));
 }
-update("electron-builder.config.cjs", patchUpdateRepositoryConfig);
-update("components/SettingsApplicationTab.tsx", (source) => patchSettingsApplicationTab(source, netcattyVersion));
+update("components/SettingsApplicationTab.tsx", patchSettingsApplicationTab);
 update("components/SettingsPage.tsx", patchSettingsPageWithCmdb);
 for (const [relativePath, patch] of CMDB_SETTINGS_HOST_PATCHES) update(relativePath, patch);
 update("components/settings/tabs/SettingsSystemTab.tsx", patchSettingsSystemTab);
 update("application/app/useAppStartupEffects.ts", patchStartupUpdateAction);
-update("application/i18n/locales/zh-CN/core.ts", patchUpdateTranslations);
+for (const locale of ['en', 'es', 'ru', 'zh-CN', 'zh-TW']) {
+  update(`application/i18n/locales/${locale}/core.ts`, source => patchUpdateTranslations(source, locale));
+}
 
 update("eslint.config.js", (source) => replaceOnce(
   source,

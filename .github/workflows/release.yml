@@ -1,6 +1,6 @@
 name: Release
 
-# 发布只由 main 上合并后的 v1.0.YYYYMMDD tag 触发，只产出 Windows 集成客户端。
+# 发布只由 main 上合并后的 v1.0.YYYYMMDDHHmm tag 触发，只产出 Windows 集成客户端。
 # 发布说明按自上个 tag 以来合并的 PR 自动汇总（修复 / 新功能），见 .github/release.yml。
 on:
   push:
@@ -53,10 +53,11 @@ jobs:
           git clone --filter=blob:none $upstream.repository build/netcatty
           git -C build/netcatty checkout $upstream.commit
           node scripts/prepare-netcatty.mjs --target build/netcatty
-          $version = (Get-Content VERSION -Raw).Trim()
+          # 宿主应用版本保持上游 Netcatty 版本（“当前版本”与上游一致）；安装包文件名使用 Cmdb 版本。
+          $hostVersion = $upstream.release -replace '^v', ''
           Push-Location build/netcatty
           npm.cmd install
-          npm.cmd version $version --no-git-tag-version
+          npm.cmd version $hostVersion --no-git-tag-version --allow-same-version
           $env:MOSH_BIN_RELEASE = $upstream.moshRelease
           $env:ET_BIN_OWNER = $upstream.etOwner
           $env:ET_BIN_RELEASE = $upstream.etRelease
@@ -72,40 +73,38 @@ jobs:
             upstreamRelease = $upstream.release
             upstreamCommit = $upstream.commit
           } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM build/build-info.json
-      - name: Build Windows installer and update metadata
+      - name: Build Windows installer
         shell: pwsh
         working-directory: build/netcatty
         env:
           NETCATTY_CMDB_SERVER_SOURCE: ${{ github.workspace }}\build\cmdb-server.exe
           NETCATTY_CMDB_BUILD_INFO: ${{ github.workspace }}\build\build-info.json
         run: |
+          $version = (Get-Content ..\..\VERSION -Raw).Trim()
           npm.cmd run build
           node ..\..\scripts\check-release-data.mjs ..\cmdb-server.exe .
-          # 只发 NSIS：便携版不能自动升级，体积与安装包相同。
-          npx.cmd electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish=never
+          # 只发 NSIS 完整安装包；文件名用 Cmdb 版本，不生成 latest.yml（宿主更新只检查上游，不从本仓库自动升级）。
+          npx.cmd electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish=never "-c.artifactName=Netcatty-Cmdb-$version-win-x64.`${ext}"
       - name: Check Netcatty release data
         shell: pwsh
         run: node scripts/check-release-data.mjs build/netcatty/release
-      - name: Build offline Cmdb patch
+      - name: Build offline Cmdb patch installer
         shell: pwsh
         run: |
           $version = (Get-Content VERSION -Raw).Trim()
-          node scripts/build-cmdb-patch.mjs build/netcatty/release/win-unpacked build/build-info.json "build/netcatty/release/Netcatty-Cmdb-patch-$version-win-x64.zip"
+          node scripts/build-cmdb-patch.mjs build/netcatty/release/win-unpacked build/build-info.json "build/netcatty/release/Netcatty-Cmdb-patch-$version-win-x64.exe"
       - name: Generate checksums
         shell: pwsh
         working-directory: build/netcatty/release
         run: |
-          Get-ChildItem -File | Where-Object { $_.Name -match '\.(exe|blockmap|zip)$' -or $_.Name -eq 'latest.yml' } |
+          Get-ChildItem -File -Filter 'Netcatty-Cmdb-*.exe' |
             ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
             Set-Content -Encoding utf8 SHA256SUMS.txt
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/netcatty/release/*.exe
-            build/netcatty/release/*.blockmap
-            build/netcatty/release/*.zip
-            build/netcatty/release/latest.yml
+            build/netcatty/release/Netcatty-Cmdb-*.exe
             build/netcatty/release/SHA256SUMS.txt
           fail_on_unmatched_files: true
           draft: false

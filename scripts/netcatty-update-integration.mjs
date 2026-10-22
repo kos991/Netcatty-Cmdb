@@ -1,18 +1,6 @@
-const UPSTREAM_REPOSITORY = "binaricat/Netcatty";
-const PROJECT_REPOSITORY = "kos991/Netcatty-Cmdb";
-
-// 集成版客户端只从本仓库 Release 获取安装包和 latest.yml；指回上游会被替换成不含 Cmdb 的原版。
-export function patchUpdateRepositoryConfig(source) {
-  return source
-    .replaceAll(`api.github.com/repos/${UPSTREAM_REPOSITORY}/releases/latest`, `api.github.com/repos/${PROJECT_REPOSITORY}/releases/latest`)
-    .replaceAll(`github.com/${UPSTREAM_REPOSITORY}/releases`, `github.com/${PROJECT_REPOSITORY}/releases`)
-    .replaceAll("owner: 'binaricat'", "owner: 'kos991'")
-    .replaceAll("repo: 'Netcatty'", "repo: 'Netcatty-Cmdb'");
-}
-
-export function patchApplicationRepositoryLinks(source) {
-  return source.replaceAll("https://github.com/binaricat/Netcatty", "https://github.com/kos991/Netcatty-Cmdb");
-}
+// 宿主“软件更新”只检查上游 Netcatty 官方发布并提示，不下载、不安装：上游官方安装包不含 Cmdb，安装会覆盖集成版。
+// 因此不改写 electron-builder publish 配置和应用页的项目链接，宿主版本号保持上游版本。
+const INTEGRATED_UPDATE_NOTICE = "当前为 Netcatty-Cmdb 集成版，上游新版本需等待 Cmdb 集成版适配后，使用项目发布的安装包升级。";
 
 export function patchUpdateConsumers(path, source) {
   if (path.endsWith('SettingsApplicationTab.tsx')) {
@@ -23,7 +11,7 @@ export function patchUpdateConsumers(path, source) {
       .replace('    if (result?.hasUpdate && result.latestRelease) {', "    if (result?.error) {\n      toast.error(result.error);\n    } else if (result?.hasUpdate && result.latestRelease) {");
   }
   if (path.endsWith('SettingsPage.tsx')) return source.replace(', isUpdateDemoMode }', ' }').replace('                                isUpdateDemoMode={isUpdateDemoMode}\n', '');
-  if (path.endsWith('AppSideEffects.tsx')) return source.replace('updateState, dismissUpdate, installUpdate }', 'updateState, installUpdate, startDownload }').replace('    dismissUpdate,\n', '    startDownload,\n');
+  if (path.endsWith('AppSideEffects.tsx')) return source.replace('updateState, dismissUpdate, installUpdate }', 'updateState, installUpdate }').replace('    dismissUpdate,\n', '');
   if (path.endsWith('useAppStartupEffects.ts')) return source.replace('const {dismissUpdate, enabled = true,', 'const {enabled = true,');
   if (path.endsWith('storageKeys.ts')) return source.replace(/^export const STORAGE_KEY_UPDATE_DISMISSED_VERSION = .*\n/m, '').replace(/^export const STORAGE_KEY_UPDATE_LATEST_RELEASE = .*\n/m, '').replace(/^export const STORAGE_KEY_DEBUG_UPDATE_DEMO = .*\n/m, '');
   if (path.endsWith('netcatty-bridge-app.d.ts')) {
@@ -52,62 +40,68 @@ declare global {`).replace(/    getUpdateStatus\?\(\): Promise<\{[^\n]+\}>;/, ' 
 
 ` + source.slice(end);
   }
-  if (path.endsWith('autoUpdateBridge.test.cjs')) return source.replace('        updateInfo: {', '        isUpdateAvailable: true,\n        updateInfo: {').replace('      assert.deepEqual(await ipcMain.invoke("netcatty:update:getStatus"), {\n        status: "error",\n        percent: 100,\n        error: "authorization cancelled",\n        version: "1.1.18",\n        isChecking: false,\n      });', `      const status = await ipcMain.invoke("netcatty:update:getStatus");
-      assert.equal(status.status, 'error');
-      assert.equal(status.percent, 100);
-      assert.match(status.error, /authorization cancelled/);
-      assert.equal(status.version, '1.1.18');
-      assert.equal(status.isChecking, false);`);
   throw new Error(`Unknown update consumer: ${path}`);
 }
 
-export function patchUpdateTranslations(source) {
+export function patchUpdateTranslations(source, locale = 'en') {
+  const zh = locale === 'zh-CN';
+  const text = zh ? {
+    latest: '上游最新版本', date: '发布日期', notes: '更新说明', notice: INTEGRATED_UPDATE_NOTICE,
+    available: '上游 Netcatty {version} 已发布，等待 Cmdb 集成版适配。', hint: '从 Netcatty 官方 GitHub Releases 检查上游版本，仅作提示。',
+    auto: '启动时检查上游版本', autoDesc: '启动后检查上游 Netcatty 是否有新版本，只提示，不下载。', message: '上游 Netcatty {version} 已发布，等待 Cmdb 集成版适配后再升级。',
+  } : {
+    latest: 'Latest upstream version', date: 'Release date', notes: 'Release notes',
+    notice: 'This is the Netcatty-Cmdb integrated build. Upstream installers do not include Cmdb and are blocked. Wait for an adapted Cmdb release, then use its installer.',
+    available: 'Upstream Netcatty {version} is available. Wait for an adapted Cmdb release.', hint: 'Checks the official Netcatty GitHub Releases for information only.',
+    auto: 'Check upstream version at startup', autoDesc: 'Checks for upstream Netcatty releases at startup. It never downloads them.', message: 'Upstream Netcatty {version} is available. Wait for an adapted Cmdb release before upgrading.',
+  };
   return source
-    .replace("  'settings.update.currentVersion': '当前版本',", "  'settings.update.currentVersion': '当前版本',\n  'settings.update.latestVersion': '最新版本',\n  'settings.update.releaseDate': '发布日期',\n  'settings.update.releaseNotes': '更新说明',\n  'settings.update.upgradeTo': '升级到 {version}',\n  'settings.update.retry': '重新尝试',")
-    .replace("  'settings.update.hint': 'Netcatty 从 GitHub Releases 检查更新。',", "  'settings.update.hint': 'Netcatty 从官方 GitHub Releases 检查更新。',")
-    .replace("  'settings.update.manualDownloadHint': '当前平台不支持自动更新，请前往 GitHub 下载最新版本。',", "  'settings.update.manualDownloadHint': '当前平台不支持自动更新，请前往 Netcatty 发布页下载最新版本。',")
-    .replace("  'update.available.message': '新版本 {version} 已发布，点击前往下载。',", "  'update.available.message': '新版本 {version} 已发布，点击即可开始升级。',\n  'update.available.details': '当前版本 {currentVersion}，发布日期 {date}',\n  'update.upgradeTo': '升级到 {version}',")
-    .replace("  'update.downloadFailed.message': '下载更新失败，可前往 GitHub 手动下载。',", "  'update.downloadFailed.message': '下载更新失败，请重试或前往项目发布页手动下载。',");
+    .replace(/  'settings\.update\.currentVersion': ([^\n]+)\n/, (line) => `${line}  'settings.update.latestVersion': '${text.latest}',\n  'settings.update.releaseDate': '${text.date}',\n  'settings.update.releaseNotes': '${text.notes}',\n  'settings.update.integratedNotice': '${text.notice}',\n`)
+    .replace(/  'settings\.update\.available': '[^']*',/, `  'settings.update.available': '${text.available}',`)
+    .replace(/  'settings\.update\.hint': '[^']*',/, `  'settings.update.hint': '${text.hint}',`)
+    .replace(/  'settings\.update\.autoUpdateEnabled': '[^']*',/, `  'settings.update.autoUpdateEnabled': '${text.auto}',`)
+    .replace(/  'settings\.update\.autoUpdateEnabledDesc': '[^']*',/, `  'settings.update.autoUpdateEnabledDesc': '${text.autoDesc}',`)
+    .replace(/  'update\.available\.message': '[^']*',/, `  'update.available.message': '${text.message}',`);
 }
 
+// 启动通知只提示，点击打开设置；不提供下载入口。
 export function patchStartupUpdateAction(source) {
   source = source.replace(/\r\n/g, "\n");
-  const oldImport = "    hasRuntimeTunnel, installUpdate, isVaultInitialized, keys, knownHosts, openSettingsWindow, portForwardingRules, proxyProfiles, sessions, setKeyboardInteractiveQueue,";
-  const newImport = "    hasRuntimeTunnel, installUpdate, startDownload, isVaultInitialized, keys, knownHosts, openSettingsWindow, portForwardingRules, proxyProfiles, sessions, setKeyboardInteractiveQueue,";
-  if (!source.includes(oldImport)) throw new Error("启动更新入口导入锚点不存在");
-  let output = source.replace(oldImport, newImport);
-  const toastStart = output.indexOf("toast.info(\n        t('update.available.message', { version }),");
-  const newToast = `      const release = updateState.latestRelease;
-      const publishedAt = release.publishedAt ? new Date(release.publishedAt).toLocaleDateString() : '';
-      toast.info(
-        [
-          t('update.available.message', { version }),
-          t('update.available.details', { currentVersion: updateState.currentVersion || '-', date: publishedAt || '-' }),
-          release.body ? release.body.slice(0, 160) : '',
-        ].filter(Boolean).join('\\n'),
+  const toastStart = source.indexOf("toast.info(\n        t('update.available.message', { version }),");
+  const toastEnd = toastStart >= 0 ? source.indexOf("      );", toastStart) + "      );".length : -1;
+  if (toastStart < 0 || toastEnd < toastStart) throw new Error("启动更新通知锚点不存在");
+  const newToast = `toast.info(
+        t('update.available.message', { version }),
         {
           title: t('update.available.title'),
-          duration: 0,
-          onClick: () => { void startDownload(); },
-          actionLabel: t('update.upgradeTo', { version }),
+          duration: 8000,
+          onClick: () => { void openSettingsWindow(); },
+          actionLabel: t('update.viewInSettings'),
         }
       );`;
-  const toastEnd = toastStart >= 0 ? output.indexOf("      );", toastStart) + "      );".length : -1;
-  if (toastStart < 0 || toastEnd < toastStart) throw new Error("启动更新通知锚点不存在");
-  return (output.slice(0, toastStart) + newToast + output.slice(toastEnd)).replace(
-    "}, [enabled, updateState.hasUpdate, updateState.latestRelease, updateState.autoDownloadStatus, t, openSettingsWindow, dismissUpdate]);",
-    "}, [enabled, updateState.hasUpdate, updateState.latestRelease, updateState.autoDownloadStatus, updateState.currentVersion, t, startDownload]);",
-  );
+  const deps = "}, [enabled, updateState.hasUpdate, updateState.latestRelease, updateState.autoDownloadStatus, t, openSettingsWindow, dismissUpdate]);";
+  if (!source.includes(deps)) throw new Error("启动更新通知依赖锚点不存在");
+  return (source.slice(0, toastStart) + newToast + source.slice(toastEnd))
+    .replace(deps, "}, [enabled, updateState.hasUpdate, updateState.latestRelease, updateState.autoDownloadStatus, t, openSettingsWindow]);");
 }
 
-export function patchSettingsApplicationTab(source, netcattyVersion) {
-  const old = `const REPO_URL = "https://github.com/binaricat/Netcatty";`;
-  if (!source.includes(old)) throw new Error("应用设置仓库地址锚点不存在");
-  const versionDisplay = `{appInfo.version ? appInfo.version : " "}`;
-  if (!source.includes(versionDisplay)) throw new Error("应用设置版本号锚点不存在");
-  return source
-    .replace(old, `const REPO_URL = "https://github.com/kos991/Netcatty-Cmdb";`)
-    .replace(versionDisplay, `{appInfo.version ? "${netcattyVersion}" : " "}`);
+// 应用页：版本号保持宿主（上游）版本；去掉“立即下载 / 立即重启”徽章按钮，只显示上游新版本号。
+export function patchSettingsApplicationTab(source) {
+  source = source.replace(/\r\n/g, "\n");
+  const badgeStart = source.indexOf("                {/* Update badge - reflects auto-download state */}");
+  const closing = "                  </button>\n                )}\n";
+  const closingAt = badgeStart >= 0 ? source.indexOf(closing, badgeStart) : -1;
+  if (badgeStart < 0 || closingAt < 0) throw new Error("应用设置更新徽章锚点不存在");
+  const badgeEnd = closingAt + closing.length;
+  const badge = `                {/* 集成版只提示上游新版本，不提供下载或安装 */}
+                {updateState.hasUpdate && updateState.latestRelease && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300" title={t('settings.update.integratedNotice')}>
+                    <ArrowUpCircle size={12} />
+                    v{updateState.latestRelease.version}
+                  </span>
+                )}
+`;
+  return source.slice(0, badgeStart) + badge + source.slice(badgeEnd);
 }
 
 export function patchSettingsPageWithCmdb(source) {
@@ -188,37 +182,16 @@ export function patchSettingsSystemTab(source) {
                 </div>
               )}
 
-              {updateState.autoDownloadStatus === 'downloading' && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>{t('settings.update.downloading').replace('{percent}', String(updateState.downloadPercent))}</span>
-                    <span>{updateState.downloadPercent}%</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div className="h-full bg-primary transition-all duration-300" style={{ width: String(updateState.downloadPercent) + '%' }} />
-                  </div>
-                </div>
-              )}
-              {updateState.autoDownloadStatus === 'ready' && <p className="text-sm text-green-600 dark:text-green-400">{t('settings.update.readyToInstall')}</p>}
-              {updateState.autoDownloadStatus === 'error' && <p className="text-sm text-destructive">{updateState.downloadError || t('settings.update.error')}</p>}
-              {updateState.autoDownloadStatus === 'idle' && updateState.manualCheckStatus === 'up-to-date' && <p className="text-sm text-green-600 dark:text-green-400">{t('settings.update.upToDate')}</p>}
-              {updateState.autoDownloadStatus === 'idle' && updateState.hasUpdate && <p className="text-sm text-blue-600 dark:text-blue-400">{t('settings.update.available').replace('{version}', updateState.latestRelease?.version ?? '')}</p>}
+              {updateState.manualCheckStatus === 'up-to-date' && !updateState.hasUpdate && <p className="text-sm text-green-600 dark:text-green-400">{t('settings.update.upToDate')}</p>}
+              {updateState.hasUpdate && <p className="text-sm text-blue-600 dark:text-blue-400">{t('settings.update.available').replace('{version}', updateState.latestRelease?.version ?? '')}</p>}
               {updateState.manualCheckStatus === 'error' && <p className="text-sm text-destructive">{updateState.error || t('settings.update.error')}</p>}
+              <p className="text-xs text-muted-foreground">{t('settings.update.integratedNotice')}</p>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Button variant="outline" size="sm" onClick={() => void checkNow()} disabled={updateState.isChecking || updateState.manualCheckStatus === 'checking' || updateState.autoDownloadStatus === 'downloading'}>
+                <Button variant="outline" size="sm" onClick={() => void checkNow()} disabled={updateState.isChecking || updateState.manualCheckStatus === 'checking'}>
                   <RefreshCw size={14} className="mr-1.5" />
                   {updateState.isChecking ? t('settings.update.checking') : t('settings.update.checkForUpdates')}
                 </Button>
-                {updateState.hasUpdate && updateState.latestRelease && updateState.autoDownloadStatus === 'idle' && (
-                  <Button variant="default" size="sm" onClick={startDownload}>
-                    <Download size={14} className="mr-1.5" />
-                    {t('settings.update.upgradeTo', { version: 'v' + updateState.latestRelease.version })}
-                  </Button>
-                )}
-                {updateState.autoDownloadStatus === 'ready' && <Button variant="default" size="sm" onClick={installUpdate}><RotateCcw size={14} className="mr-1.5" />{t('settings.update.restartNow')}</Button>}
-                {updateState.autoDownloadStatus === 'error' && <Button variant="outline" size="sm" onClick={startDownload}><RefreshCw size={14} className="mr-1.5" />{t('settings.update.retry')}</Button>}
-                {(updateState.autoDownloadStatus === 'error' || updateState.manualCheckStatus === 'error') && <Button variant="ghost" size="sm" onClick={openReleasePage}><ExternalLink size={14} className="mr-1.5" />{t('settings.update.manualDownload')}</Button>}
               </div>
 
               <SettingRow anchorId="system-auto-update" label={t('settings.update.autoUpdateEnabled')} description={t('settings.update.autoUpdateEnabledDesc')}>
