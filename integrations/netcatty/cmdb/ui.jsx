@@ -142,17 +142,16 @@ export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = 
   const allSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row[rowKey]))
   const hasPinnedColumns = pinSelection || columns.some((column) => column.sticky)
   const selectionWidth = assetLayout ? 32 : pinSelection ? 40 : 36
+  const totalWeight = assetLayout ? columns.reduce((sum, column) => sum + (column.key === 'actions' ? 0 : column.width || 1), 0) : 0
   const actionWidth = columns.find(column => column.key === 'actions')?.width || 80
-  // 资产表按声明宽度固定列宽；空间不足时表格横向滚动，避免面板打开后把列压成竖排文字。
-  const assetTotalWidth = assetLayout ? selectionWidth + columns.reduce((sum, column) => sum + (column.width || 1), 0) : undefined
   const columnStyle = (column, index) => ({
-    ...(assetLayout ? { width: column.width || 1, minWidth: column.width || 1 } : column.width ? { width: column.width, minWidth: column.width } : {}),
+    ...(assetLayout ? { width: column.key === 'actions' ? actionWidth : `${((column.width || 1) / totalWeight * 100).toFixed(4)}%` } : column.width ? { width: column.width, minWidth: column.width } : {}),
     ...(column.sticky === 'left' ? { left: assetLayout ? (selectable ? selectionWidth : 0) : (selectable && pinSelection ? selectionWidth : 0) + columns.slice(0, index).filter((item) => item.sticky === 'left').reduce((sum, item) => sum + item.width, 0) } : {}),
     ...(column.sticky === 'right' ? { right: assetLayout ? (column.key === 'actions' ? 0 : actionWidth) : columns.slice(index + 1).filter((item) => item.sticky === 'right').reduce((sum, item) => sum + item.width, 0) } : {}),
   })
   const tight = dense && !assetLayout
   return <div className={cn('min-h-0 min-w-0 flex-1 overflow-auto', assetLayout && 'cmdb-asset-table-viewport')}>
-    <table style={assetLayout ? { minWidth: assetTotalWidth } : undefined} className={cn('w-full text-left text-[12px]', assetLayout && 'cmdb-asset-table table-fixed', hasPinnedColumns ? 'border-separate border-spacing-0' : 'border-collapse', compact && !assetLayout ? 'table-fixed' : !assetLayout ? 'min-w-[760px]' : '')}>
+    <table className={cn('w-full text-left text-[12px]', assetLayout && 'cmdb-asset-table table-fixed', hasPinnedColumns ? 'border-separate border-spacing-0' : 'border-collapse', compact && !assetLayout ? 'table-fixed' : !assetLayout ? 'min-w-[760px]' : '')}>
       <thead className={cn('sticky top-0 z-20 bg-background text-[11px] text-muted-foreground')}>
         <tr className="border-b border-border/30">
           {selectable ? <th style={{ width: selectionWidth, minWidth: selectionWidth }} className={cn('px-3 py-1', hasPinnedColumns && 'border-b border-border/30', pinSelection && 'sticky left-0 z-10 bg-background')}><input type="checkbox" aria-label="选择全部" checked={allSelected} onChange={(event) => onSelectedChange(event.target.checked ? rows.map((row) => row[rowKey]) : [])} /></th> : null}
