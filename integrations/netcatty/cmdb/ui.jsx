@@ -142,6 +142,7 @@ export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = 
   const allSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row[rowKey]))
   const hasPinnedColumns = pinSelection || columns.some((column) => column.sticky)
   const selectionWidth = assetLayout ? 32 : pinSelection ? 40 : 36
+  const actionWidth = columns.find(column => column.key === 'actions')?.width || 80
   // 资产表按声明宽度固定列宽；空间不足时表格横向滚动，避免面板打开后把列压成竖排文字。
   const assetTotalWidth = assetLayout ? selectionWidth + columns.reduce((sum, column) => sum + (column.width || 1), 0) : undefined
   const columnStyle = (column, index) => ({
