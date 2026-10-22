@@ -76,13 +76,13 @@ jobs:
           commit=$(node -p "require('./integrations/netcatty/upstream.json').commit")
           git clone --filter=blob:none "$repository" build/netcatty
           git -C build/netcatty checkout "$commit"
-      - name: Verify native UI assembly
-        run: node --test scripts/prepare-netcatty.test.mjs
       - name: Apply CMDB integration
         run: node scripts/prepare-netcatty.mjs --target build/netcatty
       - name: Install Netcatty dependencies
         working-directory: build/netcatty
         run: npm install --ignore-scripts
+      - name: Verify native UI assembly (needs esbuild from Netcatty deps)
+        run: node --test scripts/prepare-netcatty.test.mjs
       - name: Verify service lifecycle and native bridge
         working-directory: build/netcatty
         run: node --test electron/cmdbService.test.cjs electron/bridges/cmdbBridge.test.cjs
