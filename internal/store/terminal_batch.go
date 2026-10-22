@@ -10,6 +10,7 @@ import (
 type TerminalAssetChanges struct {
 	GroupID    *int64  `json:"group_id"`
 	DeviceType *string `json:"device_type"`
+	Model      *string `json:"model"`
 	OSType     *string `json:"os_type"`
 	OSVersion  *string `json:"os_version"`
 	Status     *string `json:"status"`
@@ -52,6 +53,7 @@ func (s *Store) BatchUpdateTerminalAssetsForProject(scope ProjectScope, ids []in
 		value      *string
 	}{
 		{"device_type", "设备分类", changes.DeviceType},
+		{"model", "型号", changes.Model},
 		{"os_type", "操作系统", changes.OSType},
 		{"os_version", "系统版本", changes.OSVersion},
 		{"status", "设备状态", changes.Status},

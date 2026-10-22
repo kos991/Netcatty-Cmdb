@@ -144,7 +144,7 @@ function AssetDetails({ id, host, onEdit, onArchive, onClose, onNetcattyChanged,
       ['设备类型', asset.device_type || '-'],
       [serial.primaryLabel, serial.primaryValue || '-'],
       ...(serial.secondaryValue ? [[serial.secondaryLabel, serial.secondaryValue]] : []),
-      ...terminalBrandFields(asset.device_type).map(({ key, label }) => [label, key === 'vendor' ? <VendorBrandValue value={asset.vendor} model={asset.model} /> : asset[key]]),
+      ...terminalBrandFields(asset.device_type).map(({ key, label }) => [label, key === 'vendor' ? (asset.vendor ? <VendorBrandValue value={asset.vendor} /> : '未配置') : asset[key]]),
       ...terminalHardwareFields(asset.device_type).filter(({ key }) => !['vendor', 'model'].includes(key)).map(({ key, label }) => [label, asset[key]]),
       ['设备状态', asset.status || '-'],
       ['建档时间', asset.created_at || '-'],
@@ -519,20 +519,12 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
 
   const columns = [
     {
-      key: 'asset_code', label: '名称 / 编码 / SN', headerTitle: '设备名称 / 资产编号 / 设备SN', width: 190, sticky: 'left', className: 'whitespace-nowrap', headerClassName: 'cmdb-asset-identity-header',
-      render: (value, row) => {
+      key: 'asset_code', label: '设备名称 / SN', headerTitle: '设备名称 / SN', width: 220, sticky: 'left', className: 'whitespace-nowrap', headerClassName: 'cmdb-asset-identity-header',
+      render: (_, row) => {
         const name = (row.asset_name || '').trim()
-        const code = (value || '').trim()
-        const serial = terminalSerialProfile(row)
-        const boxSN = (serial.primaryValue || '').trim()
-        const displaySN = (serial.secondaryValue || '').trim()
-        const serialValue = boxSN || displaySN
-        const title = name || code || serialValue || '未命名设备'
-        // 首行已展示名称或编号时，副行不再重复编号；无名称时编号即首行，副行只保留 SN。
-        const lines = name
-          ? [code && code !== title ? code : '', serialValue].filter(Boolean)
-          : [serialValue].filter(Boolean)
-        const subtitle = lines.length ? lines.join(' · ') : '未配置 SN'
+        const serialValue = (row.box_sn || '').trim()
+        const title = name || '未命名设备'
+        const subtitle = serialValue || '未配置 SN'
         return <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">
             <Button type="button" variant="link" title={title} className="h-auto min-w-0 max-w-full justify-start truncate whitespace-nowrap p-0 text-left text-xs font-semibold" onClick={() => setDetailId(row.id)}>{title}</Button>
@@ -547,15 +539,15 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
       render: (value) => value || '未配置',
     },
     {
-      key: 'vendor_model', label: '品牌 / 型号', width: 140, className: 'whitespace-nowrap',
-      render: (_, row) => <div className="min-w-0 truncate text-xs"><VendorBrandValue value={row.vendor} model={row.model} compact /></div>,
+      key: 'vendor_model', label: '品牌 / 型号', width: 165, className: 'whitespace-nowrap',
+      render: (_, row) => <VendorBrandValue value={row.vendor} model={row.model} stacked className="text-xs" />,
     },
     {
       key: 'owner_department', label: '使用人 / 部门', width: 140, className: 'whitespace-nowrap',
       render: (_, row) => <div className="min-w-0 text-xs"><div className="truncate" title={row.user_name || '未分配使用人'}>{row.user_name || '未分配使用人'}</div><div className="mt-1 truncate text-[10px] leading-[1.45] text-muted-foreground" title={formatDepartmentName(row.department) || '未配置部门'}>{formatDepartmentName(row.department) || '未配置部门'}</div></div>,
     },
     {
-      key: 'room', label: '房间 / 位置', width: 90, className: 'whitespace-nowrap text-xs',
+      key: 'room', label: '房间号', width: 80, className: 'whitespace-nowrap text-xs',
       render: (value) => <span className="block truncate" title={value || '未配置'}>{value || '未配置'}</span>,
     },
     {
@@ -564,9 +556,9 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     },
     {
       key: 'network_type', label: '网络类型', width: 85, className: 'whitespace-nowrap',
-      render: (_, row) => <span className="block truncate text-xs text-muted-foreground">{terminalBusinessNetworkType(row)}</span>,
+      render: (_, row) => <span title={terminalBusinessNetworkType(row)} className="block truncate text-xs text-muted-foreground">{terminalBusinessNetworkType(row)}</span>,
     },
-    { key: 'operating_system', label: '操作系统', width: 110, className: 'whitespace-nowrap', render: (_, row) => <OperatingSystemCell asset={row} host={linkedHostByAssetID.get(Number(row.id))} /> },
+    { key: 'operating_system', label: '操作系统', width: 145, className: 'whitespace-nowrap', render: (_, row) => <OperatingSystemCell asset={row} host={linkedHostByAssetID.get(Number(row.id))} /> },
     { key: 'status', label: '设备状态', width: 80, sticky: 'right', className: 'whitespace-nowrap', render: (value) => <StatusPill tone={value === '闲置' ? 'warning' : statusTone(value)}>{value || '未配置'}</StatusPill> },
     { key: 'actions', label: '操作', width: 80, sticky: 'right', className: 'whitespace-nowrap', render: (_, row) => <AssetRowActions name={row.asset_name || row.asset_code || ''} onDetail={() => setDetailId(row.id)} onEdit={() => open('edit', row)} onTransfer={() => open('transfer', row)} onMaintenance={() => open('maintenance', row)} onArchive={() => setArchive(row)} /> },
   ]
@@ -601,7 +593,7 @@ export default function TerminalAssets({ keyword = '', focusTarget, command, lea
     </> : <AssetFormPanel active section="basic"><AssetPanelSection title={editorMode === 'transfer' ? '交接信息' : '维修记录'} icon={Monitor}><Fields fields={fields} value={values} onChange={setValues} /></AssetPanelSection></AssetFormPanel>}
   </> : null
 
-  return <div className="cmdb-asset-page flex min-h-0 min-w-0 flex-1 flex-col">
+  return <div className="cmdb-asset-page cmdb-terminal-assets flex min-h-0 min-w-0 flex-1 flex-col">
 
     {headerActions && createPortal(<><AssetFilterPicker expanded={filtersExpanded} onExpandedChange={onFiltersExpandedChange} items={filterItems} visible={visibleFilters} onToggle={toggleFilter} /><AssetTransferMenu importTitle="导入终端资产" importer={api.importAssets} onImported={query.reload} exporter={() => api.exportAssets({ keyword, ...filters })} /></>, headerActions)}
 

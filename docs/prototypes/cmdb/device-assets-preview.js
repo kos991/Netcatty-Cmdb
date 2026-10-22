@@ -148,7 +148,9 @@
   function sizeColumns() {
     const columns = pages[state.view].columns;
     const total = columns.reduce((sum, column) => sum + column.width, 0);
-    const available = document.querySelector('.asset-table-wrap').clientWidth - 112;
+    const wrap = document.querySelector('.asset-table-wrap');
+    wrap.dataset.view = state.view;
+    const available = Math.max(wrap.clientWidth, state.view === 'terminal' ? total + 112 : 0) - 112;
     columns.forEach((column, index) => {
       byId('asset-colgroup').children[index + 1].style.width = (available * column.width / total) + 'px';
     });
@@ -222,6 +224,25 @@
           cell.append(netcattyBrowserUrl(value));
         } else if (['ip', 'mgmt_ip', 'biz_ip', 'service_ip'].includes(column.key)) {
           cell.append(netcattyAddress(row[column.key], column.key === 'ip' && row.physical_ip ? '业务 ' : column.key === 'mgmt_ip' ? '管理 ' : ''));
+        } else if (state.view === 'terminal' && ['vendor_model', 'os'].includes(column.key)) {
+          const stack = element('span', 'asset-terminal-stack');
+          const logos = window.assetPrototypeLogos;
+          const logo = column.key === 'vendor_model' ? logos?.vendor(row.vendor) : logos?.operatingSystem(row.os);
+          const icon = element('span', 'asset-terminal-icon');
+          if (logo) icon.append(logo);
+          const lines = element('span', 'asset-terminal-lines');
+          const primaryText = text(column.key === 'vendor_model' ? row.vendor || row.model : row.os);
+          const primary = element('span', 'asset-primary', primaryText);
+          primary.title = primaryText;
+          lines.append(primary);
+          if (column.key === 'vendor_model' && row.vendor && row.model) {
+            const model = element('span', 'asset-secondary', row.model);
+            model.title = row.model;
+            lines.append(model);
+          }
+          if (column.key === 'os' || logo) stack.append(icon);
+          stack.append(lines);
+          cell.append(stack);
         } else {
           const primary = element('span', 'asset-primary' + (/ip$/i.test(column.key) ? ' asset-ip' : ''), value);
           primary.title = value;
@@ -243,7 +264,8 @@
             : element('span', 'asset-secondary', secondaryText);
           secondary.classList.add('asset-secondary');
           secondary.title = secondaryText;
-          cell.append(secondary);
+          const lines = cell.querySelector('.asset-terminal-lines');
+          (lines || cell).append(secondary);
         }
         tr.append(cell);
       }

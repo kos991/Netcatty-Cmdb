@@ -145,7 +145,7 @@ export function DataTable({ columns, rows = [], rowKey = 'id', loading, empty = 
   const totalWeight = assetLayout ? columns.reduce((sum, column) => sum + (column.key === 'actions' ? 0 : column.width || 1), 0) : 0
   const actionWidth = columns.find(column => column.key === 'actions')?.width || 80
   const columnStyle = (column, index) => ({
-    ...(assetLayout ? { width: column.key === 'actions' ? actionWidth : `calc(${((column.width || 1) / totalWeight * 100).toFixed(4)}% - ${((column.width || 1) / totalWeight * (actionWidth + (selectable ? selectionWidth : 0))).toFixed(4)}px)` } : column.width ? { width: column.width, minWidth: column.width } : {}),
+    ...(assetLayout ? { width: column.key === 'actions' ? actionWidth : `${((column.width || 1) / totalWeight * 100).toFixed(4)}%` } : column.width ? { width: column.width, minWidth: column.width } : {}),
     ...(column.sticky === 'left' ? { left: assetLayout ? (selectable ? selectionWidth : 0) : (selectable && pinSelection ? selectionWidth : 0) + columns.slice(0, index).filter((item) => item.sticky === 'left').reduce((sum, item) => sum + item.width, 0) } : {}),
     ...(column.sticky === 'right' ? { right: assetLayout ? (column.key === 'actions' ? 0 : actionWidth) : columns.slice(index + 1).filter((item) => item.sticky === 'right').reduce((sum, item) => sum + item.width, 0) } : {}),
   })

@@ -48,7 +48,7 @@ const VENDOR_LOGOS = {
 }
 
 function SystemIcon({ presentation }) {
-  if (['vmware', 'proxmox', 'nutanix', 'smartx', 'zstack', 'openstack', 'hyperv', 'citrix', 'virtualbox', 'kvm', 'kylin', 'uos', 'fangde'].includes(presentation.distro)) return <span data-os-icon={presentation.distro}><VendorBrandIcon brand={presentation.distro} /></span>
+  if (['vmware', 'proxmox', 'nutanix', 'smartx', 'zstack', 'openstack', 'hyperv', 'citrix', 'virtualbox', 'kvm', 'kylin', 'uos', 'fangde'].includes(presentation.distro)) return <span className="flex h-5 w-5 shrink-0 items-center justify-center" data-os-icon={presentation.distro}><VendorBrandIcon brand={presentation.distro} /></span>
   if (presentation.distro === 'hyperconverged') return <span aria-hidden data-os-icon="hyperconverged" className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-muted text-muted-foreground"><Boxes size={12} /></span>
   const vendorLogo = VENDOR_LOGOS[presentation.distro]
   if (vendorLogo) return <span aria-hidden data-os-icon={presentation.distro} className="grid h-5 w-5 shrink-0 place-items-center overflow-hidden rounded-[5px] border border-border/60 bg-white"><img src={vendorLogo} alt="" className="h-4 w-4 object-contain" /></span>
@@ -63,9 +63,9 @@ export default function OperatingSystemCell({ asset = {}, host = null, compact =
   const presentation = resolveOperatingSystemPresentation(asset, host)
   return <div className={`flex min-w-0 items-center gap-2 ${hideIcon ? 'pl-7' : ''}`} title={presentation.label} data-os-distro={presentation.distro}>
     {!hideIcon ? <SystemIcon presentation={presentation} /> : null}
-    <div className="min-w-0 leading-tight">
-      <p className="truncate text-xs">{compact ? shortOperatingSystemLabel(presentation.name, presentation.version) : presentation.name}</p>
-      {!compact && presentation.version ? <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{presentation.version}</p> : null}
+    <div className="min-w-0 leading-[1.45]">
+      <p className="truncate text-xs" title={presentation.name}>{compact ? shortOperatingSystemLabel(presentation.name, presentation.version) : presentation.name}</p>
+      {!compact && presentation.version ? <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground" title={presentation.version}>{presentation.version}</p> : null}
     </div>
   </div>
 }

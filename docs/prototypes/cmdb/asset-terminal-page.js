@@ -30,8 +30,11 @@
     const row = { id: 'terminal-example-' + String(index + 1).padStart(2, '0'), code: 'TERM-EXAMPLE-' + String(index + 1).padStart(3, '0'), sn: 'SN-EXAMPLE-TERM-' + String(index + 1).padStart(3, '0'), physical_ip: '', display_sn: '', os_version: '示例版本', remark: '仅为设计原型示例，不对应真实资产。', ...record };
     if (computer(row)) Object.assign(row, hardwareExamples[row.type]);
     row.vendor_model = [row.vendor, row.model].filter(Boolean).join(' / ');
-    if (cloud(row)) row.display_sn = 'SN-EXAMPLE-DISPLAY-' + String(index + 1).padStart(3, '0');
-    row.serial_summary = row.code + ' · ' + row.sn;
+    if (cloud(row)) {
+      row.box_sn = row.sn;
+      delete row.sn;
+      row.display_sn = 'SN-EXAMPLE-DISPLAY-' + String(index + 1).padStart(3, '0');
+    }
     row.relations = row.ip ? [{ label: 'IP 地址池', value: row.ip + '（示例）', href: 'network-preview.html' }] : [];
     row.history = [{ date: '2026-09-01', title: '示例入库', text: row.code + ' 登记为' + row.type + '。' }, { date: '2026-10-01', title: row.status === '已注销' ? '示例注销' : '示例资料更新', text: '保留设备资料及历史记录；此处仅展示履历样式。' }];
     return row;
@@ -41,14 +44,14 @@
     label: '终端资产',
     rows,
     columns: [
-      { key: 'name', label: '名称 / 编码 / SN', headerTitle: '设备名称 / 资产编号 / 设备SN', width: 190, kind: 'asset', secondary: 'serial_summary' },
+      { key: 'name', label: '设备名称 / SN', headerTitle: '设备名称 / SN', width: 210, kind: 'asset', secondary: 'box_sn' },
       { key: 'type', label: '设备类型', width: 90 },
-      { key: 'vendor_model', label: '品牌 / 型号', width: 140 },
+      { key: 'vendor_model', label: '品牌 / 型号', width: 160 },
       { key: 'person', label: '使用人 / 部门', width: 140, secondary: 'department' },
-      { key: 'room', label: '房间 / 位置', width: 90 },
+      { key: 'room', label: '房间号', width: 90 },
       { key: 'ip', label: 'IP 地址', width: 145, secondary: 'physical_ip' },
       { key: 'network', label: '网络类型', width: 85 },
-      { key: 'os', label: '操作系统', width: 110 },
+      { key: 'os', label: '操作系统', width: 140, secondary: 'os_version' },
       { key: 'status', label: '设备状态', width: 80, kind: 'status' },
     ],
     filters: [{ key: 'type', label: '设备类型' }, { key: 'department', label: '部门' }, { key: 'status', label: '设备状态' }, { key: 'network', label: '网络类型' }],
@@ -57,7 +60,7 @@
         { key: 'name', label: '设备名称' }, { key: 'code', label: '资产编号' },
         { key: 'type', label: '设备类型', kind: 'select', options: ['云桌面', '云桌面盒子', '云盒', '台式机', '笔记本', '一体机', '打印机'], required: true },
         { key: 'sn', label: '设备 SN', when: (row) => !cloud(row) },
-        { key: 'sn', label: '终端主机 SN', when: cloud }, { key: 'display_sn', label: '显示器 SN', when: cloud },
+        { key: 'box_sn', label: '终端主机 SN', when: cloud }, { key: 'display_sn', label: '显示器 SN', when: cloud },
         { key: 'status', label: '设备状态', kind: 'select', options: ['使用', '闲置', '维修中', '已注销'] },
       ] },
       { title: '硬件信息', fields: [
