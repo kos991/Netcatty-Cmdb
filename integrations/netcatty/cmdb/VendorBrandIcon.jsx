@@ -90,13 +90,16 @@ export function VendorBrandIcon({ value = '', context = {}, brand: explicitBrand
   return <span aria-hidden data-vendor-brand={brand} title={vendorBrandLabel(brand)} className={`grid shrink-0 place-items-center overflow-hidden border border-border/60 bg-white ${dimensions} ${className}`}><img src={src} alt="" className={`${imageSize} object-contain`} /></span>
 }
 
-export function VendorBrandValue({ value = '', model = '', className = '', compact = false }) {
+export function VendorBrandValue({ value = '', model = '', className = '', compact = false, stacked = false }) {
   const brand = String(value || '').trim()
   const modelText = String(model || '').trim()
   const dedupedModel = brand && modelText.startsWith(brand) ? modelText.slice(brand.length).trim() : modelText
   const text = [brand, dedupedModel].filter(Boolean).join(' ')
   return <div className={`flex min-w-0 items-center gap-2 ${className}`} title={text || undefined}>
     <VendorBrandIcon value={value} context={{ model }} />
-    <span className="truncate">{(compact ? shortModelLabel(brand, modelText) : text) || '-'}</span>
+    {stacked ? <div className="min-w-0 leading-[1.45]">
+      <p className="truncate" title={brand || undefined}>{brand || '-'}</p>
+      <p className="mt-0.5 truncate text-[10px] text-muted-foreground" title={modelText || undefined}>{modelText || '-'}</p>
+    </div> : <span className="truncate">{(compact ? shortModelLabel(brand, modelText) : text) || '-'}</span>}
   </div>
 }

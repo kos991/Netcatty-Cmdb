@@ -57,7 +57,7 @@
   height: 28px;
 }
 
-/* 首列表头使用短名并保留完整名称悬停提示；不截断，避免“名称 / 编码 / SN”显示成省略号。 */
+/* 首列表头完整显示业务名称，列宽与表头同步，保留悬停提示。 */
 .cmdb-device-assets .cmdb-asset-table th.cmdb-asset-identity-header {
   overflow: visible;
   text-overflow: clip;
@@ -73,6 +73,18 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.cmdb-terminal-assets .cmdb-asset-table td {
+  height: 58px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  vertical-align: middle;
+}
+
+.cmdb-terminal-assets .cmdb-asset-table th {
+  height: 40px;
+  vertical-align: middle;
 }
 
 .cmdb-asset-page {

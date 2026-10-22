@@ -65,6 +65,40 @@ func TestTerminalAssetBatchUpdatesOnlySelectedAttributes(t *testing.T) {
 	}
 }
 
+func TestTerminalAssetBatchModelPreservesOtherFields(t *testing.T) {
+	_, st, mux := newLegacyHandlerTestServer(t)
+	id, err := st.CreateAsset(&store.Asset{AssetCode: "MODEL-ONLY", DeviceType: "云桌面终端", Vendor: "深信服", Model: "旧型号", IP: "10.20.30.20", TerminalIP: "10.20.31.20", DisplaySN: "DISPLAY", OSVersion: "保留版本", Status: "在用"}, "测试")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SyncLegacyToCmdb(); err != nil {
+		t.Fatal(err)
+	}
+	before, _, err := st.GetAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	body := fmt.Sprintf(`{"ids":[%d],"changes":{"model":"aDesk-STD-200"}}`, id)
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/assets/batch", bytes.NewBufferString(body)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("型号补丁失败: %d %s", rec.Code, rec.Body.String())
+	}
+	after, _, err := st.GetAsset(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before.Model = "aDesk-STD-200"
+	before.UpdatedAt = after.UpdatedAt
+	if *before != *after {
+		t.Fatalf("型号补丁覆盖其他字段: before=%+v after=%+v", before, after)
+	}
+	pool, _, err := st.QueryCmdbAssets(store.CmdbAssetQuery{Keyword: "MODEL-ONLY", Page: 1, PageSize: 20})
+	if err != nil || len(pool) != 1 || pool[0].Model != "aDesk-STD-200" || pool[0].Vendor != "深信服" {
+		t.Fatalf("镜像型号或品牌不正确: %+v err=%v", pool, err)
+	}
+}
+
 func TestTerminalAssetBatchRejectsOtherProjectAssets(t *testing.T) {
 	s, st, mux := newLegacyHandlerTestServer(t)
 	_, scopeA := createHTTPTestProject(t, s, "batch-a")
