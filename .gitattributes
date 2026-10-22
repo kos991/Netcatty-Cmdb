@@ -1,0 +1,5 @@
+# Windows 补丁脚本必须是 CRLF：cmd.exe 解析 LF 批处理会出错，PowerShell 5.1 也按 CRLF 处理。
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+integrations/netcatty/patch/README.txt text eol=crlf

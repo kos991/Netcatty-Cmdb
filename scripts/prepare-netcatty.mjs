@@ -347,9 +347,13 @@ const fs = require('node:fs');
 function cmdbExtraResources(targetPlatform) {
     const executableName = targetPlatform === 'win32' ? 'cmdb-server.exe' : 'cmdb-server';
     const source = process.env.NETCATTY_CMDB_SERVER_SOURCE || null;
-    return source && fs.existsSync(source)
+    const resources = source && fs.existsSync(source)
         ? [{ from: source, to: \`cmdb/\${executableName}\` }]
         : [];
+    // build-info.json 记录本安装包对应的上游 Netcatty 提交，离线补丁据此拒绝装到不匹配的客户端上。
+    const buildInfo = process.env.NETCATTY_CMDB_BUILD_INFO || null;
+    if (buildInfo && fs.existsSync(buildInfo)) resources.push({ from: buildInfo, to: 'cmdb/build-info.json' });
+    return resources;
 }
 `;
 
