@@ -46,6 +46,19 @@ node scripts/start-acceptance-preview.cjs --seed
 
 重新灌数据：先退出客户端，再执行 `node scripts/seed-acceptance-data.cjs`（会从基线重建数据库，可重复执行）。
 
+### 云桌面品牌型号与系统版本回归
+
+在隔离测试客户端已启动并开放调试端口后运行（禁止连接正式 profile）：
+
+```powershell
+$env:NETCATTY_SMOKE_PLAYWRIGHT = 'C:/Users/Public/pwtemp/node_modules/playwright/test' # 改为本机 playwright/test 实际路径
+$env:NETCATTY_SMOKE_DEBUG_URL = 'http://127.0.0.1:9254'
+$env:NETCATTY_SMOKE_DATA = "$PWD/build/native-ui-preview" # 必须与隔离服务数据目录一致
+node scripts/verify-native-terminal-fields.mjs
+```
+
+脚本先核对隔离存储路径且云同步关闭，再新增明确标记的验收云桌面，实际录入品牌、型号、统信 UOS 和版本；切换基本/硬件/网络页签后保存，API 与重新打开编辑均回读校验，并保存草稿和保存后截图。仅写隔离数据库；不连接真实主机，不为真实终端推测品牌、型号或版本。
+
 ## 三、验收项
 
 ### 1. 终端资产硬件信息（本轮重点）
