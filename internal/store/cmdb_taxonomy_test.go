@@ -6,6 +6,10 @@ func TestCmdbTaxonomyCRUDAllKinds(t *testing.T) {
 	s := newCmdbTestStore(t)
 
 	for _, kind := range []string{"orgs", "groups", "categories"} {
+		baseline, err := s.ListCmdbTaxonomy(kind)
+		if err != nil {
+			t.Fatalf("[%s] 读取既有节点失败: %v", kind, err)
+		}
 		id, err := s.CreateCmdbTaxonomy(kind, "一级节点", 0, 1)
 		if err != nil {
 			t.Fatalf("[%s] 新增失败: %v", kind, err)
@@ -19,8 +23,14 @@ func TestCmdbTaxonomyCRUDAllKinds(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%s] 查询失败: %v", kind, err)
 		}
-		if len(list) != 2 {
-			t.Fatalf("[%s] 应有 2 个节点，实际 %d", kind, len(list))
+		created := map[int64]bool{}
+		for _, item := range list {
+			if item.ID == id || item.ID == child {
+				created[item.ID] = true
+			}
+		}
+		if !created[id] || !created[child] {
+			t.Fatalf("[%s] 新建的父子节点未同时出现在目录中: %+v", kind, list)
 		}
 
 		// 重命名
@@ -52,8 +62,21 @@ func TestCmdbTaxonomyCRUDAllKinds(t *testing.T) {
 		if err := s.DeleteCmdbTaxonomy(kind, id); err != nil {
 			t.Fatalf("[%s] 删除父节点失败: %v", kind, err)
 		}
-		if list, _ := s.ListCmdbTaxonomy(kind); len(list) != 0 {
-			t.Fatalf("[%s] 删除后应为空，实际 %d", kind, len(list))
+		list, err = s.ListCmdbTaxonomy(kind)
+		if err != nil {
+			t.Fatalf("[%s] 删除后读取目录失败: %v", kind, err)
+		}
+		remaining := map[int64]bool{}
+		for _, item := range list {
+			if item.ID == id || item.ID == child {
+				t.Fatalf("[%s] 已删除节点仍出现在目录中: %+v", kind, item)
+			}
+			remaining[item.ID] = true
+		}
+		for _, item := range baseline {
+			if !remaining[item.ID] {
+				t.Fatalf("[%s] 删除新节点时误删既有节点: %+v", kind, item)
+			}
 		}
 	}
 }

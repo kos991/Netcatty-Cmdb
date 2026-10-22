@@ -7,7 +7,7 @@ Netcatty-CMDB 将本项目的 Go + SQLite CMDB 服务作为内置服务集成到
 [Netcatty](https://github.com/binaricat/Netcatty) 桌面客户端。Netcatty 保留 SSH、SFTP、终端和主机管理能力，
 Cmdb 提供设备资产统一查询、终端资产、基础设施、业务系统、组织架构、IPAM/IP、统计与履历和配置中心，直接复用 Netcatty 原生组件。
 
-当前版本：`1.3.0`
+当前版本：`1.0.20261022`（格式 `1.0.YYYYMMDD`，以 `VERSION` 为准）
 
 ## 集成结构
 
@@ -34,13 +34,19 @@ Netcatty 前端不直接访问 SQLite。桌面主进程在固定回环地址 `ht
 ```text
 internal/                       Go API 与 SQLite 存储层
 integrations/netcatty/cmdb/      唯一正式界面源码（Netcatty 原生组件）
-web/                            停止维护的历史界面参考，不装配或打包
+integrations/netcatty/update/   集成版自动更新（指向本仓库 Release）
 integrations/netcatty/electron/ CMDB 子进程生命周期模块与测试
 integrations/netcatty/upstream.json  已验证的 Netcatty 上游提交
 scripts/prepare-netcatty.mjs    可重复的 Netcatty 集成装配器
 .github/workflows/ci.yml        CMDB、原生 Bridge 和 Netcatty 集成验证
-.github/workflows/release.yml   服务端与集成版客户端发布
+.github/workflows/release.yml   Windows 集成版客户端发布
 ```
+
+## 交互设计原型
+
+当前评审原型、预览图片及资源说明见 [Cmdb 交互设计原型](docs/prototypes/cmdb/README.md)。
+本地可直接打开 [HTML 交互入口](docs/prototypes/cmdb/device-assets-preview.html#terminal)，无需构建或启动后端。
+原型仅用于设计评审，不是正式浏览器版产品；不连接真实数据，不能据此认定正式客户端已实现相同布局。
 
 ## 本地验证
 
@@ -65,21 +71,14 @@ npm.cmd run build
 
 装配器会检查上游提交和修改锚点。提交不一致或上游结构变化时会直接失败，防止生成未经验证的客户端。
 
-## CI 与发布
+## 分支、PR 与发布
 
-每次推送到 `main` 都会验证：
-
-- 原生界面装配测试，确认不引入 Ant Design 依赖；
-- Go 全量测试和服务端构建；
-- UOS/Kylin 探针及 Python CLI；
-- 固定 Netcatty 上游提交可成功装配；
-- CMDB 服务生命周期测试、原生 Bridge 测试、Netcatty lint 与完整前端构建。
-
-推送与 `VERSION` 一致的标签会触发 Release。`v1.3.0` 发布内容包括：
-
-- Windows、Linux、macOS 的独立 `cmdb-server`；
-- Windows x64 集成版 Netcatty-CMDB Portable；
-- SHA-256 校验文件。
+- `main` 只接受 PR 合并。每个修复或新功能单独开分支并提交 PR，按类型打 `fix` 或 `feature` 标签；PR 必须通过 CI。
+- 每次推送到 `main` 和每个 PR 都会运行：版本格式校验、原生界面数据测试、Go 全量测试与服务端构建、UOS/Kylin 探针及 Python CLI、固定 Netcatty 上游装配、服务生命周期与 Bridge 测试、Netcatty lint 与完整前端构建。
+- 发布：在 PR 中把 `VERSION` 和 `netcatty/package.json` 改为当天的 `1.0.YYYYMMDD`，合并后在 `main` 上打 `v1.0.YYYYMMDD` tag 并推送。同一天只发布一次。
+- tag 必须指向已合并到 `main` 的提交，否则 Release 失败。Release 只构建 Windows x64：NSIS 安装包、Portable、`latest.yml`、`.blockmap` 和 SHA-256 校验文件。
+- Release 说明按自上个 tag 以来合并的 PR 自动汇总，分为“修复”“新功能”“其他变更”（见 `.github/release.yml`）。
+- 集成版客户端的“检查更新”读取本仓库 Release，版本号更高时才会升级。
 
 ## 数据与功能边界
 

@@ -118,9 +118,10 @@ func (s *Store) CommitSangforImportForProject(scope ProjectScope, r io.Reader) (
 			}
 		}
 		var id int64
-		err := tx.QueryRow(`SELECT id FROM server_apps
+		var status string
+		err := tx.QueryRow(`SELECT id,IFNULL(status,'') FROM server_apps
 			WHERE project_id=? AND app_name=? AND access_url=? LIMIT 1`,
-			scope.ProjectID, app.Name, app.IP).Scan(&id)
+			scope.ProjectID, app.Name, app.IP).Scan(&id, &status)
 		switch {
 		case err == nil:
 			result, updateErr := tx.Exec(`UPDATE server_apps SET remark=?, updated_at=?
@@ -132,14 +133,25 @@ func (s *Store) CommitSangforImportForProject(scope ProjectScope, r io.Reader) (
 				return nil, err
 			}
 			preview.AppsUpdated++
+			if err := recordServerAppHistory(tx, scope.ProjectID, &ServerApp{ID: id, AppName: app.Name, Status: status}, "更新", status, now); err != nil {
+				return nil, err
+			}
 		case errors.Is(err, sql.ErrNoRows):
-			if _, err = tx.Exec(`INSERT INTO server_apps
-				(project_id, server_id, app_name, app_type, access_url, status, remark, created_at, updated_at)
-				VALUES(?,?,?,?,?,?,?,?,?)`,
-				scope.ProjectID, serverID, app.Name, "基础支撑", app.IP, "正常运行", app.Remark, now, now); err != nil {
+			result, insertErr := tx.Exec(`INSERT INTO server_apps
+				(project_id,server_id,app_name,app_type,access_url,status,remark,created_at,updated_at,version,description,network_type)
+				VALUES(?,?,?,?,?,?,?,?,?,'','','')`,
+				scope.ProjectID, serverID, app.Name, "基础支撑", app.IP, "正常运行", app.Remark, now, now)
+			if insertErr != nil {
+				return nil, insertErr
+			}
+			id, err = result.LastInsertId()
+			if err != nil {
 				return nil, err
 			}
 			preview.AppsCreated++
+			if err := recordServerAppHistory(tx, scope.ProjectID, &ServerApp{ID: id, AppName: app.Name, Status: "正常运行"}, "创建", "", now); err != nil {
+				return nil, err
+			}
 		default:
 			return nil, err
 		}

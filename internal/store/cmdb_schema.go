@@ -1,5 +1,7 @@
 package store
 
+import "fmt"
+
 // cmdbSchema 为 nettopo CMDB 复刻的六张基础表 DDL。
 // 全部使用 IF NOT EXISTS，可重复执行。
 const cmdbSchema = `
@@ -28,6 +30,7 @@ CREATE TABLE IF NOT EXISTS cmdb_device_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
 	asset_scope TEXT NOT NULL DEFAULT 'infrastructure',
+    short_code TEXT NOT NULL DEFAULT '',
     parent_id INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
@@ -251,6 +254,9 @@ CREATE TABLE IF NOT EXISTS cmdb_work_orders (
     status TEXT,
     plan_time TEXT,
     actual_time TEXT,
+    started_at TEXT,
+    resolved_at TEXT,
+    closed_at TEXT,
     result TEXT,
     owner TEXT,
     maintainer TEXT,
@@ -261,6 +267,17 @@ CREATE TABLE IF NOT EXISTS cmdb_work_orders (
 );
 CREATE INDEX IF NOT EXISTS idx_cmdb_wo_status ON cmdb_work_orders(status);
 CREATE INDEX IF NOT EXISTS idx_cmdb_wo_asset ON cmdb_work_orders(asset_id);
+
+CREATE TABLE IF NOT EXISTS cmdb_work_order_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_order_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    operator TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(work_order_id) REFERENCES cmdb_work_orders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_cmdb_wo_logs_order ON cmdb_work_order_logs(work_order_id, id);
 
 CREATE TABLE IF NOT EXISTS cmdb_work_order_asset_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -368,6 +385,19 @@ CREATE INDEX IF NOT EXISTS idx_cmdb_cf_class ON cmdb_custom_fields(asset_class);
 
 // InitCmdbSchema 幂等创建 CMDB 相关表，可重复调用。
 func (s *Store) InitCmdbSchema() error {
+	cols := map[string]string{
+		"content_hash": "TEXT NOT NULL DEFAULT ''",
+		"s3_key":       "TEXT NOT NULL DEFAULT ''",
+		"s3_status":    "TEXT NOT NULL DEFAULT 'pending'",
+	}
+	for col, colType := range cols {
+		var exists int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('cmdb_work_order_attachments') WHERE name=?`, col).Scan(&exists)
+		if exists == 0 {
+			_, _ = s.db.Exec(fmt.Sprintf(`ALTER TABLE cmdb_work_order_attachments ADD COLUMN %s %s`, col, colType))
+		}
+	}
+
 	if _, err := s.db.Exec(cmdbSchema); err != nil {
 		return err
 	}

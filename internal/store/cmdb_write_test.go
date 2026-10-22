@@ -26,6 +26,28 @@ func findCmdbBySource(t *testing.T, s *Store, sourceType string) *CmdbAsset {
 	return nil
 }
 
+// 机柜图修改 U 位只写 start_u 而不同步 u_start 时，旧字段读取路径会回退到原位置。
+func TestApplyCmdbAssetChangesUpdatesRackUnits(t *testing.T) {
+	s := newCmdbTestStore(t)
+	id, err := s.CreateCmdbAssetManual(&CmdbAsset{Name: "交换机", CabinetName: "A01", StartU: 3, HeightU: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ApplyCmdbAssetChanges([]int64{id}, CmdbAssetChanges{StartU: int64Ptr(10), HeightU: int64Ptr(2)}); err != nil {
+		t.Fatal(err)
+	}
+	var startU, heightU, uStart, uHeight int64
+	if err := s.db.QueryRow(`SELECT start_u, height_u, u_start, u_height FROM cmdb_assets WHERE id=?`, id).Scan(&startU, &heightU, &uStart, &uHeight); err != nil {
+		t.Fatal(err)
+	}
+	if startU != 10 || heightU != 2 || uStart != 10 || uHeight != 2 {
+		t.Fatalf("U 位未同步写入: start_u=%d height_u=%d u_start=%d u_height=%d", startU, heightU, uStart, uHeight)
+	}
+	if _, err := s.ApplyCmdbAssetChanges([]int64{id}, CmdbAssetChanges{HeightU: int64Ptr(0)}); err == nil {
+		t.Fatal("占用 0U 必须拒绝")
+	}
+}
+
 func TestApplyCmdbAssetChangesPersistsEditorFields(t *testing.T) {
 	s := newCmdbTestStore(t)
 	initialOrgID, err := s.CreateCmdbTaxonomy("orgs", "原组织", 0, 0)

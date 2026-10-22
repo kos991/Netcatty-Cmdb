@@ -2,8 +2,10 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"sort"
 	"strings"
 	"time"
@@ -123,7 +125,12 @@ func (s *Store) CreateIPSubnetForProject(scope ProjectScope, v *IPSubnet) (int64
 	}
 	v.CIDR = normalizeSubnetCIDR(v.CIDR, v.Prefix)
 	now := time.Now().Format("2006-01-02 15:04:05")
-	res, err := s.db.Exec(`INSERT INTO ip_subnets
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`INSERT INTO ip_subnets
 		(project_id, name, category, prefix, cidr, gateway, vlan, vni, purpose, sort_order, remark, created_at, updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		scope.ProjectID, v.Name, v.Category, v.Prefix, v.CIDR, v.Gateway, v.VLAN, v.VNI, v.Purpose, v.SortOrder, v.Remark, now, now)
@@ -140,10 +147,98 @@ func (s *Store) CreateIPSubnetForProject(scope ProjectScope, v *IPSubnet) (int64
 	v.ID = id
 	v.ProjectID = scope.ProjectID
 	v.Defined = true
-	if err := s.db.QueryRow(`SELECT sync_id FROM ip_subnets WHERE id=? AND project_id=?`, id, scope.ProjectID).Scan(&v.SyncID); err != nil {
-		return id, err
+	if err := backfillSubnetAssetIPs(tx, scope.ProjectID, v); err != nil {
+		return 0, err
+	}
+	if err := tx.QueryRow(`SELECT sync_id FROM ip_subnets WHERE id=? AND project_id=?`, id, scope.ProjectID).Scan(&v.SyncID); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
 	}
 	return id, nil
+}
+
+func backfillSubnetAssetIPs(tx *sql.Tx, projectID int64, subnet *IPSubnet) error {
+	prefix, err := netip.ParsePrefix(normalizeSubnetCIDR(subnet.CIDR, subnet.Prefix))
+	if err != nil || !prefix.Addr().Is4() {
+		return nil
+	}
+	type candidate struct {
+		ip, ownerType, ownerName, account, department, room string
+		ownerID                                          int64
+	}
+	var candidates []candidate
+	// 所有基础设施地址先于旧服务器、终端和应用回填，应用共享业务地址时仍由基础设施占用。
+	interfaceRows, err := tx.Query(`SELECT IFNULL(i.additional_ips_json,'[]'),a.id,IFNULL(a.name,''),IFNULL(a.owner,''),IFNULL(a.department,''),IFNULL(a.room,'')
+		FROM cmdb_asset_interfaces i JOIN cmdb_assets a ON a.id=i.asset_id AND a.project_id=i.project_id
+		WHERE i.project_id=? AND a.deleted_at IS NULL`, projectID)
+	if err != nil {
+		return err
+	}
+	for interfaceRows.Next() {
+		var addressesJSON string
+		var item candidate
+		if err := interfaceRows.Scan(&addressesJSON, &item.ownerID, &item.ownerName, &item.account, &item.department, &item.room); err != nil {
+			interfaceRows.Close()
+			return err
+		}
+		var addresses []cmdbInterfaceAddress
+		if json.Unmarshal([]byte(addressesJSON), &addresses) != nil {
+			continue
+		}
+		item.ownerType = "infrastructure"
+		for _, address := range addresses {
+			item.ip = address.IP
+			candidates = append(candidates, item)
+		}
+	}
+	if err := interfaceRows.Err(); err != nil {
+		interfaceRows.Close()
+		return err
+	}
+	interfaceRows.Close()
+	rows, err := tx.Query(`
+		SELECT IFNULL(ip,''), IFNULL(owner_type,''), owner_id, IFNULL(owner_name,''), IFNULL(account,''), IFNULL(department,''), IFNULL(room,'') FROM (
+			SELECT mgmt_ip ip, 'infrastructure' owner_type, id owner_id, name owner_name, owner account, department, room, 1 priority FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
+			UNION ALL SELECT manage_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
+			UNION ALL SELECT biz_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
+			UNION ALL SELECT public_ip, 'infrastructure', id, name, owner, department, room, 1 FROM cmdb_assets WHERE project_id=? AND deleted_at IS NULL
+			UNION ALL SELECT i.ip, 'infrastructure', a.id, a.name, a.owner, a.department, a.room, 1 FROM cmdb_asset_interfaces i JOIN cmdb_assets a ON a.id=i.asset_id AND a.project_id=i.project_id WHERE i.project_id=? AND a.deleted_at IS NULL
+			UNION ALL SELECT mgmt_ip, 'server', id, device_name, admin_user, '', location, 2 FROM servers WHERE project_id=?
+			UNION ALL SELECT biz_ip, 'server', id, device_name, admin_user, '', location, 2 FROM servers WHERE project_id=?
+			UNION ALL SELECT ip, 'terminal', id, asset_code, user_name, department, room, 3 FROM assets WHERE project_id=?
+			UNION ALL SELECT terminal_ip, 'terminal', id, asset_code, user_name, department, room, 3 FROM assets WHERE project_id=?
+			UNION ALL SELECT service_ip, 'application', id, app_name, owner, '', '', 4 FROM server_apps WHERE project_id=? AND deleted_at IS NULL
+		) WHERE ip<>'' ORDER BY priority, owner_id`, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID, projectID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var item candidate
+		if err := rows.Scan(&item.ip, &item.ownerType, &item.ownerID, &item.ownerName, &item.account, &item.department, &item.room); err != nil {
+			rows.Close()
+			return err
+		}
+		candidates = append(candidates, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, item := range candidates {
+		address, err := netip.ParseAddr(strings.TrimSpace(item.ip))
+		if err != nil || !address.Is4() || !prefix.Contains(address) || specialIPv4Address(prefix.String(), item.ip) != "" {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO ip_pool(project_id,subnet,ip,status,owner_type,owner_id,owner_name,account,department,room)
+			SELECT ?,?,?,'在用',?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM ip_pool WHERE project_id=? AND ip=?)`,
+			projectID, subnet.Name, item.ip, item.ownerType, item.ownerID, item.ownerName, item.account, item.department, item.room, projectID, item.ip); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) SeedIPSubnetsFromPoolForProject(scope ProjectScope) (int, error) {
@@ -232,6 +327,9 @@ func (s *Store) UpdateIPSubnetForProject(scope ProjectScope, v *IPSubnet) error 
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("网段不属于当前项目: %w", ErrProjectScopedNotFound)
+	}
+	if err := backfillSubnetAssetIPs(tx, scope.ProjectID, v); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

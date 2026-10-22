@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="record-theme-preview.js"></script>
+<title>机柜 · 机柜与网络 · 设计原型</title>
+<link rel="stylesheet" href="cmdb-preview.css">
+<link rel="stylesheet" href="cmdb-settings-preview.css">
+<link rel="stylesheet" href="cmdb-settings-catalog-preview.css">
+<link rel="stylesheet" href="cmdb-settings-operations-preview.css">
+<link rel="stylesheet" href="rack-management-preview.css">
+<link rel="stylesheet" href="record-shell-preview.css">
+<script src="cabinet-network-nav-preview.js" defer></script>
+</head>
+<body>
+<script src="vendor/netcatty-icons.js"></script>
+<script src="cmdb-settings-data-preview.js"></script>
+<script src="cmdb-settings-catalog-preview.js"></script>
+<script src="cmdb-settings-operations-preview.js"></script>
+<script src="cmdb-settings-preview.js"></script>
+<div class="app">
+<div class="tabs"><span class="tab">▧&nbsp; Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab">▱&nbsp; SFTP</span><span class="tab">＋</span><div class="window-actions"><svg><use href="#settings"/></svg><span>—</span><span>□</span><span>×</span></div></div>
+<div class="shell">
+<nav class="rail" aria-label="工作区"><div class="logo">N</div><button aria-label="设备资产" title="设备资产" onclick="location.href='device-assets-preview.html#terminal'"><svg><use href="#monitor"/></svg></button><button aria-label="组织架构" title="组织架构" onclick="location.href='organization-preview.html'"><svg><use href="#people"/></svg></button><button class="selected" aria-label="机柜与网络" title="机柜与网络"><svg><use href="#router"/></svg></button><button aria-label="工单与统计" title="工单与统计" onclick="location.href='work-order-preview.html'"><svg><use href="#chart"/></svg></button></nav>
+<main class="surface">
+<header id="rack-toolbar" class="toolbar" aria-label="机柜工具栏">
+<details class="room"><summary aria-label="选择机房"><span class="muted">机房</span>核心机房 <span class="chevron">⌄</span></summary><div class="menu"><button>✓ 核心机房</button><button>备份机房</button></div></details>
+<details class="cabinet"><summary aria-label="选择机柜"><span class="muted">机柜</span>A01 <span class="chevron">⌄</span></summary><div class="menu"><button>✓ A01</button><button>A02</button><button>A03</button></div></details>
+<label class="search"><svg><use href="#search"/></svg><input aria-label="搜索机柜与设备" placeholder="搜索机房、机柜、设备或 IP"></label>
+</header>
+<div id="rack-content" class="content">
+<section class="rack-panel" aria-label="机柜图">
+<div class="panel-heading"><h1>A01 机柜</h1><button id="rack-units-edit" class="rack-units-edit" type="button" aria-label="编辑机柜总 U 数" title="编辑机柜总 U 数"><span id="rack-total-units">42U</span><svg><use href="#edit"/></svg></button></div>
+<p id="rack-capacity-summary" class="caption">已用 12U · 空闲 30U · 已上架 4 台</p><div class="usage"><span></span></div>
+<div class="rack-scroll"><div class="rack-frame"><div class="rack-grid" id="rack-grid" aria-label="42U 机柜示例"></div></div></div>
+<details class="fold"><summary><span class="fold-arrow">▸</span>未上架 2 <span style="margin:0 7px;color:var(--border)">/</span><span style="color:var(--warning)">冲突 1</span><span style="margin-left:auto;font-size:11px;color:var(--muted)">查看设备</span></summary><div class="fold-body"><span class="pill">待上架设备 A</span><span class="pill">待上架设备 B</span><span class="pill warning">冲突设备 C</span></div></details>
+</section>
+<aside class="editor-panel record-shell record-inline" aria-label="设备属性与照片">
+<header class="editor-head record-header"><div class="panel-heading"><h2>汇聚交换机 SW-001</h2><button class="quiet"><span>设备详情</span><svg><use href="#right"/></svg></button></div><p class="caption">当前选中 · 28–29U · 2U</p></header>
+<div class="editor-body record-body">
+<section class="record-section"><h3 class="section-title"><svg><use href="#server"/></svg>设备属性</h3>
+<div class="fields record-fields">
+  <div class="field full"><label for="device-name">设备名称<span class="required">*</span></label><input id="device-name" readonly value="汇聚交换机 SW-001"></div>
+  <div class="field"><label for="asset-code">资产编号</label><input id="asset-code" readonly value="NET-SW-001"></div>
+  <div class="field"><label for="device-type">设备类型</label><select id="device-type"><option>交换机</option></select></div>
+  <div class="field"><label for="vendor">品牌 / 厂商</label><select id="vendor"><option>H3C</option></select></div>
+  <div class="field"><label for="model">型号</label><input id="model" readonly value="示例型号"></div>
+</div>
+</section><section class="record-section"><h3 class="section-title"><svg><use href="#network"/></svg>机柜位置</h3>
+<div class="fields record-fields">
+  <div class="field full"><label for="device-room">所属机房</label><select id="device-room"><option>核心机房</option></select></div>
+  <div class="field full"><label for="device-cabinet">机柜</label><select id="device-cabinet"><option>A01</option></select></div>
+  <div class="field"><label for="start-u">起始 U 位</label><input id="start-u" readonly value="28"></div>
+  <div class="field"><label for="height-u">占用 U 数</label><input id="height-u" readonly value="2"></div>
+</div>
+<div class="position-hint"><span id="rack-position-summary">范围 28–29U / 共 42U</span><strong>● 位置可用</strong></div>
+</section><section class="record-section"><h3 class="section-title"><svg><use href="#image"/></svg>设备照片</h3>
+<div class="photos hardware-photos"><div class="photo"><span class="photo-label">正面 · 示例示意</span><div class="hardware"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span class="light"></span></div></div><div class="photo empty"><span class="photo-label">背面</span><svg><use href="#image"/></svg><span>未上传</span></div></div>
+<div class="image-actions"><span>正面 / 背面</span><button class="quiet"><span>管理设备照片</span><svg><use href="#right"/></svg></button></div>
+</section>
+</div>
+<footer class="editor-footer record-footer"><button class="quiet unmount">下架设备</button><button>重置</button><button class="primary">保存设备</button></footer>
+</aside>
+</div>
+<div class="prototype-label">设计原型 · 示例数据 · 不连接业务服务</div>
+</main>
+</div>
+</div>
+<script src="rack-capacity-preview.js"></script>
+</body>
+</html>

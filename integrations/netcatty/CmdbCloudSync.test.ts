@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import {
+  CMDB_CLOUD_SYNC_REQUEST_KEY,
+  CMDB_CLOUD_SYNC_STORAGE_KEY,
   applyCmdbCloudSnapshot,
   collectCmdbCloudSnapshot,
   readCmdbCloudSyncSettings,
+  requestCmdbCloudSync,
   scheduleCmdbCloudSync,
   writeCmdbCloudSyncSettings,
-} from './CmdbCloudSync';
-import type { CmdbSyncSnapshot } from './CmdbSyncSnapshot';
+} from './CmdbCloudSync.ts';
+import type { CmdbSyncSnapshot } from './CmdbSyncSnapshot.ts';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -40,6 +43,14 @@ beforeEach(() => {
 });
 
 describe('CmdbCloudSync', () => {
+  it('设置窗口的手动同步请求通过原生跨窗口通道传给主窗口', () => {
+    const messages: Array<{ key: string; value: unknown }> = [];
+    Object.assign(window, { netcatty: { notifySettingsChanged: (payload: { key: string; value: unknown }) => messages.push(payload) } });
+    requestCmdbCloudSync();
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].key, CMDB_CLOUD_SYNC_REQUEST_KEY);
+  });
+
   it('默认关闭，不调用导出接口', async () => {
     let called = false;
     const result = await collectCmdbCloudSnapshot(async () => {
@@ -50,8 +61,8 @@ describe('CmdbCloudSync', () => {
     assert.equal(called, false);
   });
 
-  it('启用后按隐私设置导出规范快照', async () => {
-    writeCmdbCloudSyncSettings({ enabled: true, includeContacts: true, includeHistory: false });
+  it('启用总开关后始终包含联系电话和运维履历', async () => {
+    writeCmdbCloudSyncSettings({ enabled: true });
     const calls: Array<{ path: string; body?: string }> = [];
     const result = await collectCmdbCloudSnapshot(async (request) => {
       calls.push(request);
@@ -61,8 +72,28 @@ describe('CmdbCloudSync', () => {
     assert.deepEqual(calls, [{
       path: '/api/cmdb/sync/export',
       method: 'POST',
-      body: JSON.stringify({ include_contacts: true, include_history: false }),
+      body: JSON.stringify({ include_contacts: true, include_history: true }),
     }]);
+  });
+
+  it('迁移旧分项设置，保留总开关与宿主结果并删除分项', () => {
+    globalThis.localStorage.setItem(CMDB_CLOUD_SYNC_STORAGE_KEY, JSON.stringify({
+      enabled: true, includeContacts: false, includeHistory: false,
+      lastStatus: 'error', lastError: 'S3 不可用',
+    }));
+    assert.deepEqual(readCmdbCloudSyncSettings(), {
+      enabled: true, lastStatus: 'error', lastError: 'S3 不可用', lastSyncedAt: undefined,
+    });
+    assert.deepEqual(JSON.parse(globalThis.localStorage.getItem(CMDB_CLOUD_SYNC_STORAGE_KEY)!), {
+      enabled: true, lastStatus: 'error', lastError: 'S3 不可用',
+    });
+  });
+
+  it('迁移旧分项不会替用户启用总开关', () => {
+    globalThis.localStorage.setItem(CMDB_CLOUD_SYNC_STORAGE_KEY, JSON.stringify({
+      enabled: false, includeContacts: true, includeHistory: true,
+    }));
+    assert.equal(readCmdbCloudSyncSettings().enabled, false);
   });
 
   it('下载快照必须先预检再应用，并记录成功状态', async () => {

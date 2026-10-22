@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 )
@@ -85,41 +86,42 @@ type CmdbAsset struct {
 	UpdatedAt      string  `json:"updated_at"`
 
 	// 48+ 扩展字段与规范对齐字段
-	DeviceType       string                 `json:"device_type"`
-	ManageIP         string                 `json:"manage_ip"`
-	MACAddress       string                 `json:"mac_address"`
-	Organization     string                 `json:"organization"`
-	Area             string                 `json:"area"`
-	CabinetPos       string                 `json:"cabinet_pos"`
-	UHeight          int64                  `json:"u_height"`
-	UStart           int64                  `json:"u_start"`
-	PurchaseAt       string                 `json:"purchase_at"`
-	WarrantyAt       string                 `json:"warranty_at"`
-	Description      string                 `json:"description"`
-	Country          string                 `json:"country"`
-	GeoAddress       string                 `json:"geo_address"`
-	Provider         string                 `json:"provider"`
-	Region           string                 `json:"region"`
-	Zone             string                 `json:"zone"`
-	VCPU             int64                  `json:"vcpu"`
-	MemoryMB         int64                  `json:"memory_mb"`
-	InstanceType     string                 `json:"instance_type"`
-	PublicIP         string                 `json:"public_ip"`
-	BoxSN            string                 `json:"box_sn"`
-	DisplaySN        string                 `json:"display_sn"`
-	CPUInfo          string                 `json:"cpu_info"`
-	DiskInfo         string                 `json:"disk_info"`
-	MgmtURL          string                 `json:"mgmt_url"`
-	BizIP            string                 `json:"biz_ip"`
-	RackUnit         string                 `json:"rack_unit"`
-	SecuritySoftware string                 `json:"security_software"`
-	NetType          string                 `json:"net_type"`
-	AdminUser        string                 `json:"admin_user"`
-	Room             string                 `json:"room"`
-	OwnerID          int64                  `json:"owner_id"`
-	CustomFields     map[string]interface{} `json:"custom_fields,omitempty"`
-	CustomFieldsJSON string                 `json:"-"`
-	Interfaces       []CmdbAssetInterface   `json:"interfaces,omitempty"`
+	DeviceType          string                 `json:"device_type"`
+	ManageIP            string                 `json:"manage_ip"`
+	MACAddress          string                 `json:"mac_address"`
+	Organization        string                 `json:"organization"`
+	Area                string                 `json:"area"`
+	CabinetPos          string                 `json:"cabinet_pos"`
+	UHeight             int64                  `json:"u_height"`
+	UStart              int64                  `json:"u_start"`
+	PurchaseAt          string                 `json:"purchase_at"`
+	WarrantyAt          string                 `json:"warranty_at"`
+	Description         string                 `json:"description"`
+	Country             string                 `json:"country"`
+	GeoAddress          string                 `json:"geo_address"`
+	Provider            string                 `json:"provider"`
+	Region              string                 `json:"region"`
+	Zone                string                 `json:"zone"`
+	VCPU                int64                  `json:"vcpu"`
+	MemoryMB            int64                  `json:"memory_mb"`
+	InstanceType        string                 `json:"instance_type"`
+	PublicIP            string                 `json:"public_ip"`
+	BoxSN               string                 `json:"box_sn"`
+	DisplaySN           string                 `json:"display_sn"`
+	CPUInfo             string                 `json:"cpu_info"`
+	DiskInfo            string                 `json:"disk_info"`
+	MgmtURL             string                 `json:"mgmt_url"`
+	BizIP               string                 `json:"biz_ip"`
+	RackUnit            string                 `json:"rack_unit"`
+	SecuritySoftware    string                 `json:"security_software"`
+	NetType             string                 `json:"net_type"`
+	BusinessNetworkType string                 `json:"business_network_type"`
+	AdminUser           string                 `json:"admin_user"`
+	Room                string                 `json:"room"`
+	OwnerID             int64                  `json:"owner_id"`
+	CustomFields        map[string]interface{} `json:"custom_fields,omitempty"`
+	CustomFieldsJSON    string                 `json:"-"`
+	Interfaces          []CmdbAssetInterface   `json:"interfaces,omitempty"`
 }
 
 // CmdbAssetInterface 对应 cmdb_asset_interfaces 表。
@@ -150,12 +152,16 @@ type CmdbAssetQuery struct {
 	Department    string
 	Owner         string
 	OwnerID       int64
+	Vendor        string
+	Model         string
+	NetType       string
 	Status        string
 	AssetClass    string
 	DeviceType    string
 	OSType        string
 	OSVersion     string
 	MgmtIP        string
+	Location      string
 	SourceType    string
 	ResourceScope string
 	Page          int
@@ -163,6 +169,8 @@ type CmdbAssetQuery struct {
 	SortBy        string
 	SortOrder     string
 }
+
+const CmdbAssetUnconfiguredFilter = "__unconfigured__"
 
 // 只有白名单内的字段允许出现在 ORDER BY 中，防止 SQL 注入。
 var cmdbSortWhitelist = map[string]string{
@@ -352,24 +360,21 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		args = append(args, pat, pat, pat, pat, pat, pat, pat, pat)
 	}
 	deviceType := strings.TrimSpace(q.DeviceType)
-	if q.CategoryID > 0 || (deviceType != "" && deviceType != "全部") {
-		var typeWhere []string
-		var typeArgs []interface{}
-		if q.CategoryID > 0 {
-			typeWhere = append(typeWhere, "a.category_id = ?")
-			typeArgs = append(typeArgs, q.CategoryID)
+	if q.CategoryID > 0 {
+		where = append(where, "a.category_id = ?")
+		args = append(args, q.CategoryID)
+	} else if q.CategoryID == -1 {
+		where = append(where, "IFNULL(a.category_id,0) = 0")
+	} else if deviceType != "" && deviceType != "全部" {
+		aliases := cmdbDeviceTypeAliases(deviceType)
+		placeholders := make([]string, len(aliases))
+		for i, alias := range aliases {
+			placeholders[i] = "?"
+			args = append(args, alias)
 		}
-		if deviceType != "" && deviceType != "全部" {
-			aliases := cmdbDeviceTypeAliases(deviceType)
-			placeholders := make([]string, len(aliases))
-			for i, alias := range aliases {
-				placeholders[i] = "?"
-				typeArgs = append(typeArgs, alias)
-			}
-			typeWhere = append(typeWhere, "lower(trim(IFNULL(a.device_type,''))) IN ("+strings.Join(placeholders, ",")+")")
-		}
-		where = append(where, "("+strings.Join(typeWhere, " OR ")+")")
-		args = append(args, typeArgs...)
+		where = append(where, `lower(trim(COALESCE(NULLIF(trim(a.device_type),''),
+			(SELECT type_category.name FROM cmdb_device_categories type_category
+			 WHERE type_category.id = a.category_id AND type_category.project_id = a.project_id),''))) IN (`+strings.Join(placeholders, ",")+")")
 	}
 	if q.OrgID > 0 {
 		where = append(where, "a.org_id = ?")
@@ -381,33 +386,37 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		where = append(where, "a.group_id = ?")
 		args = append(args, q.GroupID)
 	}
-	if dept := strings.TrimSpace(q.Department); dept != "" && dept != "全部" {
-		where = append(where, "a.department = ?")
-		args = append(args, dept)
-	}
-	if owner := strings.TrimSpace(q.Owner); owner != "" && owner != "全部" {
-		where = append(where, "a.owner = ?")
-		args = append(args, owner)
-	}
+	appendCmdbExactFilter(&where, &args, "a.department", q.Department)
+	appendCmdbExactFilter(&where, &args, "a.owner", q.Owner)
+	appendCmdbExactFilter(&where, &args, "a.vendor", q.Vendor)
+	appendCmdbExactFilter(&where, &args, "a.model", q.Model)
 	if q.OwnerID > 0 {
 		where = append(where, "a.owner_id = ?")
 		args = append(args, q.OwnerID)
 	}
-	if st := strings.TrimSpace(q.Status); st != "" && st != "全部" {
-		where = append(where, "a.status = ?")
-		args = append(args, st)
-	}
+	appendCmdbExactFilter(&where, &args, "a.status", q.Status)
 	if cls := strings.TrimSpace(q.AssetClass); cls != "" && cls != "全部" {
 		where = append(where, "a.asset_class = ?")
 		args = append(args, cls)
 	}
-	if v := strings.TrimSpace(q.OSType); v != "" && v != "全部" {
-		where = append(where, "IFNULL(a.os_type,'') = ?")
-		args = append(args, v)
-	}
-	if v := strings.TrimSpace(q.OSVersion); v != "" && v != "全部" {
-		where = append(where, "IFNULL(a.os_version,'') = ?")
-		args = append(args, v)
+	appendCmdbExactFilter(&where, &args, "a.os_type", q.OSType)
+	appendCmdbExactFilter(&where, &args, "a.os_version", q.OSVersion)
+	if location := strings.TrimSpace(q.Location); location != "" && location != "全部" {
+		locationColumns := []string{"a.room", "a.data_center", "a.floor", "a.cabinet_name", "a.area", "a.cabinet_pos"}
+		if location == CmdbAssetUnconfiguredFilter {
+			checks := make([]string, 0, len(locationColumns))
+			for _, column := range locationColumns {
+				checks = append(checks, "TRIM(IFNULL("+column+",'')) = ''")
+			}
+			where = append(where, "("+strings.Join(checks, " AND ")+")")
+		} else {
+			checks := make([]string, 0, len(locationColumns))
+			for _, column := range locationColumns {
+				checks = append(checks, "TRIM(IFNULL("+column+",'')) = ?")
+				args = append(args, location)
+			}
+			where = append(where, "("+strings.Join(checks, " OR ")+")")
+		}
 	}
 	if v := strings.TrimSpace(q.MgmtIP); v != "" && v != "全部" {
 		where = append(where, "(IFNULL(a.mgmt_ip,'') LIKE ? OR IFNULL(a.manage_ip,'') LIKE ?)")
@@ -418,23 +427,31 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		args = append(args, v)
 	}
 	if strings.EqualFold(strings.TrimSpace(q.ResourceScope), "infrastructure") {
+		// 基础设施范围以分类目录的 asset_scope 为准；device_type 只作为分类缺失时的兜底，
+		// 必须复用 cmdbDeviceTypeAliases 的规范别名，避免中文类型（服务器/安全设备等）被漏掉。
+		deviceTypeAliases := []string{
+			"server", "physical_server", "服务器", "物理服务器", "物理主机",
+			"virtual_machine", "vm", "虚拟机", "云主机", "云资源", "ecs",
+			"hyperconverged", "hci", "超融合", "超融合集群", "超融合节点",
+			"switch", "交换机",
+			"router", "路由器",
+			"security_device", "security", "安全设备", "防火墙", "网闸", "负载均衡",
+			"storage", "存储", "存储设备",
+			"cloud_desktop", "云桌面", "云桌面平台", "桌面池",
+		}
+		placeholders := make([]string, len(deviceTypeAliases))
+		for i, alias := range deviceTypeAliases {
+			placeholders[i] = "?"
+			args = append(args, alias)
+		}
 		where = append(where, `(a.source_type = 'legacy_server'
 			OR (a.source_type = 'manual' AND IFNULL(a.device_type,'') = '' AND IFNULL(a.category_id,0) = 0)
-			OR lower(IFNULL(a.device_type,'')) IN ('server','physical_server','virtual_machine','switch','router','security_device','storage','hyperconverged','hci','超融合','cloud_desktop')
+			OR lower(trim(IFNULL(a.device_type,''))) IN (`+strings.Join(placeholders, ",")+`)
 			OR EXISTS (
 				SELECT 1 FROM cmdb_device_categories scope_category
 				WHERE scope_category.id = a.category_id
 				AND scope_category.project_id = a.project_id
-				AND (scope_category.name LIKE '%服务器%'
-					OR scope_category.name LIKE '%虚拟机%'
-					OR scope_category.name LIKE '%超融合%'
-					OR scope_category.name LIKE '%交换机%'
-					OR scope_category.name LIKE '%网络设备%'
-					OR scope_category.name LIKE '%路由器%'
-					OR scope_category.name LIKE '%安全设备%'
-					OR scope_category.name LIKE '%存储设备%'
-					OR scope_category.name LIKE '%云桌面平台%'
-					OR scope_category.name LIKE '%桌面池%')
+				AND scope_category.asset_scope = 'infrastructure'
 			))`)
 	}
 
@@ -443,6 +460,71 @@ func (s *Store) buildCmdbWhere(q CmdbAssetQuery) (string, []interface{}) {
 		clause = " WHERE " + strings.Join(where, " AND ")
 	}
 	return clause, args
+}
+
+// CmdbAssetLocationSummary 生成列表导出共用的基础设施位置摘要。
+func CmdbAssetLocationSummary(a CmdbAsset) string {
+	parts := make([]string, 0, 7)
+	appendUnique := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, current := range parts {
+			if current == value {
+				return
+			}
+		}
+		parts = append(parts, value)
+	}
+	appendUnique(a.Room)
+	if strings.TrimSpace(a.DataCenter) != "" {
+		appendUnique(a.DataCenter)
+	} else {
+		appendUnique(a.Area)
+	}
+	appendUnique(a.Floor)
+	if strings.TrimSpace(a.CabinetName) != "" {
+		appendUnique(a.CabinetName)
+	} else {
+		appendUnique(a.CabinetPos)
+	}
+	rowColumn := make([]string, 0, 2)
+	if value := strings.TrimSpace(a.CabinetRow); value != "" {
+		rowColumn = append(rowColumn, value)
+	}
+	if a.CabinetCol > 0 {
+		rowColumn = append(rowColumn, fmt.Sprintf("%d 列", a.CabinetCol))
+	}
+	appendUnique(strings.Join(rowColumn, " / "))
+	start, height := a.StartU, a.HeightU
+	if start == 0 {
+		start = a.UStart
+	}
+	if height == 0 {
+		height = a.UHeight
+	}
+	if start > 0 && height > 1 {
+		appendUnique(fmt.Sprintf("%dU–%dU", start, start+height-1))
+	} else if start > 0 {
+		appendUnique(fmt.Sprintf("%dU", start))
+	} else {
+		appendUnique(a.RackUnit)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func appendCmdbExactFilter(where *[]string, args *[]interface{}, column, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "全部" {
+		return
+	}
+	if value == CmdbAssetUnconfiguredFilter {
+		*where = append(*where, "IFNULL("+column+",'') = ''")
+		return
+	}
+	*where = append(*where, column+" = ?")
+	*args = append(*args, value)
 }
 
 func (s *Store) buildCmdbWhereForProject(scope ProjectScope, q CmdbAssetQuery) (string, []interface{}) {
@@ -472,6 +554,22 @@ func (s *Store) QueryCmdbAssetsForProject(scope ProjectScope, q CmdbAssetQuery) 
 	}
 	if q.PageSize < 1 || q.PageSize > 500 {
 		q.PageSize = 10
+	}
+	if netType := strings.TrimSpace(q.NetType); netType != "" && netType != "全部" {
+		list, err := s.AllCmdbAssetsForProject(scope, q)
+		if err != nil {
+			return nil, 0, err
+		}
+		total := len(list)
+		start := (q.Page - 1) * q.PageSize
+		if start >= total {
+			return []CmdbAsset{}, total, nil
+		}
+		end := start + q.PageSize
+		if end > total {
+			end = total
+		}
+		return list[start:end], total, nil
 	}
 
 	whereClause, args := s.buildCmdbWhereForProject(scope, q)
@@ -509,6 +607,231 @@ func (s *Store) QueryCmdbAssetsForProject(scope ProjectScope, q CmdbAssetQuery) 
 		list = append(list, item)
 	}
 	return list, total, rows.Err()
+}
+
+func (s *Store) AttachCmdbAssetInterfacesForProject(scope ProjectScope, assets []CmdbAsset) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	if len(assets) == 0 {
+		return nil
+	}
+	ids := make([]interface{}, 0, len(assets)+1)
+	placeholders := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		placeholders = append(placeholders, "?")
+		ids = append(ids, asset.ID)
+	}
+	ids = append([]interface{}{scope.ProjectID}, ids...)
+	rows, err := s.db.Query(`SELECT id, asset_id, IFNULL(asset_name,''), IFNULL(name,''), IFNULL(if_name,''),
+		IFNULL(ip,''), IFNULL(additional_ips_json,'[]'), IFNULL(mask,''), IFNULL(gateway,''), IFNULL(mac,''),
+		IFNULL(network_zone,''), IFNULL(net_zone,''), is_primary, vlan_id, IFNULL(remark,'')
+		FROM cmdb_asset_interfaces WHERE project_id=? AND asset_id IN (`+strings.Join(placeholders, ",")+") ORDER BY asset_id, is_primary DESC, id ASC", ids...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	interfacesByAsset := make(map[int64][]CmdbAssetInterface, len(assets))
+	for rows.Next() {
+		var iface CmdbAssetInterface
+		if err := rows.Scan(&iface.ID, &iface.AssetID, &iface.AssetName, &iface.Name, &iface.IfName,
+			&iface.IP, &iface.AdditionalIPsJSON, &iface.Mask, &iface.Gateway, &iface.MAC,
+			&iface.NetworkZone, &iface.NetZone, &iface.IsPrimary, &iface.VlanID, &iface.Remark); err != nil {
+			return err
+		}
+		if iface.Name == "" && iface.IfName != "" {
+			iface.Name = iface.IfName
+		}
+		if iface.IfName == "" && iface.Name != "" {
+			iface.IfName = iface.Name
+		}
+		if iface.NetworkZone == "" && iface.NetZone != "" {
+			iface.NetworkZone = iface.NetZone
+		}
+		if iface.NetZone == "" && iface.NetworkZone != "" {
+			iface.NetZone = iface.NetworkZone
+		}
+		if err := normalizeInterfaceAddresses(&iface); err != nil {
+			return err
+		}
+		interfacesByAsset[iface.AssetID] = append(interfacesByAsset[iface.AssetID], iface)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for index := range assets {
+		assets[index].Interfaces = interfacesByAsset[assets[index].ID]
+		if assets[index].Interfaces == nil {
+			assets[index].Interfaces = []CmdbAssetInterface{}
+		}
+	}
+	return nil
+}
+
+func (s *Store) AttachCmdbAssetBusinessNetworkTypesForProject(scope ProjectScope, assets []CmdbAsset) error {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return err
+	}
+	if len(assets) == 0 {
+		return nil
+	}
+	// 只使用业务字段或接口中明确标记 business 的地址，不借用管理/带外地址。
+	candidates := make([][]string, len(assets))
+	wanted := make(map[string]struct{})
+	for index := range assets {
+		assets[index].BusinessNetworkType = ""
+		addCandidate := func(raw string) {
+			ip := strings.TrimSpace(raw)
+			if ip == "" {
+				return
+			}
+			candidates[index] = append(candidates[index], ip)
+			wanted[ip] = struct{}{}
+		}
+		addCandidate(assets[index].BizIP)
+		for _, iface := range assets[index].Interfaces {
+			var addresses []cmdbInterfaceAddress
+			if err := json.Unmarshal([]byte(interfaceAdditionalIPs(iface)), &addresses); err != nil {
+				return fmt.Errorf("接口 %s 的附加地址格式无效: %w", iface.Name, err)
+			}
+			for _, address := range addresses {
+				business := false
+				switch purpose := address.Purpose.(type) {
+				case string:
+					business = purpose == "business"
+				case []interface{}:
+					for _, value := range purpose {
+						if value == "business" {
+							business = true
+						}
+					}
+				}
+				if business {
+					addCandidate(address.IP)
+				}
+			}
+		}
+	}
+	ips := make([]string, 0, len(wanted))
+	for ip := range wanted {
+		ips = append(ips, ip)
+	}
+	networkTypes, err := s.networkTypesForIPsForProject(scope, ips)
+	if err != nil {
+		return err
+	}
+	for index := range assets {
+		for _, ip := range candidates[index] {
+			if category := networkTypes[ip]; category != "" {
+				assets[index].BusinessNetworkType = category
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// networkTypesForIPsForProject 是三类资产共用的 IPAM 网络来源，重叠 CIDR 取最长前缀。
+func (s *Store) networkTypesForIPsForProject(scope ProjectScope, ips []string) (map[string]string, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
+	wanted := make(map[string]struct{}, len(ips))
+	for _, raw := range ips {
+		if ip := strings.TrimSpace(raw); net.ParseIP(ip) != nil {
+			wanted[ip] = struct{}{}
+		}
+	}
+	out := make(map[string]string, len(wanted))
+	if len(wanted) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, 0, len(wanted))
+	args := make([]interface{}, 0, len(wanted)+1)
+	args = append(args, scope.ProjectID)
+	for ip := range wanted {
+		placeholders = append(placeholders, "?")
+		args = append(args, ip)
+	}
+	rows, err := s.db.Query(`SELECT ip.ip, IFNULL(n.category,'') FROM ip_pool ip
+		JOIN ip_subnets n ON n.project_id=ip.project_id AND n.name=ip.subnet
+		WHERE ip.project_id=? AND ip.ip IN (`+strings.Join(placeholders, ",")+") ORDER BY ip.id", args...)
+	if err != nil {
+		return nil, err
+	}
+	registered := make(map[string]string, len(wanted))
+	for rows.Next() {
+		var ip, category string
+		if err := rows.Scan(&ip, &category); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if _, seen := registered[ip]; !seen && category != "" {
+			registered[ip] = category
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	type subnetCategory struct {
+		network  *net.IPNet
+		category string
+	}
+	subnetRows, err := s.db.Query(`SELECT IFNULL(cidr,''), IFNULL(prefix,''), IFNULL(category,'') FROM ip_subnets WHERE project_id=? ORDER BY sort_order, id`, scope.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	var subnets []subnetCategory
+	for subnetRows.Next() {
+		var cidr, prefix, category string
+		if err := subnetRows.Scan(&cidr, &prefix, &category); err != nil {
+			subnetRows.Close()
+			return nil, err
+		}
+		cidr = strings.TrimSpace(cidr)
+		if cidr == "" && strings.TrimSpace(prefix) != "" {
+			cidr = strings.TrimSpace(prefix) + ".0/24"
+		}
+		if _, network, err := net.ParseCIDR(cidr); err == nil && strings.TrimSpace(category) != "" {
+			subnets = append(subnets, subnetCategory{network: network, category: strings.TrimSpace(category)})
+		}
+	}
+	if err := subnetRows.Err(); err != nil {
+		subnetRows.Close()
+		return nil, err
+	}
+	if err := subnetRows.Close(); err != nil {
+		return nil, err
+	}
+	categoryForIP := func(raw string) string {
+		// CIDR 最长前缀优先于旧 IP 台账归属，避免重叠网段被较大地址池遮蔽。
+		ip := net.ParseIP(raw)
+		if ip == nil {
+			return ""
+		}
+		best, bestBits := "", -1
+		for _, subnet := range subnets {
+			if !subnet.network.Contains(ip) {
+				continue
+			}
+			if bits, _ := subnet.network.Mask.Size(); bits > bestBits {
+				best, bestBits = subnet.category, bits
+			}
+		}
+		if best != "" {
+			return best
+		}
+		return registered[raw]
+	}
+	for ip := range wanted {
+		out[ip] = categoryForIP(ip)
+	}
+	return out, nil
 }
 
 // GetCmdbAsset 读取单个资产及其全部网络接口。
@@ -573,9 +896,6 @@ func (s *Store) InsertCmdbAssetForProject(scope ProjectScope, a *CmdbAsset) (int
 	if a.UHeight == 0 {
 		a.UHeight = a.HeightU
 	}
-	if a.UStart == 0 && a.StartU > 0 {
-		a.UStart = a.StartU
-	}
 	if a.Country == "" {
 		a.Country = "中国"
 	}
@@ -590,12 +910,6 @@ func (s *Store) InsertCmdbAssetForProject(scope ProjectScope, a *CmdbAsset) (int
 	}
 	if a.MAC == "" && a.MACAddress != "" {
 		a.MAC = a.MACAddress
-	}
-	if a.Area == "" && a.DataCenter != "" {
-		a.Area = a.DataCenter
-	}
-	if a.DataCenter == "" && a.Area != "" {
-		a.DataCenter = a.Area
 	}
 	if a.Description == "" && a.Remark != "" {
 		a.Description = a.Remark
@@ -626,6 +940,9 @@ func (s *Store) InsertCmdbAssetForProject(scope ProjectScope, a *CmdbAsset) (int
 	}
 	if a.OrgName == "" && a.Organization != "" {
 		a.OrgName = a.Organization
+	}
+	if err := normalizeAssetRackLocation(a, true); err != nil {
+		return 0, err
 	}
 
 	if len(a.CustomFields) > 0 {

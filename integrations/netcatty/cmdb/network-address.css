@@ -1,0 +1,70 @@
+.network-address-workspace { container: cmdb-network / inline-size; background: hsl(var(--background)); }
+.network-address-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.network-address-layout.has-ip-detail { grid-template-columns: minmax(0, 1fr) 320px; }
+.network-ip-detail.cmdb-record-shell {
+  position: static;
+  width: auto;
+  max-width: none;
+  height: auto;
+  border: 0;
+  border-left: 1px solid hsl(var(--border));
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+.network-ip-detail .cmdb-record-header { min-height: 62px; padding: 12px 14px; }
+.network-pool-maintenance .cmdb-record-header { min-height: 62px; padding: 12px 48px 12px 14px; }
+.network-ip-detail .cmdb-record-body { padding: 16px 14px; }
+.network-ip-detail .cmdb-record-footer { padding: 10px 14px; }
+.network-ip-detail .cmdb-record-footer button,
+.network-pool-maintenance .cmdb-record-footer button { height: 34px; font-size: 13px; }
+.network-ip-detail dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.network-ip-detail dt { font-size: 12px; line-height: 18px; }
+.network-ip-detail dd { min-width: 0; overflow-wrap: anywhere; font-size: 13px; line-height: 20px; }
+.network-pool-maintenance-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.network-pool-directory {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+  padding: 12px;
+  border-right: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+.network-pool-directory > div { flex: none; min-width: 0; max-width: none; }
+.network-address-layout [data-ipam-grid-scroll] { overscroll-behavior: contain; scrollbar-width: thin; }
+.network-address-layout [data-ipam-address-grid] [data-ipam-selected='true'] { position: relative; z-index: 1; background: hsl(var(--primary) / 0.1); color: hsl(var(--foreground)); font-weight: 700; }
+.network-address-workspace > section > .cmdb-toolbar { background: hsl(var(--background)); padding: 10px 18px; gap: 12px; }
+.network-address-workspace > section > .grid { background: hsl(var(--background)); }
+.network-ip-detail .cmdb-record-section { padding: 13px 14px; border-radius: 10px; background: hsl(var(--secondary) / 0.28); }
+.network-pool-maintenance .cmdb-record-body { padding: 18px 20px; }
+@container cmdb-network (max-width: 900px) {
+  .network-address-layout.has-ip-detail {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(120px, 1fr) minmax(160px, 240px);
+    overflow: auto;
+  }
+  .network-ip-detail.cmdb-record-shell { border-left: 0; border-top: 1px solid hsl(var(--border)); }
+}
+@container cmdb-network (max-width: 560px) {
+  .network-ip-detail dl { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .network-pool-maintenance-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(110px, 30%) minmax(0, 1fr); }
+  .network-pool-directory { border-right: 0; border-bottom: 1px solid hsl(var(--border)); }
+}

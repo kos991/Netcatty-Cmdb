@@ -1,0 +1,33 @@
+/* 单排阶段只在自身容器横向滚动，为下方工单列表保留空间。 */
+.work-overview { flex: none; min-width: 0; padding: 8px 18px; border-bottom: 1px solid var(--border); }
+.work-overview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.work-overview-heading h2 { margin: 0; font-size: 12px; font-weight: 600; line-height: 16px; }
+#work-summary.work-stage-summary { --stage-line: color-mix(in srgb, var(--accent) 55%, var(--border)); position: relative; min-width: 0; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; color: var(--fg); background: var(--surface); }
+.work-stage-scroll { width: 100%; max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.work-stage-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.work-stage-row { display: flex; align-items: center; width: 100%; min-width: 650px; min-height: 88px; box-sizing: border-box; padding: 14px 16px; }
+.work-stage-main { display: flex; align-items: center; flex: 1; min-width: 0; }
+.work-stage-button { display: flex; align-items: center; justify-content: space-between; flex: 1 0 86px; gap: 10px; height: 48px; min-width: 0; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); background: var(--bg); white-space: nowrap; }
+.work-stage-name { font-size: 12px; font-weight: 500; }
+.work-stage-count { color: var(--accent); font-size: 20px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.work-stage-button:hover { border-color: var(--stage-line); background: var(--accent-soft); }
+.work-stage-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.work-stage-button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent); }
+.work-stage-button[aria-pressed="true"] .work-stage-name, .work-stage-button[aria-pressed="true"] .work-stage-count { color: var(--accent); }
+.work-stage-connector { position: relative; flex: 0 0 32px; height: 16px; margin: 0 4px; pointer-events: none; }
+.work-stage-connector svg { display: block; width: 32px; height: 16px; fill: none; stroke: var(--stage-line); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* 取消独立于成功路线，仅用分隔留白与虚线按钮弱化，不从已关闭引出箭头。 */
+.work-stage-optional { display: flex; align-items: center; flex: 0 0 112px; margin-left: 20px; padding-left: 20px; border-left: 1px solid var(--border); }
+.work-stage-button--cancelled { border-style: dashed; color: var(--muted); background: transparent; }
+.work-stage-button--cancelled .work-stage-count { color: var(--muted); }
+.work-stage-button--cancelled[aria-pressed="true"] { border-style: solid; }
+/* 三条连接线各自在局部坐标内用 Anime.js createMotionPath 显示轻量流光。 */
+.work-stage-glint { position: absolute; top: -2px; left: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 40%, transparent); opacity: 0; pointer-events: none; }
+.work-stage-summary:not([data-motion="running"]) .work-stage-glint { visibility: hidden; }
+.work-stage-motion-note { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 560px) {
+  .work-overview { padding-right: 9px; padding-left: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .work-stage-glint { display: none; }
+}

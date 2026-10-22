@@ -1,5 +1,6 @@
 import React from 'react'
 import { DistroAvatar } from '@/components/DistroAvatar'
+import { shortModelLabel } from './deviceWorkspaceModel'
 import checkpointLogo from './vendor-icons/checkpoint.svg'
 import dellemcLogo from './vendor-icons/dellemc.svg'
 import dptechLogo from './vendor-icons/dptech.svg'
@@ -89,10 +90,13 @@ export function VendorBrandIcon({ value = '', context = {}, brand: explicitBrand
   return <span aria-hidden data-vendor-brand={brand} title={vendorBrandLabel(brand)} className={`grid shrink-0 place-items-center overflow-hidden border border-border/60 bg-white ${dimensions} ${className}`}><img src={src} alt="" className={`${imageSize} object-contain`} /></span>
 }
 
-export function VendorBrandValue({ value = '', model = '', className = '' }) {
-  const text = [value, model].filter(Boolean).join(' ')
+export function VendorBrandValue({ value = '', model = '', className = '', compact = false }) {
+  const brand = String(value || '').trim()
+  const modelText = String(model || '').trim()
+  const dedupedModel = brand && modelText.startsWith(brand) ? modelText.slice(brand.length).trim() : modelText
+  const text = [brand, dedupedModel].filter(Boolean).join(' ')
   return <div className={`flex min-w-0 items-center gap-2 ${className}`} title={text || undefined}>
     <VendorBrandIcon value={value} context={{ model }} />
-    <span className="truncate">{text || '-'}</span>
+    <span className="truncate">{(compact ? shortModelLabel(brand, modelText) : text) || '-'}</span>
   </div>
 }

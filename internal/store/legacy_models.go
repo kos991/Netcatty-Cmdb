@@ -3,28 +3,54 @@ package store
 // Legacy models for backward compatibility
 
 type Asset struct {
-	ID               int64  `json:"id"`
-	ProjectID        int64  `json:"project_id"`
-	AssetCode        string `json:"asset_code"`
-	DeviceType       string `json:"device_type"`
-	BoxSN            string `json:"box_sn"`
-	DisplaySN        string `json:"display_sn"`
-	UserName         string `json:"user_name"`
-	Department       string `json:"department"`
-	Room             string `json:"room"`
-	IP               string `json:"ip"`
-	TerminalIP       string `json:"terminal_ip"`
-	OSType           string `json:"os_type"`
-	OSVersion        string `json:"os_version"`
-	SecuritySoftware string `json:"security_software"`
-	Status           string `json:"status"`
-	NetType          string `json:"net_type"`
-	GroupID          int64  `json:"group_id"`
-	GroupName        string `json:"group_name"`
-	Remark           string `json:"remark"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
+	ID                    int64  `json:"id"`
+	ProjectID             int64  `json:"project_id"`
+	AssetName             string `json:"asset_name"`
+	IPNetworkType         string `json:"ip_network_type"`
+	TerminalIPNetworkType string `json:"terminal_ip_network_type"`
+	AssetCode             string `json:"asset_code"`
+	DeviceType            string `json:"device_type"`
+	BoxSN                 string `json:"box_sn"`
+	DisplaySN             string `json:"display_sn"`
+	UserName              string `json:"user_name"`
+	Department            string `json:"department"`
+	Room                  string `json:"room"`
+	IP                    string `json:"ip"`
+	TerminalIP            string `json:"terminal_ip"`
+	OSType                string `json:"os_type"`
+	OSVersion             string `json:"os_version"`
+	Vendor                string `json:"vendor"`
+	Model                 string `json:"model"`
+	CPUInfo               string `json:"cpu_info"`
+	MemoryMB              int64  `json:"memory_mb"`
+	DiskInfo              string `json:"disk_info"`
+	SecuritySoftware      string `json:"security_software"`
+	Status                string `json:"status"`
+	NetType               string `json:"net_type"`
+	GroupID               int64  `json:"group_id"`
+	GroupName             string `json:"group_name"`
+	Remark                string `json:"remark"`
+	CreatedAt             string `json:"created_at"`
+	UpdatedAt             string `json:"updated_at"`
 }
+
+type AssetQuery struct {
+	Keyword          string
+	DeviceType       string
+	Department       string
+	UserName         string
+	Room             string
+	NetType          string
+	OSType           string
+	Status           string
+	SecuritySoftware string
+	GroupID          int64
+	IncludeArchived  bool
+	Page             int
+	PageSize         int
+}
+
+const AssetUnconfiguredFilter = "__unconfigured__"
 
 type PhysicalServer struct {
 	ID           int64  `json:"id"`
@@ -52,29 +78,50 @@ type PhysicalServer struct {
 }
 
 type ServerApp struct {
-	ID           int64  `json:"id"`
-	ProjectID    int64  `json:"project_id"`
-	ServerID     int64  `json:"server_id"`
-	CmdbAssetID  int64  `json:"cmdb_asset_id"`
-	AppName      string `json:"app_name"`
-	AppType      string `json:"app_type"`
-	Port         string `json:"port"`
-	AccessURL    string `json:"access_url"`
-	Middleware   string `json:"middleware"`
-	DatabaseInfo string `json:"database_info"`
-	Provider     string `json:"provider"`
-	Owner        string `json:"owner"`
-	Status       string `json:"status"`
-	GroupID      int64  `json:"group_id"`
-	GroupName    string `json:"group_name"`
-	Remark       string `json:"remark"`
-	Version      string `json:"version"`
-	Description  string `json:"description"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
-	ServerName   string `json:"server_name"`
-	ServerBizIP  string `json:"server_biz_ip"`
-	ServiceIP    string `json:"service_ip"`
+	ID                 int64  `json:"id"`
+	ProjectID          int64  `json:"project_id"`
+	ServerID           int64  `json:"server_id"`
+	CmdbAssetID        int64  `json:"cmdb_asset_id"`
+	AssetCode          string `json:"asset_code"`
+	Department         string `json:"department"`
+	Deployment         string `json:"deployment"`
+	DeploymentLocation string `json:"deployment_location"`
+	AppName            string `json:"app_name"`
+	AppType            string `json:"app_type"`
+	Port               string `json:"port"`
+	AccessURL          string `json:"access_url"`
+	Middleware         string `json:"middleware"`
+	DatabaseInfo       string `json:"database_info"`
+	Provider           string `json:"provider"`
+	Owner              string `json:"owner"`
+	Status             string `json:"status"`
+	GroupID            int64  `json:"group_id"`
+	GroupName          string `json:"group_name"`
+	Remark             string `json:"remark"`
+	Version            string `json:"version"`
+	Description        string `json:"description"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
+	ServerName         string `json:"server_name"`
+	ServerBizIP        string `json:"server_biz_ip"`
+	ServiceIP          string `json:"service_ip"`
+	NetworkType        string `json:"network_type"`
+}
+
+type ServerAppQuery struct {
+	Keyword         string
+	AppType         string
+	Status          string
+	Provider        string
+	Owner           string
+	NetworkType     string
+	Department      string
+	IncludeArchived bool
+	GroupID         int64
+	HostID          int64
+	HostLinked      string
+	Page            int
+	PageSize        int
 }
 
 type AssetLog struct {

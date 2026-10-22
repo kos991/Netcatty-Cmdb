@@ -15,6 +15,7 @@ func (s *Server) handleListPersons(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+	nodeID, _ := strconv.ParseInt(q.Get("node_id"), 10, 64)
 	if page < 1 {
 		page = 1
 	}
@@ -24,6 +25,8 @@ func (s *Server) handleListPersons(w http.ResponseWriter, r *http.Request) {
 
 	query := store.PersonQuery{
 		Keyword:    strings.TrimSpace(q.Get("keyword")),
+		NodeID:     nodeID,
+		NodeType:   strings.TrimSpace(q.Get("node_type")),
 		Department: strings.TrimSpace(q.Get("department")),
 		OrgName:    strings.TrimSpace(q.Get("org_name")),
 		GroupName:  strings.TrimSpace(q.Get("group_name")),

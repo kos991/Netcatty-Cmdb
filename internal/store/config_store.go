@@ -1,11 +1,12 @@
 package store
 
 import (
-	"database/sql"
-	"errors"
-	"fmt"
-	"strings"
-	"time"
+  "database/sql"
+  "errors"
+  "fmt"
+  "regexp"
+  "strings"
+  "time"
 )
 
 const (
@@ -28,6 +29,12 @@ const (
 
 var ErrReferenced = errors.New("配置项已被引用")
 
+var hexColorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+
+func validHexColor(value string) bool {
+  return hexColorPattern.MatchString(value)
+}
+
 type OrgNode struct {
 	ID        int64     `json:"id"`
 	ProjectID int64     `json:"project_id"`
@@ -41,22 +48,27 @@ type OrgNode struct {
 }
 
 type ConfigItem struct {
-	ID          int64   `json:"id"`
-	ProjectID   int64   `json:"project_id"`
-	SyncID      string  `json:"sync_id"`
-	Name        string  `json:"name"`
-	ParentID    int64   `json:"parent_id"`
-	NodeType    string  `json:"node_type"`
-	Vendor      string  `json:"vendor"`
-	Model       string  `json:"model"`
-	Version     string  `json:"version"`
-	Remark      string  `json:"remark"`
-	SortOrder   int64   `json:"sort_order"`
-	HeightU     int64   `json:"height_u"`
-	RatedPowerW int64   `json:"rated_power_w"`
-	MaxPowerW   int64   `json:"max_power_w"`
-	WeightKG    float64 `json:"weight_kg"`
-	DepthMM     int64   `json:"depth_mm"`
+  ID           int64   `json:"id"`
+  ProjectID    int64   `json:"project_id"`
+  SyncID       string  `json:"sync_id"`
+  Name         string  `json:"name"`
+  ParentID     int64   `json:"parent_id"`
+  NodeType     string  `json:"node_type"`
+  Vendor       string  `json:"vendor"`
+  Model        string  `json:"model"`
+  Version      string  `json:"version"`
+  Remark       string  `json:"remark"`
+  Color        string  `json:"color"`
+  SortOrder    int64   `json:"sort_order"`
+  HeightU      int64   `json:"height_u"`
+  RatedPowerW  int64   `json:"rated_power_w"`
+  MaxPowerW    int64   `json:"max_power_w"`
+  WeightKG     float64 `json:"weight_kg"`
+  DepthMM      int64   `json:"depth_mm"`
+  RackUnits    int64   `json:"rack_units"`
+  LocationType string  `json:"location_type"`
+  DataCenter   string  `json:"data_center"`
+  CabinetName  string  `json:"cabinet_name"`
 }
 
 func (s *Store) ListOrgTree(scope ProjectScope) ([]OrgNode, error) {
@@ -470,7 +482,7 @@ func (s *Store) UpdateConfigItem(scope ProjectScope, kind string, item *ConfigIt
 	case ConfigKindSoftware:
 		return s.updateFlatConfigItem(scope, "cmdb_software_catalog", kind, item, true)
 	case ConfigKindLocations:
-		return s.updateFlatConfigItem(scope, "cmdb_locations", kind, item, false)
+		return s.updateRackConfigItem(scope, item)
 	case ConfigKindStatuses:
 		return s.updateFlatConfigItem(scope, "cmdb_statuses", kind, item, false)
 	case ConfigKindNetworkTypes:
@@ -530,25 +542,38 @@ func (s *Store) DeleteConfigItem(scope ProjectScope, kind string, id int64) erro
 	}
 }
 
-func (s *Store) listFlatConfigItems(scope ProjectScope, table string, software bool) ([]ConfigItem, error) {
-	columns := "id, project_id, IFNULL(sync_id,''), name, '', '', IFNULL(remark,''), sort_order"
-	if software {
-		columns = "id, project_id, IFNULL(sync_id,''), name, IFNULL(vendor,''), IFNULL(version,''), IFNULL(remark,''), sort_order"
+const maxRackUnits = 60
+
+func validateRackUnits(units int64) error {
+	if units < 0 || units > maxRackUnits {
+		return fmt.Errorf("机柜 U 数需在 1-%d 之间", maxRackUnits)
 	}
+	return nil
+}
+
+func (s *Store) listFlatConfigItems(scope ProjectScope, table string, software bool) ([]ConfigItem, error) {
+  columns := "id, project_id, IFNULL(sync_id,''), name, '', '', IFNULL(remark,''), '', sort_order, 0, '', '', ''"
+  if software {
+    columns = "id, project_id, IFNULL(sync_id,''), name, IFNULL(vendor,''), IFNULL(version,''), IFNULL(remark,''), '', sort_order, 0, '', '', ''"
+  } else if table == "cmdb_network_types" {
+    columns = "id, project_id, IFNULL(sync_id,''), name, '', '', IFNULL(remark,''), IFNULL(color,''), sort_order, 0, '', '', ''"
+  } else if table == "cmdb_locations" {
+    columns = "id, project_id, IFNULL(sync_id,''), name, '', '', IFNULL(remark,''), '', sort_order, rack_units, location_type, data_center, cabinet_name"
+  }
 	rows, err := s.db.Query(`SELECT `+columns+` FROM `+table+` WHERE project_id=? AND deleted_at IS NULL ORDER BY sort_order,name,id`, scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	items := make([]ConfigItem, 0)
-	for rows.Next() {
-		var item ConfigItem
-		if err := rows.Scan(&item.ID, &item.ProjectID, &item.SyncID, &item.Name, &item.Vendor, &item.Version, &item.Remark, &item.SortOrder); err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+    for rows.Next() {
+      var item ConfigItem
+      if err := rows.Scan(&item.ID, &item.ProjectID, &item.SyncID, &item.Name, &item.Vendor, &item.Version, &item.Remark, &item.Color, &item.SortOrder, &item.RackUnits, &item.LocationType, &item.DataCenter, &item.CabinetName); err != nil {
+        return nil, err
+      }
+      items = append(items, item)
+    }
+    return items, rows.Err()
 }
 
 func (s *Store) createFlatConfigItem(scope ProjectScope, table, kind string, item *ConfigItem, software bool) (int64, error) {
@@ -563,11 +588,18 @@ func (s *Store) createFlatConfigItem(scope ProjectScope, table, kind string, ite
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	var result sql.Result
 	var err error
-	if software {
-		result, err = s.db.Exec(`INSERT INTO `+table+`(project_id,name,vendor,version,remark,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, scope.ProjectID, item.Name, item.Vendor, strings.TrimSpace(item.Version), strings.TrimSpace(item.Remark), item.SortOrder, now, now)
-	} else {
-		result, err = s.db.Exec(`INSERT INTO `+table+`(project_id,name,remark,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?)`, scope.ProjectID, item.Name, strings.TrimSpace(item.Remark), item.SortOrder, now, now)
-	}
+  if software {
+    result, err = s.db.Exec(`INSERT INTO `+table+`(project_id,name,vendor,version,remark,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, scope.ProjectID, item.Name, item.Vendor, strings.TrimSpace(item.Version), strings.TrimSpace(item.Remark), item.SortOrder, now, now)
+  } else if table == "cmdb_locations" {
+    if err := normalizeRackConfig(item); err != nil { return 0, err }
+    result, err = s.db.Exec(`INSERT INTO `+table+`(project_id,name,remark,sort_order,rack_units,location_type,data_center,cabinet_name,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, scope.ProjectID, item.Name, strings.TrimSpace(item.Remark), item.SortOrder, item.RackUnits, item.LocationType, item.DataCenter, item.CabinetName, now, now)
+  } else if table == "cmdb_network_types" {
+    item.Color = strings.TrimSpace(item.Color)
+    if item.Color != "" && !validHexColor(item.Color) { return 0, errors.New("网络类型颜色必须是 #RRGGBB") }
+    result, err = s.db.Exec(`INSERT INTO `+table+`(project_id,name,remark,color,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, scope.ProjectID, item.Name, strings.TrimSpace(item.Remark), item.Color, item.SortOrder, now, now)
+  } else {
+    result, err = s.db.Exec(`INSERT INTO `+table+`(project_id,name,remark,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?)`, scope.ProjectID, item.Name, strings.TrimSpace(item.Remark), item.SortOrder, now, now)
+  }
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return 0, fmt.Errorf("同一项目内已存在相同%s配置", kind)
@@ -596,13 +628,17 @@ func (s *Store) updateFlatConfigItem(scope ProjectScope, table, kind string, ite
 		return errors.New("配置项名称不能为空")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	var result sql.Result
-	var err error
-	if software {
-		result, err = s.db.Exec(`UPDATE `+table+` SET name=?,vendor=?,version=?,remark=?,sort_order=?,revision=revision+1,updated_at=? WHERE id=? AND project_id=? AND deleted_at IS NULL`, item.Name, item.Vendor, strings.TrimSpace(item.Version), strings.TrimSpace(item.Remark), item.SortOrder, now, item.ID, scope.ProjectID)
-	} else {
-		result, err = s.db.Exec(`UPDATE `+table+` SET name=?,remark=?,sort_order=?,revision=revision+1,updated_at=? WHERE id=? AND project_id=? AND deleted_at IS NULL`, item.Name, strings.TrimSpace(item.Remark), item.SortOrder, now, item.ID, scope.ProjectID)
-	}
+  var result sql.Result
+  var err error
+  if software {
+    result, err = s.db.Exec(`UPDATE `+table+` SET name=?,vendor=?,version=?,remark=?,sort_order=?,revision=revision+1,updated_at=? WHERE id=? AND project_id=? AND deleted_at IS NULL`, item.Name, item.Vendor, strings.TrimSpace(item.Version), strings.TrimSpace(item.Remark), item.SortOrder, now, item.ID, scope.ProjectID)
+  } else if table == "cmdb_network_types" {
+    item.Color = strings.TrimSpace(item.Color)
+    if item.Color != "" && !validHexColor(item.Color) { return errors.New("网络类型颜色必须是 #RRGGBB") }
+    result, err = s.db.Exec(`UPDATE `+table+` SET name=?,remark=?,color=?,sort_order=?,revision=revision+1,updated_at=? WHERE id=? AND project_id=? AND deleted_at IS NULL`, item.Name, strings.TrimSpace(item.Remark), item.Color, item.SortOrder, now, item.ID, scope.ProjectID)
+  } else {
+    result, err = s.db.Exec(`UPDATE `+table+` SET name=?,remark=?,sort_order=?,revision=revision+1,updated_at=? WHERE id=? AND project_id=? AND deleted_at IS NULL`, item.Name, strings.TrimSpace(item.Remark), item.SortOrder, now, item.ID, scope.ProjectID)
+  }
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return fmt.Errorf("同一项目内已存在相同%s配置", kind)

@@ -24,6 +24,10 @@ import (
 // CmdbAssetChanges 用指针区分「未提供」与「置为空」。
 type CmdbAssetChanges struct {
 	Name         *string                 `json:"name"`
+	AssetCode    *string                 `json:"asset_code"`
+	Vendor       *string                 `json:"vendor"`
+	Model        *string                 `json:"model"`
+	MgmtIP       *string                 `json:"mgmt_ip"`
 	DeviceType   *string                 `json:"device_type"`
 	Status       *string                 `json:"status"`
 	OrgID        *int64                  `json:"org_id"`
@@ -35,6 +39,8 @@ type CmdbAssetChanges struct {
 	DataCenter   *string                 `json:"data_center"`
 	Floor        *string                 `json:"floor"`
 	CabinetName  *string                 `json:"cabinet_name"`
+	StartU       *int64                  `json:"start_u"`
+	HeightU      *int64                  `json:"height_u"`
 	Remark       *string                 `json:"remark"`
 	CustomFields *map[string]interface{} `json:"custom_fields"`
 }
@@ -49,6 +55,19 @@ func (c CmdbAssetChanges) build() (string, []interface{}, error) {
 	}
 	if c.Name != nil {
 		add("name", *c.Name)
+	}
+	if c.AssetCode != nil {
+		add("asset_code", strings.TrimSpace(*c.AssetCode))
+	}
+	if c.Vendor != nil {
+		add("vendor", strings.TrimSpace(*c.Vendor))
+	}
+	if c.Model != nil {
+		add("model", strings.TrimSpace(*c.Model))
+	}
+	if c.MgmtIP != nil {
+		add("mgmt_ip", strings.TrimSpace(*c.MgmtIP))
+		add("manage_ip", strings.TrimSpace(*c.MgmtIP))
 	}
 	if c.DeviceType != nil {
 		add("device_type", *c.DeviceType)
@@ -82,6 +101,22 @@ func (c CmdbAssetChanges) build() (string, []interface{}, error) {
 	}
 	if c.CabinetName != nil {
 		add("cabinet_name", *c.CabinetName)
+		add("cabinet_pos", "")
+	}
+	// start_u/height_u 与历史同义列 u_start/u_height 同步写入，避免两套 U 位分叉。
+	if c.StartU != nil {
+		if *c.StartU < 0 || *c.StartU > maxRackUnits {
+			return "", nil, fmt.Errorf("起始 U 位需在 0-%d 之间", maxRackUnits)
+		}
+		add("start_u", *c.StartU)
+		add("u_start", *c.StartU)
+	}
+	if c.HeightU != nil {
+		if *c.HeightU < 1 || *c.HeightU > maxRackUnits {
+			return "", nil, fmt.Errorf("占用 U 数需在 1-%d 之间", maxRackUnits)
+		}
+		add("height_u", *c.HeightU)
+		add("u_height", *c.HeightU)
 	}
 	if c.Remark != nil {
 		add("remark", *c.Remark)
@@ -100,7 +135,8 @@ func (c CmdbAssetChanges) isEmpty() bool {
 	return c.Name == nil && c.DeviceType == nil && c.Status == nil && c.OrgID == nil &&
 		c.GroupID == nil && c.CategoryID == nil && c.Department == nil && c.Owner == nil &&
 		c.OwnerID == nil && c.DataCenter == nil && c.Floor == nil && c.CabinetName == nil &&
-		c.Remark == nil && c.CustomFields == nil
+		c.StartU == nil && c.HeightU == nil && c.Remark == nil && c.CustomFields == nil &&
+		c.AssetCode == nil && c.Vendor == nil && c.Model == nil && c.MgmtIP == nil
 }
 
 // CMDB 状态 → 旧终端台账状态
@@ -170,6 +206,9 @@ func writeThroughToLegacy(tx *sql.Tx, projectID int64, asset *CmdbAsset, ch Cmdb
 
 	switch asset.SourceType {
 	case "legacy_asset":
+		if ch.AssetCode != nil {
+			add("asset_code", strings.TrimSpace(*ch.AssetCode))
+		}
 		if v, ok := str(ch.Department); ok {
 			add("department", v)
 		}
@@ -190,6 +229,26 @@ func writeThroughToLegacy(tx *sql.Tx, projectID int64, asset *CmdbAsset, ch Cmdb
 		return verifyLegacyWrite(asset, result, err)
 
 	case "legacy_server":
+		if ch.AssetCode != nil {
+			add("asset_code", strings.TrimSpace(*ch.AssetCode))
+		}
+		if ch.MgmtIP != nil {
+			add("mgmt_ip", strings.TrimSpace(*ch.MgmtIP))
+		}
+		if ch.Vendor != nil || ch.Model != nil {
+			vendor, model := asset.Vendor, asset.Model
+			if ch.Vendor != nil {
+				vendor = strings.TrimSpace(*ch.Vendor)
+			}
+			if ch.Model != nil {
+				model = strings.TrimSpace(*ch.Model)
+			}
+			brandModel := model
+			if vendor != "" && !strings.Contains(model, vendor) {
+				brandModel = strings.TrimSpace(vendor + " " + model)
+			}
+			add("brand_model", brandModel)
+		}
 		if v, ok := str(ch.Name); ok {
 			add("device_name", v)
 		}
@@ -199,8 +258,19 @@ func writeThroughToLegacy(tx *sql.Tx, projectID int64, asset *CmdbAsset, ch Cmdb
 		if v, ok := str(ch.Remark); ok {
 			add("remark", v)
 		}
-		if v, ok := str(ch.CabinetName); ok {
-			add("location", v)
+		if ch.CabinetName != nil || ch.DataCenter != nil {
+			room, cabinet := asset.DataCenter, asset.CabinetName
+			if ch.DataCenter != nil {
+				room = *ch.DataCenter
+			}
+			if ch.CabinetName != nil {
+				cabinet = *ch.CabinetName
+			}
+			location := room
+			if cabinet != "" {
+				location = qualifiedRackLocation(room, cabinet)
+			}
+			add("location", location)
 		}
 		if ch.Status != nil && strings.TrimSpace(*ch.Status) != "" {
 			add("status", cmdbStatusToLegacyServer(*ch.Status))
@@ -337,17 +407,20 @@ func (s *Store) ApplyCmdbAssetChangesForProject(scope ProjectScope, ids []int64,
 			}
 		}
 	}
-	setClause, args, err := ch.build()
-	if err != nil {
+	if _, _, err := ch.build(); err != nil {
 		return 0, err
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 
 	for _, id := range ids {
 		cur := &CmdbAsset{ID: id}
-		err := tx.QueryRow(`SELECT source_type, source_id, category_id, model_id, org_id, group_id, owner_id
-			FROM cmdb_assets WHERE id = ? AND project_id = ?`, id, scope.ProjectID).Scan(
+		err := tx.QueryRow(`SELECT source_type, source_id, category_id, model_id, org_id, group_id, owner_id,
+			IFNULL(data_center,''),IFNULL(cabinet_name,''),IFNULL(cabinet_pos,''),start_u,u_start,
+			height_u,IFNULL(name,''),IFNULL(vendor,''),IFNULL(model,''),IFNULL(mgmt_ip,''),IFNULL(manage_ip,''),IFNULL(biz_ip,''),IFNULL(public_ip,''),IFNULL(department,''),IFNULL(owner,''),IFNULL(room,'')
+			FROM cmdb_assets WHERE id = ? AND project_id = ? AND deleted_at IS NULL`, id, scope.ProjectID).Scan(
 			&cur.SourceType, &cur.SourceID, &cur.CategoryID, &cur.ModelID, &cur.OrgID, &cur.GroupID, &cur.OwnerID,
+			&cur.DataCenter, &cur.CabinetName, &cur.CabinetPos, &cur.StartU, &cur.UStart,
+			&cur.HeightU, &cur.Name, &cur.Vendor, &cur.Model, &cur.MgmtIP, &cur.ManageIP, &cur.BizIP, &cur.PublicIP, &cur.Department, &cur.Owner, &cur.Room,
 		)
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, fmt.Errorf("资产 %d 不属于当前项目: %w", id, ErrProjectScopedNotFound)
@@ -371,11 +444,54 @@ func (s *Store) ApplyCmdbAssetChangesForProject(scope ProjectScope, ids []int64,
 		if err := validateCmdbAssetRelations(tx, scope.ProjectID, &effectiveRelations); err != nil {
 			return 0, err
 		}
-		q := "UPDATE cmdb_assets SET " + setClause + ", updated_at = ? WHERE id = ? AND project_id = ?"
+		rowChanges, err := normalizeRackChanges(cur, ch)
+		if err != nil {
+			return 0, fmt.Errorf("资产 %d: %w", id, err)
+		}
+		if ch.StartU != nil || ch.HeightU != nil || ch.DataCenter != nil || ch.CabinetName != nil {
+			height := cur.HeightU
+			if height < 1 {
+				height = 1
+			}
+			if rowChanges.HeightU != nil {
+				height = *rowChanges.HeightU
+			}
+			if err := validateRackAssetPlacement(tx, scope.ProjectID, id, *rowChanges.DataCenter, *rowChanges.CabinetName, *rowChanges.StartU, height); err != nil {
+				return 0, err
+			}
+		}
+		setClause, args, err := rowChanges.build()
+		if err != nil {
+			return 0, err
+		}
+		q := "UPDATE cmdb_assets SET " + setClause + ", revision=revision+1, updated_at = ? WHERE id = ? AND project_id = ?"
 		if _, err := tx.Exec(q, append(append([]interface{}{}, args...), now, id, scope.ProjectID)...); err != nil {
 			return 0, err
 		}
-		if err := writeThroughToLegacy(tx, scope.ProjectID, cur, ch); err != nil {
+		if rowChanges.MgmtIP != nil {
+			interfaces, err := rackPatchInterfaces(tx, scope.ProjectID, id)
+			if err != nil {
+				return 0, err
+			}
+			next := *cur
+			next.MgmtIP, next.ManageIP = strings.TrimSpace(*rowChanges.MgmtIP), strings.TrimSpace(*rowChanges.MgmtIP)
+			if rowChanges.Name != nil {
+				next.Name = *rowChanges.Name
+			}
+			if rowChanges.Department != nil {
+				next.Department = *rowChanges.Department
+			}
+			if rowChanges.Owner != nil {
+				next.Owner = *rowChanges.Owner
+			}
+			if err := linkCmdbAssetIPsToIPPool(tx, scope.ProjectID, id, cur, &next, interfaces, interfaces); err != nil {
+				return 0, err
+			}
+		}
+		if err := writeThroughToLegacy(tx, scope.ProjectID, cur, rowChanges); err != nil {
+			return 0, err
+		}
+		if err := appendCmdbAssetHistory(tx, scope.ProjectID, id, "资产修改", "批量更新资产属性或机柜位置", "系统"); err != nil {
 			return 0, err
 		}
 	}
@@ -630,9 +746,6 @@ func (s *Store) CreateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 	if a.UHeight == 0 {
 		a.UHeight = a.HeightU
 	}
-	if a.UStart == 0 && a.StartU > 0 {
-		a.UStart = a.StartU
-	}
 	if a.ManageIP == "" && a.MgmtIP != "" {
 		a.ManageIP = a.MgmtIP
 	}
@@ -644,12 +757,6 @@ func (s *Store) CreateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 	}
 	if a.MAC == "" && a.MACAddress != "" {
 		a.MAC = a.MACAddress
-	}
-	if a.Area == "" && a.DataCenter != "" {
-		a.Area = a.DataCenter
-	}
-	if a.DataCenter == "" && a.Area != "" {
-		a.DataCenter = a.Area
 	}
 	if a.Description == "" && a.Remark != "" {
 		a.Description = a.Remark
@@ -683,6 +790,9 @@ func (s *Store) CreateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 	}
 	if a.Country == "" {
 		a.Country = "中国"
+	}
+	if err := normalizeAssetRackLocation(a, true); err != nil {
+		return 0, err
 	}
 
 	if len(a.CustomFields) > 0 {
@@ -821,9 +931,6 @@ func (s *Store) UpdateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 	if a.UHeight == 0 {
 		a.UHeight = a.HeightU
 	}
-	if a.UStart == 0 && a.StartU > 0 {
-		a.UStart = a.StartU
-	}
 	if a.ManageIP == "" && a.MgmtIP != "" {
 		a.ManageIP = a.MgmtIP
 	}
@@ -835,12 +942,6 @@ func (s *Store) UpdateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 	}
 	if a.MAC == "" && a.MACAddress != "" {
 		a.MAC = a.MACAddress
-	}
-	if a.Area == "" && a.DataCenter != "" {
-		a.Area = a.DataCenter
-	}
-	if a.DataCenter == "" && a.Area != "" {
-		a.DataCenter = a.Area
 	}
 	if a.Description == "" && a.Remark != "" {
 		a.Description = a.Remark
@@ -874,6 +975,15 @@ func (s *Store) UpdateCmdbAssetManualForProject(scope ProjectScope, a *CmdbAsset
 	}
 	if a.Country == "" {
 		a.Country = "中国"
+	}
+	if a.CabinetName != cur.CabinetName || a.DataCenter != cur.DataCenter {
+		a.CabinetPos = ""
+	}
+	if a.CabinetName == "" && cur.CabinetName != "" {
+		a.StartU = 0
+	}
+	if err := normalizeAssetRackLocation(a, false); err != nil {
+		return err
 	}
 
 	if len(a.CustomFields) > 0 {

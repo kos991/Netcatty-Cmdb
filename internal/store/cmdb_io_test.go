@@ -10,9 +10,12 @@ import (
 
 func TestCmdbAssetFilterOptionsAndExportAll(t *testing.T) {
 	s := newCmdbTestStore(t)
-	insertCmdbAsset(t, s, CmdbAsset{Name: "A", AssetCode: "ZC-1", Status: "在线", OSType: "Linux", OSVersion: "openEuler 22.03"})
+	insertCmdbAsset(t, s, CmdbAsset{Name: "A", AssetCode: "ZC-1", Status: "在线", OSType: "Linux", OSVersion: "openEuler 22.03", BizIP: "192.0.2.10", NetType: "外网"})
 	insertCmdbAsset(t, s, CmdbAsset{Name: "B", AssetCode: "ZC-2", Status: "在库", OSType: "Linux", OSVersion: "Kylin V10"})
 	insertCmdbAsset(t, s, CmdbAsset{Name: "C", AssetCode: "ZC-3", Status: "在线"})
+	if _, err := s.CreateIPSubnet(&IPSubnet{Name: "业务地址池", Category: "专网", CIDR: "192.0.2.0/24"}); err != nil {
+		t.Fatal(err)
+	}
 
 	opts, err := s.CmdbAssetFilterOptions()
 	if err != nil {
@@ -23,6 +26,9 @@ func TestCmdbAssetFilterOptionsAndExportAll(t *testing.T) {
 	}
 	if len(opts["os_version"]) != 2 {
 		t.Fatalf("os_version 应有 2 个值，实际 %v", opts["os_version"])
+	}
+	if got := opts["net_type"]; len(got) != 1 || got[0] != "专网" {
+		t.Fatalf("网络筛选选项只应含业务 IPAM 归属，实际 %v", got)
 	}
 
 	// 导出取全量，不受分页限制

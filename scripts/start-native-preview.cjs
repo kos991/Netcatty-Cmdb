@@ -21,8 +21,12 @@ if (process.versions.electron) {
   service.startCmdbService = options => start({ ...options, port });
   require(path.join(target, 'electron', 'main.cjs'));
 } else {
-  const candidates = [target, path.join(root, 'build', 'netcatty')]
-    .map(directory => path.join(directory, 'node_modules', 'electron', 'dist', 'electron.exe'));
+  const candidates = [
+    process.env.NETCATTY_PREVIEW_ELECTRON,
+    ...[target, path.join(root, 'build', 'netcatty')]
+      .map(directory => path.join(directory, 'node_modules', 'electron', 'dist', 'electron.exe')),
+    path.join(root, 'build', 'electron-runtime-preview', 'electron.exe'),
+  ].filter(Boolean);
   const executable = candidates.find(file => fs.existsSync(file));
   if (!executable) throw new Error('本地 Electron 尚未安装，请先安装 Netcatty 的桌面运行依赖');
   for (const file of [server, executable, path.join(target, 'dist', 'index.html')]) {
@@ -32,8 +36,14 @@ if (process.versions.electron) {
   const env = { ...process.env, NETCATTY_CMDB_DB_PATH: path.join(data, 'assets.db'), NETCATTY_CMDB_SERVER_PATH: server };
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.VITE_DEV_SERVER_URL;
-  const child = spawn(executable, [__filename], { cwd: target, env, detached: true, windowsHide: true, stdio: 'ignore' });
+  const stdoutPath = path.join(data, 'preview-stdout.log');
+  const stderrPath = path.join(data, 'preview-stderr.log');
+  const stdout = fs.openSync(stdoutPath, 'a');
+  const stderr = fs.openSync(stderrPath, 'a');
+  const child = spawn(executable, [`--user-data-dir=${path.join(data, 'profile')}`, __filename], { cwd: target, env, detached: true, windowsHide: false, stdio: ['ignore', stdout, stderr] });
+  fs.closeSync(stdout);
+  fs.closeSync(stderr);
   child.on('error', error => { console.error('客户端启动失败：', error.message); process.exitCode = 1; });
-  child.on('spawn', () => console.log(`原生测试客户端已启动，测试数据目录：${data}`));
+  child.on('spawn', () => console.log(`测试进程已创建（PID ${child.pid}）；源码：${target}；测试数据：${data}；启动日志：${stdoutPath} / ${stderrPath}`));
   child.unref();
 }

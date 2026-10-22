@@ -57,9 +57,7 @@ type CmdbMergePreview struct {
 
 type CmdbMergeResult = CmdbMergePreview
 
-var snapshotExcludedTables = map[string]bool{
-	"cmdb_work_order_attachments": true,
-}
+var snapshotExcludedTables = map[string]bool{}
 
 var snapshotApplyOrder = []string{
 	"cmdb_orgs", "cmdb_groups", "cmdb_device_categories", "cmdb_device_models",
@@ -67,8 +65,8 @@ var snapshotApplyOrder = []string{
 	"cmdb_work_order_categories", "cmdb_work_order_types", "cmdb_work_order_priorities", "cmdb_work_order_rules",
 	"cmdb_custom_fields", "assets", "servers", "server_apps", "cmdb_assets", "cmdb_asset_interfaces",
 	"cmdb_asset_links", "cmdb_netcatty_links", "cmdb_switch_snapshots", "cmdb_asset_history", "cmdb_work_orders",
-	"cmdb_work_order_asset_links", "cmdb_inventory_tasks", "cmdb_credentials", "cmdb_labels",
-	"cmdb_asset_software", "ip_subnets", "ip_pool", "asset_logs", "cmdb_work_order_attachments",
+	"cmdb_work_order_asset_links", "cmdb_work_order_logs", "cmdb_inventory_tasks", "cmdb_credentials", "cmdb_labels",
+	"cmdb_asset_software", "ip_subnets", "ip_pool", "asset_logs", "server_app_logs", "cmdb_work_order_attachments",
 }
 
 func (s *Store) ExportCmdbSnapshot(scope ProjectScope, options SnapshotExportOptions) (*CmdbSnapshot, error) {
@@ -82,7 +80,7 @@ func (s *Store) ExportCmdbSnapshot(scope ProjectScope, options SnapshotExportOpt
 	}
 	collections := make(map[string]json.RawMessage)
 	for _, table := range projectScopedTables {
-		if snapshotExcludedTables[table] || (!options.IncludeHistory && (table == "asset_logs" || table == "cmdb_asset_history")) {
+		if snapshotExcludedTables[table] || (!options.IncludeHistory && isSnapshotHistoryTable(table)) {
 			continue
 		}
 		records, err := readSnapshotTable(s.db, table, scope.ProjectID, options, referenceIndex)
@@ -197,7 +195,7 @@ func readSnapshotTombstones(q snapshotQueryer, projectID int64, options Snapshot
 		if err := rows.Scan(&item.EntityType, &item.SyncID, &item.Revision, &item.DeletedAt); err != nil {
 			return nil, fmt.Errorf("扫描同步墓碑: %w", err)
 		}
-		if snapshotExcludedTables[item.EntityType] || (!options.IncludeHistory && (item.EntityType == "asset_logs" || item.EntityType == "cmdb_asset_history")) {
+		if snapshotExcludedTables[item.EntityType] || (!options.IncludeHistory && isSnapshotHistoryTable(item.EntityType)) {
 			continue
 		}
 		result = append(result, item)
@@ -405,6 +403,15 @@ func validateIncomingSnapshot(project *CmdbProject, snapshot *CmdbSnapshot) erro
 		if !isSnapshotTable(table) || snapshotExcludedTables[table] {
 			return fmt.Errorf("同步快照包含不允许的集合: %s", table)
 		}
+		if table == "cmdb_assets" {
+			records, err := decodeSnapshotCollection(table, snapshot.Collections[table])
+			if err != nil {
+				return err
+			}
+			if err := validateSnapshotRackLocations(records); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -495,8 +502,11 @@ func (preview *CmdbMergePreview) addConflict(table, syncID, reason string) {
 
 func snapshotOptions(snapshot *CmdbSnapshot) SnapshotExportOptions {
 	options := SnapshotExportOptions{}
-	if _, exists := snapshot.Collections["asset_logs"]; exists {
-		options.IncludeHistory = true
+	for name := range snapshot.Collections {
+		if isSnapshotHistoryTable(name) {
+			options.IncludeHistory = true
+			break
+		}
 	}
 	if raw, exists := snapshot.Collections["cmdb_persons"]; exists {
 		var records []map[string]any
@@ -616,10 +626,20 @@ func snapshotTableColumns(q snapshotQueryer, table string) (map[string]bool, err
 
 type snapshotReferenceIndex map[string]map[int64]string
 
+func isSnapshotHistoryTable(table string) bool {
+	switch table {
+	case "asset_logs", "cmdb_asset_history", "server_app_logs", "cmdb_work_order_logs":
+		return true
+	default:
+		return false
+	}
+}
+
 var snapshotStaticReferences = map[string]map[string]string{
 	"asset_logs":                  {"asset_id": "assets"},
 	"assets":                      {"group_id": "cmdb_groups"},
 	"server_apps":                 {"server_id": "servers", "cmdb_asset_id": "cmdb_assets", "group_id": "cmdb_groups"},
+	"server_app_logs":             {"app_id": "server_apps"},
 	"cmdb_orgs":                   {"parent_id": "cmdb_orgs"},
 	"cmdb_groups":                 {"parent_id": "cmdb_groups"},
 	"cmdb_device_categories":      {"parent_id": "cmdb_device_categories"},
@@ -629,6 +649,7 @@ var snapshotStaticReferences = map[string]map[string]string{
 	"cmdb_asset_history":          {"asset_id": "cmdb_assets"},
 	"cmdb_switch_snapshots":       {"asset_id": "cmdb_assets"},
 	"cmdb_work_orders":            {"asset_id": "cmdb_assets"},
+	"cmdb_work_order_logs":        {"work_order_id": "cmdb_work_orders"},
 	"cmdb_work_order_asset_links": {"work_order_id": "cmdb_work_orders"},
 	"cmdb_work_order_attachments": {"work_order_id": "cmdb_work_orders"},
 	"cmdb_credentials":            {"asset_id": "cmdb_assets"},
@@ -810,6 +831,10 @@ func withAvailableSnapshotReferences(tx snapshotTransaction, projectID int64, ta
 }
 
 func insertSnapshotRecord(tx snapshotTransaction, table string, allowed map[string]bool, projectID int64, record map[string]any) error {
+	if table == "cmdb_work_order_attachments" && strings.TrimSpace(snapshotString(record["stored_name"])) == "" {
+		digest := sha256.Sum256([]byte(snapshotString(record["sync_id"])))
+		record["stored_name"] = hex.EncodeToString(digest[:]) + ".bin"
+	}
 	columns := []string{"project_id"}
 	values := []any{projectID}
 	for _, column := range sortedSnapshotColumns(record, allowed) {

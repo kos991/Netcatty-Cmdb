@@ -1,0 +1,60 @@
+/* IP 详情占据自己的布局列，不覆盖地址网格；仅供离线原型评审。 */
+.pool-address-layout { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; min-height: 0; overflow: clip; }
+.pool-address-layout.has-ip-detail { grid-template-columns: minmax(0, 1fr) 320px; }
+.pool-address-layout > .pool-scroll { min-width: 0; min-height: 0; overflow: auto; padding-top: 4px; overscroll-behavior: contain; }
+#ip-detail.record-inline { display: flex; flex-direction: column; position: static; width: auto; max-width: none; height: auto; min-width: 0; min-height: 0; border: 0; border-left: 1px solid var(--border); border-radius: 0; box-shadow: none; background: var(--surface); overflow: auto; }
+#ip-detail .dialog-header { gap: 10px; padding: 12px 14px; }
+#ip-detail-title { font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#ip-detail .dialog-body { min-height: 0; flex: 1; overflow: auto; padding: 16px 14px; }
+#ip-detail .dialog-footer { flex-wrap: wrap; justify-content: flex-start; padding: 10px 14px; }
+#ip-detail .dialog-footer button { height: 34px; padding: 0 10px; font-size: 13px; }
+#ip-detail-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#ip-detail .selection-note { margin-top: 0; padding-bottom: 12px; color: var(--accent); line-height: 1.6; font-size: 11px; }
+#ip-detail-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+#ip-detail-fields .field { padding: 0; border: 0; background: transparent; }
+#ip-detail-fields dt { margin-bottom: 6px; font-size: 12px; line-height: 18px; }
+#ip-detail-fields dd { font-size: 13px; line-height: 20px; }
+#ip-detail .record-section, #pool-editor .record-section, #pool-ip-editor .record-section { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#ip-detail .section-title, #pool-editor .section-title, #pool-ip-editor .section-title { font-size: 13px; margin: 0 0 14px; }
+#ip-detail .record-header .icon, #pool-editor .record-header .icon, #pool-ip-editor .record-header .icon { width: 34px; height: 34px; }
+#pool-editor .field label, #pool-ip-editor .field label { font-size: 12px; }
+#pool-editor .field input, #pool-editor .field select, #pool-ip-editor .field input { height: 34px; font-size: 13px; }
+#pool-editor .record-footer button, #pool-ip-editor .record-footer button { height: 34px; font-size: 13px; }
+.ip-cell.ip-selected { position: relative; z-index: 1; outline: 2px solid var(--accent); outline-offset: 1px; background: var(--accent-soft); color: var(--accent); font-weight: 700; animation: ip-selection-glow 1.6s ease-in-out infinite; }
+.ip-table tr.ip-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ip-table tr.ip-selected td { background: var(--accent-soft); }
+@keyframes ip-selection-glow { 0%, 100% { box-shadow: 0 0 0 2px var(--accent-soft); } 50% { box-shadow: 0 0 0 5px var(--accent-soft), inset 0 0 0 1px var(--accent); } }
+#pool-editor { width: min(780px, calc(100vw - 32px)); }
+#pool-editor .pool-maintenance-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.pool-maintenance-directory { display: flex; min-height: 0; flex-direction: column; gap: 8px; padding: 12px; border-right: 1px solid var(--border); background: var(--bg); }
+.pool-editor-search { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--muted); }
+.pool-editor-search svg { width: 14px; height: 14px; flex: none; }
+.pool-editor-search input { min-width: 0; flex: 1; border: 0; background: transparent; color: var(--fg); font-size: 12px; outline: none; }
+.pool-editor-list { display: flex; min-height: 0; flex-direction: column; gap: 2px; overflow: auto; scrollbar-width: thin; }
+.pool-editor-item { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; height: 34px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--fg); font-size: 12px; text-align: left; }
+.pool-editor-item span { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.pool-editor-item:hover { background: var(--muted-surface); }
+.pool-editor-item[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+#pool-editor .record-body { min-height: 0; overflow: auto; }
+#pool-editor-scope { margin: 0 0 14px; font-size: 11px; line-height: 1.7; color: var(--muted); }
+@media (max-width: 720px) {
+  #pool-editor .pool-maintenance-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(110px, 30%) minmax(0, 1fr); }
+  .pool-maintenance-directory { border-right: 0; border-bottom: 1px solid var(--border); }
+}
+#pool-editor.record-dialog::backdrop, #pool-ip-editor.record-dialog::backdrop { background: #25314435; }
+@media (max-width: 900px) {
+  body.ip-review-active .app { height: 100dvh; min-height: 0; }
+  body.ip-review-active .surface { min-height: 0; overflow: hidden; }
+  body.ip-review-active .pool-summary { padding: 10px 12px; gap: 10px 14px; }
+  body.ip-review-active .pool-controls { padding: 8px 12px; }
+  .pool-view { min-height: 0; }
+  .pool-address-layout.has-ip-detail { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 1fr) minmax(160px, 200px); }
+  #ip-detail.record-inline { border-left: 0; border-top: 1px solid var(--border); }
+  #ip-detail .dialog-body { padding: 10px 14px; }
+  #ip-detail-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+  #ip-detail .selection-note { margin-bottom: 10px; padding-bottom: 0; }
+}
+@media (max-width: 560px) {
+  #ip-detail .ip-definition.record-fields { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .ip-cell.ip-selected { animation: none; box-shadow: inset 0 0 0 1px var(--accent); } }

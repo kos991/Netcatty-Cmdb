@@ -19,6 +19,9 @@ type CmdbWorkOrder struct {
 	Status        string              `json:"status"`
 	PlanTime      string              `json:"plan_time"`
 	ActualTime    string              `json:"actual_time"`
+	StartedAt     string              `json:"started_at"`
+	ResolvedAt    string              `json:"resolved_at"`
+	ClosedAt      string              `json:"closed_at"`
 	Result        string              `json:"result"`
 	Owner         string              `json:"owner"`
 	Maintainer    string              `json:"maintainer"`
@@ -27,6 +30,11 @@ type CmdbWorkOrder struct {
 	CreatedAt     string              `json:"created_at"`
 	UpdatedAt     string              `json:"updated_at"`
 	Assets        []WorkOrderAssetRef `json:"assets"`
+}
+
+type CmdbWorkOrderClosure struct {
+	ID     int64  `json:"id"`
+	Result string `json:"result"`
 }
 
 type WorkOrderAssetRef struct {
@@ -53,13 +61,14 @@ type CmdbWorkOrderQuery struct {
 
 const cmdbWorkOrderSelect = `SELECT id, project_id, IFNULL(sync_id,''), IFNULL(order_no,''), IFNULL(priority,''), subject,
 	IFNULL(biz_type,''), IFNULL(operation_type,''), work_minutes, IFNULL(status,''), IFNULL(plan_time,''), IFNULL(actual_time,''),
+	IFNULL(started_at,''), IFNULL(resolved_at,''), IFNULL(closed_at,''),
 	IFNULL(result,''), IFNULL(owner,''), IFNULL(maintainer,''), asset_id, IFNULL(remark,''),
 	IFNULL(created_at,''), IFNULL(updated_at,'') FROM cmdb_work_orders`
 
 func scanCmdbWorkOrder(sc interface{ Scan(...interface{}) error }) (CmdbWorkOrder, error) {
 	var w CmdbWorkOrder
 	err := sc.Scan(&w.ID, &w.ProjectID, &w.SyncID, &w.OrderNo, &w.Priority, &w.Subject, &w.BizType, &w.OperationType, &w.WorkMinutes, &w.Status,
-		&w.PlanTime, &w.ActualTime, &w.Result, &w.Owner, &w.Maintainer, &w.AssetID,
+		&w.PlanTime, &w.ActualTime, &w.StartedAt, &w.ResolvedAt, &w.ClosedAt, &w.Result, &w.Owner, &w.Maintainer, &w.AssetID,
 		&w.Remark, &w.CreatedAt, &w.UpdatedAt)
 	return w, err
 }

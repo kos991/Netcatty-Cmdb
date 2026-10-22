@@ -25,6 +25,11 @@ jobs:
         run: node --test scripts/check-release-data.test.mjs
       - name: Test native UI data contracts
         run: node --test integrations/netcatty/cmdb/*.test.js
+      - name: Test attachment sync, cloud sync, and encryption
+        run: |
+          node --experimental-strip-types --test integrations/netcatty/CmdbAttachmentCloudSync.test.ts
+          node --experimental-strip-types --test integrations/netcatty/CmdbCloudSync.test.ts
+          node --test integrations/netcatty/electron/cmdbAttachmentCloud.test.cjs
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -71,16 +76,19 @@ jobs:
           commit=$(node -p "require('./integrations/netcatty/upstream.json').commit")
           git clone --filter=blob:none "$repository" build/netcatty
           git -C build/netcatty checkout "$commit"
-      - name: Verify native UI assembly
-        run: node --test scripts/prepare-netcatty.test.mjs
       - name: Apply CMDB integration
         run: node scripts/prepare-netcatty.mjs --target build/netcatty
       - name: Install Netcatty dependencies
         working-directory: build/netcatty
         run: npm install --ignore-scripts
+      - name: Verify native UI assembly (needs esbuild from Netcatty deps)
+        run: node --test scripts/prepare-netcatty.test.mjs
       - name: Verify service lifecycle and native bridge
         working-directory: build/netcatty
         run: node --test electron/cmdbService.test.cjs electron/bridges/cmdbBridge.test.cjs
+      - name: Test Cmdb snapshot merge (needs @noble/hashes from Netcatty deps)
+        working-directory: build/netcatty
+        run: node --experimental-strip-types --test domain/cmdbSyncSnapshot.test.ts
       - name: Lint integrated source
         working-directory: build/netcatty
         run: npm run lint

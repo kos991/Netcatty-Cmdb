@@ -14,9 +14,15 @@ const put = (path, body = {}) => req(path, { method: 'PUT', body: JSON.stringify
 const del = (path, body) => req(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) })
 
 export const api = {
+  version: () => req('/api/version'),
   meta: () => req('/api/meta'),
   projects: () => req('/api/cmdb/projects'),
+  currentProject: () => req('/api/cmdb/projects/current'),
   updateProject: (id, body) => put(`/api/cmdb/projects/${id}`, body),
+  attachmentStorage: () => req('/api/cmdb/attachment-storage'),
+  preflightAttachmentStorage: (targetRoot = '') => post('/api/cmdb/attachment-storage/preflight', { target_root: targetRoot }),
+  migrateAttachmentStorage: (targetRoot = '') => post('/api/cmdb/attachment-storage/migrate', { target_root: targetRoot }),
+  restoreDefaultAttachmentStorage: () => post('/api/cmdb/attachment-storage/restore-default'),
   search: (q, limit = 50) => req(`/api/search?${toQuery({ q, limit })}`),
 
   assets: (params = {}) => req(`/api/assets?${toQuery(params)}`),
@@ -24,6 +30,7 @@ export const api = {
   assetRelations: (id) => req(`/api/assets/${id}/relations`),
   createAsset: (body) => post('/api/assets', body),
   updateAsset: (id, body) => put(`/api/assets/${id}`, body),
+  batchUpdateAssets: (ids, changes) => post('/api/assets/batch', { ids, changes }),
   archiveAsset: (id) => del(`/api/assets/${id}`, { reason: '资产注销归档', operator: '资产管理员' }),
   transferAsset: (id, body) => post(`/api/assets/${id}/transfer`, body),
   maintainAsset: (id, body) => post(`/api/assets/${id}/maintenance`, body),
@@ -37,6 +44,7 @@ export const api = {
   updateServer: (id, body) => put(`/api/servers/${id}`, body),
   deleteServer: (id) => del(`/api/servers/${id}`),
   apps: (params = {}) => req(`/api/apps?${toQuery(params)}`),
+  app: (id) => req(`/api/apps/${id}`),
   serverApps: (serverId) => req(`/api/servers/${serverId}/apps`),
   createApp: (body) => post('/api/apps', body),
   updateApp: (id, body) => put(`/api/apps/${id}`, body),
@@ -60,6 +68,9 @@ export const api = {
   deleteInfrastructureLink: (id) => del(`/api/cmdb/asset-links/${id}`),
   deleteInfrastructure: (id) => del(`/api/cmdb/assets/${id}`),
   batchInfrastructure: (ids, action, changes) => post('/api/cmdb/assets/batch', { ids, action, changes }),
+  rackMigrationPreview: () => req('/api/cmdb/rack-migration'),
+  migrateRackLocations: (token) => post('/api/cmdb/rack-migration', { token }),
+  rollbackRackMigration: () => post('/api/cmdb/rack-migration/rollback'),
   exportInfrastructure: (params = {}) => exportFile(`/api/cmdb/assets/export?${toQuery(params)}`, 'cmdb_assets.xlsx'),
   importInfrastructure: (commit = false, token) => importFile('/api/cmdb/assets/import', { commit, token }),
   downloadInfrastructureTemplate: () => exportFile('/api/cmdb/assets/template', 'cmdb-template.xlsx'),
@@ -101,6 +112,10 @@ export const api = {
   createSubnet: (body) => post('/api/ip_subnets', body),
   updateSubnet: (id, body) => put(`/api/ip_subnets/${id}`, body),
   deleteSubnet: (id) => del(`/api/ip_subnets/${id}`),
+  subnetSuggestions: () => req('/api/ip_subnets/suggestions'),
+  terminalNamePreview: () => req('/api/assets/name-backfill'),
+  applyTerminalNames: () => post('/api/assets/name-backfill'),
+  setTerminalShortCode: (id, shortCode) => put(`/api/cmdb/taxonomy/terminal-categories/${id}/short-code`, { short_code: shortCode }),
   ipEntries: (params = {}) => req(`/api/ip_pool?${toQuery(params)}`),
   ipVisualization: (params = {}) => req(`/api/ip_pool/visualization?${toQuery(params)}`),
   createIP: (body) => post('/api/ip_pool', body),
@@ -117,14 +132,24 @@ export const api = {
   logs: (params = {}) => req(`/api/logs?${toQuery(params)}`),
 
   workOrders: (params = {}) => req(`/api/cmdb/work-orders?${toQuery(params)}`),
+  workOrder: (id) => req(`/api/cmdb/work-orders/${id}`),
+  workOrderLogs: (id) => req(`/api/cmdb/work-orders/${id}/logs`),
+  addWorkOrderLog: (id, body) => post(`/api/cmdb/work-orders/${id}/logs`, body),
+  importWorkOrders: (commit = false, token) => importFile('/api/cmdb/work-orders/import', { commit, token }),
+  downloadWorkOrderTemplate: () => exportFile('/api/cmdb/work-orders/template', 'work-orders-template.csv'),
   createWorkOrder: (body) => post('/api/cmdb/work-orders', body),
   updateWorkOrder: (id, body) => put(`/api/cmdb/work-orders/${id}`, body),
-  batchUpdateWorkOrders: (ids, status = '已关闭') => post('/api/cmdb/work-orders/batch', { ids, status }),
+  batchUpdateWorkOrders: (items, status = '已关闭') => post('/api/cmdb/work-orders/batch', { items, status }),
   deleteWorkOrder: (id) => del(`/api/cmdb/work-orders/${id}`),
   exportWorkOrders: (params = {}) => exportFile(`/api/cmdb/work-orders/export?${toQuery(params)}`, 'cmdb_work_orders.xlsx'),
   workOrderAttachments: (id) => req(`/api/cmdb/work-orders/${id}/attachments`),
   uploadWorkOrderAttachment: (id, file) => uploadFile(`/api/cmdb/work-orders/${id}/attachments`, file),
   downloadWorkOrderAttachment: (workOrderId, attachment) => exportFile(`/api/cmdb/work-orders/${workOrderId}/attachments/${attachment.id}`, attachment.file_name),
+  previewWorkOrderAttachment: (workOrderId, attachment) => {
+    const preview = window.netcatty?.cmdbPreviewAttachment
+    if (typeof preview !== 'function') throw new Error('Netcatty 图片预览通道不可用')
+    return preview({ path: `/api/cmdb/work-orders/${workOrderId}/attachments/${attachment.id}`, contentType: attachment.content_type })
+  },
   deleteWorkOrderAttachment: (workOrderId, attachmentId) => del(`/api/cmdb/work-orders/${workOrderId}/attachments/${attachmentId}`),
 
   credentials: (params = {}) => req(`/api/cmdb/credentials?${toQuery(params)}`),

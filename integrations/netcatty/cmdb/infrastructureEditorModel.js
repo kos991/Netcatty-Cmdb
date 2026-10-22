@@ -101,7 +101,7 @@ export function networkAddressRows(asset = {}) {
     }
     rows.set(ip, row)
   }
-  add(asset.mgmt_ip || asset.manage_ip, 'management')
+  add(asset.mgmt_ip || asset.manage_ip, 'management', { network_zone: asset.net_type || asset.network_zone || asset.net_zone })
   add(asset.biz_ip, 'business')
   for (const iface of asset.interfaces || []) {
     const mainIP = String(iface.ip || '').trim()

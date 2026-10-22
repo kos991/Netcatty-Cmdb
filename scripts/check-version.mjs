@@ -2,16 +2,20 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// 版本格式固定为 1.0.YYYYMMDD：VERSION 是唯一来源，发布 tag 必须为 v<VERSION>。
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const expected = readFileSync(join(root, "VERSION"), "utf8").trim();
-const sources = [
-  ["web/package.json", JSON.parse(readFileSync(join(root, "web/package.json"), "utf8")).version],
-  ["netcatty/package.json", JSON.parse(readFileSync(join(root, "netcatty/package.json"), "utf8")).version],
-];
 
-for (const [file, actual] of sources) {
-  if (actual !== expected) throw new Error(`${file} version ${actual} does not match VERSION ${expected}`);
+const match = /^1\.0\.(\d{4})(\d{2})(\d{2})$/.exec(expected);
+if (!match) throw new Error(`VERSION ${expected} must use 1.0.YYYYMMDD`);
+const [, year, month, day] = match.map(Number);
+const date = new Date(Date.UTC(year, month - 1, day));
+if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+  throw new Error(`VERSION ${expected} contains an invalid date`);
 }
+
+const pluginVersion = JSON.parse(readFileSync(join(root, "netcatty/package.json"), "utf8")).version;
+if (pluginVersion !== expected) throw new Error(`netcatty/package.json version ${pluginVersion} does not match VERSION ${expected}`);
 
 const tagIndex = process.argv.indexOf("--tag");
 if (tagIndex >= 0) {

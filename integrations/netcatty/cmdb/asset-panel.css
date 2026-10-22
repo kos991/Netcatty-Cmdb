@@ -1,0 +1,97 @@
+/* 保留三条栏结构，表面与分隔线沿用宿主原生主题。 */
+.cmdb-asset-panel {
+  container-type: inline-size;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.cmdb-asset-panel .cmdb-record-header,
+.cmdb-asset-panel .cmdb-asset-panel-actions,
+.cmdb-asset-panel [role="tablist"],
+.cmdb-asset-panel .cmdb-record-footer {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border) / 0.6);
+}
+
+.cmdb-asset-panel .cmdb-record-header {
+  padding: 10px 14px;
+}
+
+.cmdb-asset-panel .cmdb-record-body,
+.cmdb-asset-panel [data-section="device-workspace-body"] {
+  background: hsl(var(--background));
+}
+
+.cmdb-asset-panel .cmdb-asset-section {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.cmdb-asset-panel .cmdb-asset-section + .cmdb-asset-section {
+  padding-top: 16px;
+  border-top: 1px solid hsl(var(--border) / 0.6);
+}
+
+.cmdb-asset-panel .cmdb-asset-section h3 {
+  margin: 0;
+}
+
+.cmdb-asset-panel [role="tab"][aria-selected="true"] {
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--foreground));
+}
+
+.cmdb-asset-panel-controls button,
+.cmdb-asset-panel-actions button {
+  width: 27px;
+  height: 28px;
+  padding: 5px;
+}
+
+.cmdb-asset-panel .cmdb-asset-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cmdb-asset-panel .cmdb-asset-fields > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--border) / 0.55);
+  border-radius: 10px;
+  background: hsl(var(--secondary) / 0.28);
+}
+
+.cmdb-asset-panel .cmdb-asset-fields dd {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+/* 正文也有容器边界，按可用正文宽度决定双列，避免 420px 侧栏退成单列。 */
+@container (min-width: 300px) {
+  .cmdb-asset-panel .cmdb-asset-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 299px) {
+  .cmdb-asset-panel .cmdb-asset-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 第一条栏“左右分栏”只切换正文单/双列，与放大全宽、420px 默认宽和拖宽互不影响。 */
+.cmdb-panel-single-column :is(.cmdb-asset-fields, .cmdb-record-fields, .cmdb-form-grid) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.cmdb-panel-single-column :is(.cmdb-asset-fields, .cmdb-record-fields, .cmdb-form-grid) > * {
+  grid-column: 1 / -1;
+}
+
+.cmdb-asset-panel-controls [aria-pressed="true"] {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.1);
+}

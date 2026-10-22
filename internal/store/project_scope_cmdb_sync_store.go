@@ -129,6 +129,7 @@ func (s *Store) SyncLegacyToCmdbForProject(scope ProjectScope) (*CmdbSyncResult,
 			AssetClass: "physical", DeviceType: asset.DeviceType, SN: asset.BoxSN,
 			OrgID: orgMap[strings.TrimSpace(asset.Department)], Department: asset.Department,
 			Owner: asset.UserName, MgmtIP: asset.TerminalIP, OSType: asset.OSType, OSVersion: asset.OSVersion,
+			Vendor: asset.Vendor, Model: asset.Model, CPUInfo: asset.CPUInfo, MemoryMB: asset.MemoryMB, DiskInfo: asset.DiskInfo,
 			SourceType: "legacy_asset", SourceID: asset.ID,
 		}
 		id, err := s.InsertCmdbAssetForProject(scope, item)

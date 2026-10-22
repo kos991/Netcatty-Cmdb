@@ -240,6 +240,26 @@ test("allows native IPAM import with preview and commit", async () => {
   ]);
 });
 
+test("work-order CSV import selects once and consumes its confirmation token", async () => {
+  let selections = 0;
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async (options) => {
+        selections++;
+        assert.deepEqual(options.filters, [{ name: "CSV", extensions: ["csv"] }]);
+        return { canceled: false, filePaths: ["C:/imports/work-orders.csv"] };
+      },
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+    fetchImpl: async () => new Response('{"valid":1}', { status: 200 }),
+  });
+  const preview = await handlers.get(CMDB_CHANNELS.importFile)({}, { path: "/api/cmdb/work-orders/import" });
+  const commit = { path: "/api/cmdb/work-orders/import", commit: true, token: preview.token };
+  await handlers.get(CMDB_CHANNELS.importFile)({}, commit);
+  await assert.rejects(handlers.get(CMDB_CHANNELS.importFile)({}, commit), /令牌无效/);
+  assert.equal(selections, 1);
+});
+
 test("returns cancellation without writing when export selection is cancelled", async () => {
   let writes = 0;
   const handlers = registerTestBridge({
@@ -278,6 +298,40 @@ test("writes downloaded binary only to the path accepted by the save dialog", as
 
   assert.deepEqual(result, { cancelled: false, filePath: "C:/exports/assets.xlsx" });
   assert.deepEqual(writes, [{ filePath: "C:/exports/assets.xlsx", data: [9, 8] }]);
+});
+
+test("selects an attachment directory with the native directory dialog", async () => {
+  const handlers = registerTestBridge({
+    dialog: {
+      showOpenDialog: async (options) => {
+        assert.deepEqual(options.properties, ["openDirectory", "createDirectory"]);
+        return { canceled: false, filePaths: ["D:/cmdb-files/project-1"] };
+      },
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+  });
+
+  assert.deepEqual(await handlers.get(CMDB_CHANNELS.selectAttachmentDirectory)(), {
+    cancelled: false,
+    directoryPath: "D:/cmdb-files/project-1",
+  });
+});
+
+test("previews only image attachments from work orders", async () => {
+  let requested = "";
+  const handlers = registerTestBridge({ fetchImpl: async (url) => {
+    requested = url;
+    return new Response(Uint8Array.from([137, 80, 78, 71]), { status: 200 });
+  } });
+  const result = await handlers.get(CMDB_CHANNELS.previewAttachment)({}, {
+    path: "/api/cmdb/work-orders/12/attachments/7", contentType: "image/png",
+  });
+  assert.equal(requested, "http://127.0.0.1:18080/api/cmdb/work-orders/12/attachments/7");
+  assert.equal(result.contentType, "image/png");
+  assert.equal(result.data, Buffer.from([137, 80, 78, 71]).toString("base64"));
+  await assert.rejects(handlers.get(CMDB_CHANNELS.previewAttachment)({}, {
+    path: "/api/cmdb/work-orders/12/attachments/7", contentType: "text/plain",
+  }), /只能预览/);
 });
 
 test("uploads a selected file only to a work-order attachment endpoint", async () => {

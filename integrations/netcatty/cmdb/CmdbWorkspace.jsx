@@ -11,20 +11,20 @@ const modules = {
   people: lazy(() => import('./People')),
   ip: lazy(() => import('./IPAM')),
   operations: lazy(() => import('./Operations')),
-  config: lazy(() => import('./ConfigCenter')),
+  topology: lazy(() => import('./Topology')),
 }
 
-export default function CmdbWorkspace({ activeModule = 'assets', onModuleChange }) {
+export default function CmdbWorkspace({ activeModule = 'assets', onModuleChange, onDirtyChange }) {
   const root = useRef(null)
   const [targets, setTargets] = useState({})
   const initialize = useCallback(async () => {
     await nativeStatus()
-    const [meta, projects] = await Promise.all([api.meta(), api.projects()])
-    return { ...meta, projects: projects.list || [] }
+    const [meta, project] = await Promise.all([api.meta(), api.currentProject()])
+    return { ...meta, project, projects: [project] }
   }, [])
   const query = useQuery(initialize)
   const navigate = useCallback((result) => {
-    const target = resolveSearchTarget(result)
+    const target = result?.tableKey === 'rack_cabinet' ? { module: 'ip' } : resolveSearchTarget(result)
     if (!target) return
     setTargets((old) => ({ ...old, [target.module]: { ...result } }))
     onModuleChange(target.module)
@@ -40,6 +40,6 @@ export default function CmdbWorkspace({ activeModule = 'assets', onModuleChange 
   }, [onModuleChange])
   const Module = modules[activeModule] || modules.assets
   return <div ref={root} data-cmdb-native className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground">
-    {query.error ? <ErrorBanner title="Cmdb 服务不可用" message={query.error} onRetry={query.reload} /> : !query.data ? <div className="grid flex-1 place-items-center"><Spinner /></div> : <Suspense fallback={<div className="p-5"><Spinner /></div>}><Module meta={query.data} focusTarget={targets[activeModule]} onNavigate={navigate} /></Suspense>}
+    {query.error ? <ErrorBanner title="Cmdb 服务不可用" message={query.error} onRetry={query.reload} /> : !query.data ? <div className="grid flex-1 place-items-center"><Spinner /></div> : <Suspense fallback={<div className="p-5"><Spinner /></div>}><Module meta={query.data} focusTarget={targets[activeModule]} onNavigate={navigate} onDirtyChange={onDirtyChange} /></Suspense>}
   </div>
 }

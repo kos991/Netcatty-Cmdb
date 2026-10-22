@@ -26,6 +26,192 @@ func createLegacyAsset(t *testing.T, s *Store, a Asset) int64 {
 	return id
 }
 
+func TestLegacyAssetNameRoundTripAndActualFilters(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var assetNameColumn int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('assets') WHERE name='asset_name'`).Scan(&assetNameColumn); err != nil {
+		t.Fatal(err)
+	}
+	if assetNameColumn != 1 {
+		t.Fatalf("assets 表必须迁移独立资产名称列，实际=%d", assetNameColumn)
+	}
+
+	if _, err := s.CreateIPSubnet(&IPSubnet{Name: "办公内网", Category: "内网", CIDR: "10.20.30.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+
+	matchingID := createLegacyAsset(t, s, Asset{
+		AssetName: "执行局办公终端", AssetCode: "PC-100", DeviceType: "台式电脑",
+		UserName: "张三", Department: "执行局", Room: "502室", IP: "10.20.30.100",
+		NetType: "内网", OSType: "统信 UOS", Status: "在用",
+	})
+	createLegacyAsset(t, s, Asset{
+		AssetName: "办公室备用终端", AssetCode: "PC-101", DeviceType: "台式电脑",
+		UserName: "李四", Department: "办公室", Room: "仓库", IP: "10.20.30.101",
+		NetType: "专网", OSType: "Windows 11", Status: "闲置",
+	})
+
+	asset, _, err := s.GetAssetForProject(scope, matchingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asset.AssetName != "执行局办公终端" {
+		t.Fatalf("资产名称未往返保存: %+v", asset)
+	}
+	asset.AssetName = "执行局审判终端"
+	if err := s.UpdateAssetForProject(scope, asset, "测试"); err != nil {
+		t.Fatal(err)
+	}
+
+	list, total, err := s.QueryAssetsForProject(scope, AssetQuery{
+		Keyword: "审判终端", DeviceType: "台式电脑", Department: "执行局",
+		UserName: "张三", Room: "502室", NetType: "内网", OSType: "统信 UOS",
+		Status: "在用", GroupID: -1, Page: 1, PageSize: 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(list) != 1 || list[0].ID != matchingID || list[0].AssetName != "执行局审判终端" {
+		t.Fatalf("终端实际筛选未按交集返回: total=%d list=%+v", total, list)
+	}
+}
+
+func TestLegacyAssetUnsetFiltersAndIPAMNetworkTypes(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateIPSubnet(&IPSubnet{Name: "设备网", Category: "政法专网", CIDR: "10.20.31.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+	matchedID := createLegacyAsset(t, s, Asset{
+		AssetName: "已纳管终端", IP: "10.20.31.10", TerminalIP: "10.20.31.11",
+		Status: "在用", NetType: "", GroupID: 0,
+	})
+	createLegacyAsset(t, s, Asset{
+		AssetName: "已分类终端", DeviceType: "笔记本", IP: "10.20.31.12", NetType: "内网", Status: "在用",
+	})
+	unconfiguredNetworkID := createLegacyAsset(t, s, Asset{
+		AssetName: "未配置网络终端", DeviceType: "台式电脑", Status: "在用",
+	})
+
+	list, total, err := s.QueryAssetsForProject(scope, AssetQuery{
+		DeviceType: AssetUnconfiguredFilter, GroupID: -1, Page: 1, PageSize: 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(list) != 1 || list[0].ID != matchedID {
+		t.Fatalf("未配置分类和未分组筛选必须取交集: total=%d list=%+v", total, list)
+	}
+	if list[0].IPNetworkType != "政法专网" || list[0].TerminalIPNetworkType != "政法专网" {
+		t.Fatalf("资产 IP 网络类型应来自匹配的 IPAM 网段: %+v", list[0])
+	}
+	unconfigured, total, err := s.QueryAssetsForProject(scope, AssetQuery{
+		DeviceType: "台式电脑", NetType: AssetUnconfiguredFilter, GroupID: -1, Page: 1, PageSize: 20,
+	})
+	if err != nil || total != 1 || len(unconfigured) != 1 || unconfigured[0].ID != unconfiguredNetworkID {
+		t.Fatalf("未配置网络筛选必须排除 IPAM 已识别网段: total=%d list=%+v err=%v", total, unconfigured, err)
+	}
+}
+
+func TestLegacyAssetBusinessNetworkUsesOwnIPAMAcrossQueries(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustLegacyExec(t, s, `INSERT INTO ip_subnets(project_id,name,category,cidr) VALUES
+		(?, '大业务池', '内网', '198.51.100.0/23'),
+		(?, '小业务池', '专网', '198.51.100.0/24'),
+		(?, '物理池', '外网', '10.0.0.0/24')`, scope.ProjectID, scope.ProjectID, scope.ProjectID)
+	// The old registered pool and sort order must not beat a more specific CIDR.
+	mustLegacyExec(t, s, `INSERT INTO ip_pool(project_id,subnet,ip,remark) VALUES
+		(?, '大业务池', '198.51.100.10', ''),
+		(?, '物理池', '10.0.0.10', ''),
+		(?, '小业务池', '198.51.100.20', '盒子 10.0.0.50')`, scope.ProjectID, scope.ProjectID, scope.ProjectID)
+	fixtures := []struct {
+		code, ip, terminalIP, business, physical string
+	}{
+		{"REGISTERED-OVERLAP", "198.51.100.10", "10.0.0.10", "专网", "外网"},
+		{"CIDR-ONLY", "198.51.100.11", "10.0.0.11", "专网", "外网"},
+		{"UNKNOWN-BUSINESS", "203.0.113.50", "10.0.0.50", "", "外网"},
+		{"NO-BUSINESS", "", "10.0.0.60", "", "外网"},
+	}
+	for _, fixture := range fixtures {
+		mustLegacyExec(t, s, `INSERT INTO assets(project_id,asset_code,ip,terminal_ip,net_type,status) VALUES (?,?,?,?, '手工网络', '在用')`, scope.ProjectID, fixture.code, fixture.ip, fixture.terminalIP)
+	}
+	assets, err := s.AllAssetsForProject(scope)
+	if err != nil || len(assets) != len(fixtures) {
+		t.Fatalf("读取终端列表失败: assets=%+v err=%v", assets, err)
+	}
+	for _, fixture := range fixtures {
+		for _, asset := range assets {
+			if asset.AssetCode != fixture.code {
+				continue
+			}
+			if asset.IP != fixture.ip || asset.IPNetworkType != fixture.business || asset.TerminalIPNetworkType != fixture.physical {
+				t.Fatalf("业务与物理网络必须按各自地址解析: fixture=%+v asset=%+v", fixture, asset)
+			}
+			detail, _, err := s.GetAssetForProject(scope, asset.ID)
+			if err != nil || detail.IPNetworkType != asset.IPNetworkType || detail.TerminalIPNetworkType != asset.TerminalIPNetworkType || detail.IP != asset.IP {
+				t.Fatalf("列表详情网络不一致: list=%+v detail=%+v err=%v", asset, detail, err)
+			}
+		}
+	}
+	for _, networkType := range []string{"专网", "内网", "外网", "手工网络", AssetUnconfiguredFilter} {
+		want := make(map[string]bool)
+		for _, fixture := range fixtures {
+			if fixture.business == networkType || networkType == AssetUnconfiguredFilter && fixture.business == "" {
+				want[fixture.code] = true
+			}
+		}
+		query := AssetQuery{NetType: networkType, Page: 1, PageSize: 1}
+		page, total, err := s.QueryAssetsForProject(scope, query)
+		if err != nil || total != len(want) || len(page) > 1 {
+			t.Fatalf("网络筛选或分页错误: network=%q total=%d page=%+v err=%v", networkType, total, page, err)
+		}
+		exported, err := s.AllAssetsMatchingQueryForProject(scope, query)
+		if err != nil || len(exported) != len(want) {
+			t.Fatalf("导出必须使用相同网络条件且包含全部匹配资产: network=%q assets=%+v err=%v", networkType, exported, err)
+		}
+		for _, asset := range exported {
+			if !want[asset.AssetCode] {
+				t.Fatalf("借用了物理或手工网络分类: network=%q asset=%+v", networkType, asset)
+			}
+		}
+	}
+}
+
+func TestLegacyCloudDesktopResolvesBusinessIPFromIPAMBoxRemark(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "外网", Category: "外网", CIDR: "198.51.100.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAssetForProject(scope, &Asset{AssetCode: "CLOUD-001", DeviceType: "云桌面终端", IP: "外网", TerminalIP: "10.0.0.20"}, "测试"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateIPEntryForProject(scope, &IPEntry{Subnet: "外网", IP: "198.51.100.20", Remark: "外网云桌面｜盒子 10.0.0.20"}); err != nil {
+		t.Fatal(err)
+	}
+	assets, err := s.AllAssetsForProject(scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 1 || assets[0].IP != "198.51.100.20" || assets[0].IPNetworkType != "外网" {
+		t.Fatalf("云桌面业务 IP 未从 IPAM 备注恢复: %+v", assets)
+	}
+}
+
 func TestImportAssetsForProjectRollsBackOnIPConflict(t *testing.T) {
 	s := newLegacyAssetTestStore(t)
 	scope, err := s.DefaultProjectScope()
@@ -135,6 +321,29 @@ func TestLegacyAssetOperatingSystemRoundTripSearchAndMappedUpdate(t *testing.T) 
 	}
 }
 
+func TestLegacyAssetAttributeUpdateKeepsExistingAddressBindings(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	firstID := createLegacyAsset(t, s, Asset{AssetCode: "OLD-1", DeviceType: "云桌面终端", IP: "10.20.30.21", Status: "在用"})
+	secondID := createLegacyAsset(t, s, Asset{AssetCode: "OLD-2", DeviceType: "云桌面终端", Status: "在用"})
+	// 历史导入的数据可能把网络类型文字填在 IP 列，普通属性编辑不能重分配该值。
+	mustLegacyExec(t, s, `UPDATE assets SET ip='外网' WHERE id IN (?,?)`, firstID, secondID)
+	for _, id := range []int64{firstID, secondID} {
+		asset, _, err := s.GetAsset(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		asset.OSType = "统信 UOS"
+		asset.DeviceType = "云桌面盒子"
+		if err := s.UpdateAsset(asset, "测试"); err != nil {
+			t.Fatalf("修改分类和系统不应重校验未改变的历史 IP: %v", err)
+		}
+		updated, _, err := s.GetAsset(id)
+		if err != nil || updated.IP != "外网" || updated.OSType != "统信 UOS" || updated.DeviceType != "云桌面盒子" {
+			t.Fatalf("属性未保存或历史 IP 被改动: asset=%+v err=%v", updated, err)
+		}
+	}
+}
+
 func TestLegacyAssetSerialFieldsFollowDeviceType(t *testing.T) {
 	s := newLegacyAssetTestStore(t)
 	ordinaryID := createLegacyAsset(t, s, Asset{
@@ -204,6 +413,10 @@ func TestLegacyAssetDeviceTypeMigrationBackfillsExistingRows(t *testing.T) {
 
 func TestLegacyAssetQueryAndSummaryUseSameArchiveAndFilterRules(t *testing.T) {
 	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
 	createLegacyAsset(t, s, Asset{AssetCode: "A-1", UserName: "张三", Department: "执行局", Room: "101", SecuritySoftware: "已安装", Status: "在用"})
 	secondID := createLegacyAsset(t, s, Asset{AssetCode: "A-2", UserName: "张三", Department: "执行局", Room: "102", SecuritySoftware: "已安装", Status: "闲置"})
 	createLegacyAsset(t, s, Asset{AssetCode: "A-3", UserName: "张三", Department: "执行局", SecuritySoftware: "已安装", Status: "已报废"})
@@ -216,6 +429,16 @@ func TestLegacyAssetQueryAndSummaryUseSameArchiveAndFilterRules(t *testing.T) {
 	}
 	if total != 2 || len(list) != 1 || list[0].ID != secondID {
 		t.Fatalf("默认应排除两种归档状态且保留分页倒序，total=%d list=%+v", total, list)
+	}
+
+	combined, combinedTotal, combinedSummary, err := s.QueryAssetsWithSummaryForProject(scope, AssetQuery{
+		Keyword: "张三", Department: "执行局", SecuritySoftware: "已安装", Page: 1, PageSize: 1,
+	})
+	if err != nil {
+		t.Fatalf("组合查询失败: %v", err)
+	}
+	if combinedTotal != 2 || len(combined) != 1 || combined[0].ID != secondID || combinedSummary["total"] != 2 || combinedSummary["在用"] != 1 || combinedSummary["闲置"] != 1 {
+		t.Fatalf("组合查询必须复用同一筛选结果生成分页和统计: total=%d list=%+v summary=%+v", combinedTotal, combined, combinedSummary)
 	}
 
 	for _, status := range []string{"已报废", "报废"} {
@@ -641,5 +864,47 @@ func TestLegacyAssetTransactionsRollbackOnLogFailure(t *testing.T) {
 				t.Fatalf("维修旧件写入也必须回滚，count=%d err=%v", count, err)
 			}
 		})
+	}
+}
+
+func TestUpdateAssetAllowsUpdatingOtherFieldsWhenDuplicateOrNonStandardIPExists(t *testing.T) {
+	s := newLegacyAssetTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mustLegacyExec(t, s, `INSERT INTO assets (project_id, asset_code, ip, device_type, status) VALUES (1, 'DUP-1', '138.64.7.122', '云桌面终端', '在用')`)
+	mustLegacyExec(t, s, `INSERT INTO assets (project_id, asset_code, ip, device_type, status) VALUES (1, 'DUP-2', '138.64.7.122', '云桌面终端', '在用')`)
+	mustLegacyExec(t, s, `INSERT INTO assets (project_id, asset_code, ip, device_type, status) VALUES (1, 'WAN-1', '外网', '云桌面终端', '在用')`)
+	mustLegacyExec(t, s, `INSERT INTO assets (project_id, asset_code, ip, device_type, status) VALUES (1, 'WAN-2', '外网', '云桌面终端', '在用')`)
+
+	var id1, wan1 int64
+	_ = s.db.QueryRow(`SELECT id FROM assets WHERE asset_code='DUP-1'`).Scan(&id1)
+	_ = s.db.QueryRow(`SELECT id FROM assets WHERE asset_code='WAN-1'`).Scan(&wan1)
+
+	err = s.UpdateAssetForProject(scope, &Asset{
+		ID:         id1,
+		AssetCode:  "DUP-1",
+		IP:         "138.64.7.122",
+		DeviceType: "云桌面终端",
+		OSType:     "统信 UOS",
+		OSVersion:  "1050u2",
+		Status:     "在用",
+	}, "测试员")
+	if err != nil {
+		t.Fatalf("更新同IP历史资产失败: %v", err)
+	}
+
+	err = s.UpdateAssetForProject(scope, &Asset{
+		ID:         wan1,
+		AssetCode:  "WAN-1",
+		IP:         "外网",
+		DeviceType: "云桌面终端",
+		OSType:     "Windows 10",
+		Status:     "在用",
+	}, "测试员")
+	if err != nil {
+		t.Fatalf("更新外网IP历史资产失败: %v", err)
 	}
 }

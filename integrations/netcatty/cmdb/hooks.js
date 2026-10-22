@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from '@/components/ui/toast'
+import { broadcastDirectoryChange, listenDirectoryChanges } from './directorySync'
 
 export function useTableDensity() {
   const ref = useRef(null)
@@ -69,13 +70,15 @@ export async function allPages(loader, params = {}) {
 
 export function directoryChanged() {
   window.dispatchEvent(new CustomEvent('cmdb:directory-changed'))
+  broadcastDirectoryChange(window.netcatty)
 }
 
 export function useDirectory(loader) {
   const query = useQuery(loader)
   useEffect(() => {
     window.addEventListener('cmdb:directory-changed', query.reload)
-    return () => window.removeEventListener('cmdb:directory-changed', query.reload)
+    const unsubscribe = listenDirectoryChanges(window.netcatty, query.reload)
+    return () => { window.removeEventListener('cmdb:directory-changed', query.reload); unsubscribe() }
   }, [query.reload])
   return query
 }

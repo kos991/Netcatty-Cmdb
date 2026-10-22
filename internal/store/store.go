@@ -4,13 +4,16 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	db   *sql.DB
-	path string
+	db               *sql.DB
+	path             string
+	attachmentTempMu sync.Mutex
+	attachmentTemps  map[string]attachmentTempTarget
 }
 
 func Open(path string) (*Store, error) {
@@ -79,6 +82,9 @@ func Open(path string) (*Store, error) {
 	if err := MigrateProjectSchema(s.db); err != nil {
 		return fail(fmt.Errorf("migrate project schema: %w", err))
 	}
+	if err := s.migrateServerAppPrototypeFields(); err != nil {
+		return fail(fmt.Errorf("migrate app detail fields: %w", err))
+	}
 	return s, nil
 }
 
@@ -95,6 +101,7 @@ func (s *Store) InitSchema() error {
 
 	CREATE TABLE IF NOT EXISTS assets (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		asset_name TEXT NOT NULL DEFAULT '',
 		asset_code TEXT,
 		device_type TEXT,
 		box_sn TEXT,
@@ -106,6 +113,11 @@ func (s *Store) InitSchema() error {
 		terminal_ip TEXT,
 		os_type TEXT DEFAULT '',
 		os_version TEXT DEFAULT '',
+		vendor TEXT NOT NULL DEFAULT '',
+		model TEXT NOT NULL DEFAULT '',
+		cpu_info TEXT NOT NULL DEFAULT '',
+		memory_mb INTEGER NOT NULL DEFAULT 0 CHECK(memory_mb >= 0),
+		disk_info TEXT NOT NULL DEFAULT '',
 		security_software TEXT,
 		status TEXT,
 		net_type TEXT,
@@ -199,7 +211,11 @@ func (s *Store) InitSchema() error {
 		return fmt.Errorf("init schema: %w", err)
 	}
 	if err := addMissingColumns(s.db, "assets", map[string]string{
+		"asset_name":  "TEXT NOT NULL DEFAULT ''",
 		"device_type": "TEXT DEFAULT ''", "os_type": "TEXT DEFAULT ''", "os_version": "TEXT DEFAULT ''",
+		"vendor": "TEXT NOT NULL DEFAULT ''", "model": "TEXT NOT NULL DEFAULT ''",
+		"cpu_info": "TEXT NOT NULL DEFAULT ''", "disk_info": "TEXT NOT NULL DEFAULT ''",
+		"memory_mb":   "INTEGER NOT NULL DEFAULT 0 CHECK(memory_mb >= 0)",
 		"group_id":    "INTEGER NOT NULL DEFAULT 0",
 		"front_image": "TEXT NOT NULL DEFAULT ''", "back_image": "TEXT NOT NULL DEFAULT ''",
 	}); err != nil {
@@ -211,22 +227,29 @@ func (s *Store) InitSchema() error {
 		return fmt.Errorf("migrate ip_pool owner columns: %w", err)
 	}
 	serverAppColumns := map[string]string{
-		"service_ip":    "TEXT NOT NULL DEFAULT ''",
-		"server_id":     "INTEGER",
-		"cmdb_asset_id": "INTEGER DEFAULT 0",
-		"app_name":      "TEXT",
-		"app_type":      "TEXT",
-		"port":          "TEXT DEFAULT ''",
-		"access_url":    "TEXT DEFAULT ''",
-		"middleware":    "TEXT DEFAULT ''",
-		"database_info": "TEXT DEFAULT ''",
-		"provider":      "TEXT DEFAULT ''",
-		"owner":         "TEXT DEFAULT ''",
-		"status":        "TEXT DEFAULT ''",
-		"group_id":      "INTEGER NOT NULL DEFAULT 0",
-		"remark":        "TEXT DEFAULT ''",
-		"created_at":    "TEXT DEFAULT ''",
-		"updated_at":    "TEXT DEFAULT ''",
+		"service_ip":          "TEXT NOT NULL DEFAULT ''",
+		"asset_code":          "TEXT NOT NULL DEFAULT ''",
+		"version":             "TEXT",
+		"department":          "TEXT NOT NULL DEFAULT ''",
+		"network_type":        "TEXT",
+		"description":         "TEXT",
+		"deployment":          "TEXT NOT NULL DEFAULT ''",
+		"deployment_location": "TEXT NOT NULL DEFAULT ''",
+		"server_id":           "INTEGER",
+		"cmdb_asset_id":       "INTEGER DEFAULT 0",
+		"app_name":            "TEXT",
+		"app_type":            "TEXT",
+		"port":                "TEXT DEFAULT ''",
+		"access_url":          "TEXT DEFAULT ''",
+		"middleware":          "TEXT DEFAULT ''",
+		"database_info":       "TEXT DEFAULT ''",
+		"provider":            "TEXT DEFAULT ''",
+		"owner":               "TEXT DEFAULT ''",
+		"status":              "TEXT DEFAULT ''",
+		"group_id":            "INTEGER NOT NULL DEFAULT 0",
+		"remark":              "TEXT DEFAULT ''",
+		"created_at":          "TEXT DEFAULT ''",
+		"updated_at":          "TEXT DEFAULT ''",
 	}
 	if err := addMissingColumns(s.db, "server_apps", serverAppColumns); err != nil {
 		return fmt.Errorf("migrate server_apps columns: %w", err)
@@ -236,6 +259,9 @@ func (s *Store) InitSchema() error {
 		CREATE INDEX IF NOT EXISTS idx_server_apps_name ON server_apps(app_name);
 	`); err != nil {
 		return fmt.Errorf("init server_apps indexes: %w", err)
+	}
+	if err := s.InitServerAppHistorySchema(); err != nil {
+		return fmt.Errorf("init app history schema: %w", err)
 	}
 	if err := s.InitIPSubnetSchema(); err != nil {
 		return fmt.Errorf("init ip subnet schema: %w", err)

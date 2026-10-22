@@ -1,0 +1,98 @@
+
+.cmdb-device-assets-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.cmdb-device-assets-content > div {
+  min-width: 0;
+}
+
+.cmdb-device-assets .cmdb-asset-table-viewport {
+  width: 100%;
+  /* 视口独立横向滚动：侧栏变宽时表格在自身区域内滚动，绝不从面板下方穿过。 */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.cmdb-device-assets .cmdb-asset-toolbar {
+  min-height: 54px;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: hsl(var(--background));
+}
+
+.cmdb-device-assets .cmdb-asset-table {
+  min-width: 1120px;
+}
+
+.cmdb-device-assets .cmdb-asset-table th,
+.cmdb-device-assets .cmdb-asset-table td {
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.cmdb-device-assets .cmdb-asset-table th:first-child,
+.cmdb-device-assets .cmdb-asset-table td:first-child {
+  padding-left: 10px;
+  padding-right: 2px;
+}
+
+.cmdb-device-assets .cmdb-asset-table th:last-child,
+.cmdb-device-assets .cmdb-asset-table td:last-child {
+  text-align: right;
+  padding-left: 12px;
+  padding-right: 16px;
+}
+
+.cmdb-device-assets .cmdb-asset-table td:last-child > div {
+  margin-right: 0;
+  gap: 6px;
+}
+
+.cmdb-device-assets .cmdb-asset-table td:last-child button:not(.cmdb-asset-row-actions) {
+  width: 28px;
+  height: 28px;
+}
+
+/* 首列表头使用短名并保留完整名称悬停提示；不截断，避免“名称 / 编码 / SN”显示成省略号。 */
+.cmdb-device-assets .cmdb-asset-table th.cmdb-asset-identity-header {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.cmdb-device-assets .cmdb-asset-table [data-os-distro] > div:last-child {
+  overflow: hidden;
+}
+
+.cmdb-device-assets .cmdb-asset-table [data-os-distro] p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmdb-asset-page {
+  min-width: 0;
+  background: hsl(var(--background));
+  --cmdb-panel-space: 0px;
+  /* 面板是 overlay 浮层；内容按面板实测宽度让位，操作列始终可见。 */
+  padding-inline-end: min(var(--cmdb-panel-space), 100%);
+}
+
+.cmdb-asset-page > * {
+  min-width: 0;
+}
+
+.cmdb-asset-page > :not(.cmdb-asset-panel) {
+  width: 100%;
+}
+
+/* 详情面板定位到整个设备资产工作区，顶部工具栏同步让位。 */
+.cmdb-device-assets[data-asset-panel-open="true"] [data-section="cmdb-device-assets-header"] {
+  margin-inline-end: min(var(--cmdb-workspace-panel-width), 100%);
+}
+

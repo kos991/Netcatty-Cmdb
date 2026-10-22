@@ -66,8 +66,8 @@ func TestMigrateCMDBFullSchema(t *testing.T) {
 	if macAddr != "00:11:22:33:44:55" {
 		t.Errorf("expected mac_address 00:11:22:33:44:55, got %s", macAddr)
 	}
-	if area != "机房A" {
-		t.Errorf("expected area 机房A, got %s", area)
+	if area != "" {
+		t.Errorf("机房与区域不再互相回填，expected empty area, got %s", area)
 	}
 	if desc != "老系统" {
 		t.Errorf("expected description 老系统, got %s", desc)

@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -48,6 +49,9 @@ func TestCmdbSnapshotHashMatchesNetcattyGoldenValue(t *testing.T) {
 
 func TestCmdbSnapshotIsStableAndOmitsLocalIDsAndPrivateFields(t *testing.T) {
 	st, scope := openSnapshotTestStore(t)
+	if err := st.UpdateProjectAttachmentRoot(scope.ProjectID, `D:\local-only\attachments`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := st.db.Exec(`INSERT INTO assets(project_id,asset_code,device_type,user_name,ip,status) VALUES(?,?,?,?,?,?)`,
 		scope.ProjectID, "PC-001", "台式电脑", "张三", "10.20.30.8", "在用"); err != nil {
 		t.Fatal(err)
@@ -92,6 +96,12 @@ func TestCmdbSnapshotIsStableAndOmitsLocalIDsAndPrivateFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	collections := document["collections"].(map[string]any)
+	if _, exists := collections["cmdb_projects"]; exists {
+		t.Fatal("本机项目配置不得进入 Cmdb 同步集合")
+	}
+	if strings.Contains(string(encoded), "attachment_root") || strings.Contains(string(encoded), `D:\\local-only\\attachments`) {
+		t.Fatal("本机附件目录不得进入 Cmdb 同步快照")
+	}
 	assets := collections["assets"].([]any)
 	asset := assets[0].(map[string]any)
 	if _, exists := asset["id"]; exists {
@@ -110,6 +120,68 @@ func TestCmdbSnapshotIsStableAndOmitsLocalIDsAndPrivateFields(t *testing.T) {
 	}
 	if _, exists := collections["cmdb_asset_history"]; exists {
 		t.Fatal("未启用履历同步时不得导出履历")
+	}
+}
+
+func TestCmdbSnapshotIncludesAttachmentEncryptionMetadata(t *testing.T) {
+	st, scope := openSnapshotTestStore(t)
+	workOrderID, err := st.CreateCmdbWorkOrderForProject(scope, &CmdbWorkOrder{Subject: "附件同步"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`INSERT INTO cmdb_work_order_attachments(
+		project_id,work_order_id,file_name,stored_name,size_bytes,content_type,created_at,
+		content_hash,s3_key,s3_status,cloud_object_id,encryption_version,wrapped_key,wrapped_key_iv,data_iv
+	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		scope.ProjectID, workOrderID, "证据.txt", "local-name.txt", 8, "text/plain", "2026-10-09 18:00:00",
+		"hash-1", "attachments/object-1.nca", "synced", "object-1", 1, "wrapped-value", "wrap-iv", "data-iv"); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := st.ExportCmdbSnapshot(scope, SnapshotExportOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, exists := snapshot.Collections["cmdb_work_order_attachments"]
+	if !exists {
+		t.Fatal("附件元数据未进入 Cmdb 同步快照")
+	}
+	var records []map[string]any
+	if err := json.Unmarshal(raw, &records); err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("附件元数据数量错误: %d", len(records))
+	}
+	attachment := records[0]
+	for field, expected := range map[string]any{
+		"cloud_object_id": "object-1",
+		"wrapped_key":     "wrapped-value",
+		"wrapped_key_iv":  "wrap-iv",
+		"data_iv":         "data-iv",
+	} {
+		if attachment[field] != expected {
+			t.Fatalf("附件同步字段 %s 错误: got=%v want=%v", field, attachment[field], expected)
+		}
+	}
+	refs, ok := attachment["_refs"].(map[string]any)
+	if !ok || refs["work_order_id"] == nil {
+		t.Fatalf("附件元数据缺少工单稳定引用: %#v", attachment["_refs"])
+	}
+
+	target, targetScope := openSnapshotTestStore(t)
+	alignSnapshotProject(t, target, targetScope, snapshot.ProjectSyncID)
+	if _, err := target.ApplyCmdbSnapshot(targetScope, snapshot); err != nil {
+		t.Fatalf("附件元数据快照无法在异机数据库还原: %v", err)
+	}
+	var storedName, cloudObjectID, wrappedKey string
+	if err := target.db.QueryRow(`SELECT stored_name,cloud_object_id,wrapped_key
+		FROM cmdb_work_order_attachments WHERE project_id=?`, targetScope.ProjectID).
+		Scan(&storedName, &cloudObjectID, &wrappedKey); err != nil {
+		t.Fatal(err)
+	}
+	if storedName == "" || cloudObjectID != "object-1" || wrappedKey != "wrapped-value" {
+		t.Fatalf("附件元数据还原错误: stored_name=%q cloud_object_id=%q wrapped_key=%q", storedName, cloudObjectID, wrappedKey)
 	}
 }
 
@@ -156,6 +228,22 @@ func TestCmdbProjectTablesAutomaticallyAdvanceRevisionAndWriteTombstones(t *test
 func alignSnapshotProject(t *testing.T, st *Store, scope ProjectScope, projectSyncID string) {
 	t.Helper()
 	if _, err := st.db.Exec(`UPDATE cmdb_projects SET sync_id=? WHERE id=?`, projectSyncID, scope.ProjectID); err != nil {
+		t.Fatal(err)
+	}
+	// 新项目的内置分类按项目同步标识稳定命名；本测试直接改项目标识时需同步重算分类标识。
+	if _, err := st.db.Exec(`INSERT OR REPLACE INTO _meta(k,v) VALUES('cmdb_sync_apply','test-project-alignment')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range defaultAssetCategories {
+		for _, name := range group.names {
+			if _, err := st.db.Exec(`UPDATE cmdb_device_categories SET sync_id=?
+				WHERE project_id=? AND asset_scope=? AND name=?`,
+				defaultAssetCategorySyncID(projectSyncID, group.scope, name), scope.ProjectID, group.scope, name); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := st.db.Exec(`DELETE FROM _meta WHERE k='cmdb_sync_apply'`); err != nil {
 		t.Fatal(err)
 	}
 }

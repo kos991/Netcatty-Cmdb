@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="record-theme-preview.js"></script>
+<title>组织架构 · 设计原型</title>
+<link rel="stylesheet" href="cmdb-preview.css">
+<link rel="stylesheet" href="organization-preview.css">
+<link rel="stylesheet" href="cmdb-settings-preview.css">
+<link rel="stylesheet" href="cmdb-settings-catalog-preview.css">
+<link rel="stylesheet" href="cmdb-settings-operations-preview.css">
+<link rel="stylesheet" href="record-shell-preview.css">
+</head>
+<body>
+<script src="vendor/netcatty-icons.js"></script>
+<script src="cmdb-settings-data-preview.js"></script>
+<script src="cmdb-settings-catalog-preview.js"></script>
+<script src="cmdb-settings-operations-preview.js"></script>
+<script src="cmdb-settings-preview.js"></script>
+<script src="cabinet-network-nav-preview.js" defer></script>
+<div class="app">
+<div class="tabs"><span class="tab">▧&nbsp; Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab">▱&nbsp; SFTP</span><span class="tab">＋</span><div class="window-actions"><svg><use href="#settings"/></svg><span>—</span><span>□</span><span>×</span></div></div>
+<div class="shell">
+<nav class="rail" aria-label="工作区"><div class="logo">N</div><a href="device-assets-preview.html#terminal" aria-label="设备资产" title="设备资产"><svg><use href="#monitor"/></svg></a><a class="selected" href="organization-preview.html" aria-current="page" aria-label="组织架构" title="组织架构"><svg><use href="#people"/></svg></a><a href="rack-layout-preview.html#rack" aria-label="机柜与网络" title="机柜与网络"><svg><use href="#router"/></svg></a><a href="work-order-preview.html" aria-label="工单与统计" title="工单与统计"><svg><use href="#chart"/></svg></a></nav>
+<main class="surface">
+<header class="toolbar people-toolbar" aria-label="组织架构工具栏">
+  <details id="people-create-menu" class="new-menu"><summary class="primary" aria-label="新增人员" title="新增人员（原型表单预览）"><svg><use href="#plus"/></svg>新增人员 <span class="chevron">⌄</span></summary><div class="menu"><button id="create-person" type="button"><svg><use href="#plus"/></svg>新增人员</button><button id="maintain-organizations" type="button"><svg><use href="#settings"/></svg>维护组织架构</button><small>仅预览表单，不保存业务数据</small></div></details>
+  <label class="search"><svg><use href="#search"/></svg><input id="people-search" type="search" aria-label="搜索示例人员姓名或工号" placeholder="搜索姓名或工号"></label>
+  <div class="toolbar-actions">
+  <label id="people-status-filter" class="toolbar-field" for="people-status">状态 <select id="people-status" class="toolbar-selector" aria-label="人员状态"><option value="">全部状态</option><option>在职</option><option>调休</option><option>离职</option></select></label>
+  <button id="people-filter-toggle" class="icon toolbar-icon" type="button" aria-label="查询人员" title="查询人员" aria-controls="people-status-filter" aria-expanded="true"><svg aria-hidden="true"><use href="#filter"/></svg></button>
+  <button id="people-reset" class="icon toolbar-icon" type="button" aria-label="重置人员查询" title="重置人员查询"><svg aria-hidden="true"><use href="#refresh"/></svg></button>
+  <details class="people-transfer toolbar-transfer"><summary class="icon toolbar-icon" aria-label="导入/导出人员" title="导入/导出人员"><svg aria-hidden="true"><use href="#transfer"/></svg></summary><div class="menu"><button disabled><svg><use href="#upload"/></svg>导入人员</button><button disabled><svg><use href="#download"/></svg>导出人员</button><small>设计原型，不读写业务文件</small></div></details>
+  </div>
+</header>
+<div class="organization-layout">
+  <aside class="organization-sidebar" aria-label="示例组织目录">
+    <header class="tree-heading"><strong>组织节点</strong><span class="muted">示例目录</span></header>
+    <label class="search tree-search"><svg><use href="#search"/></svg><input id="organization-search" type="search" aria-label="搜索组织节点" placeholder="搜索组织、部门或分组"></label>
+    <div class="directory-scroll"><button id="all-people" class="all-people" type="button" aria-pressed="true"><svg><use href="#people"/></svg>全部人员 <span id="all-people-count"></span></button><div id="organization-tree" aria-label="组织、部门及分组"></div><p id="organization-empty" class="empty" hidden>没有匹配的组织节点</p></div>
+    <footer class="tree-footer"><button id="expand-organizations" class="quiet" type="button">全部展开</button><button id="collapse-organizations" class="quiet" type="button">全部收起</button></footer>
+  </aside>
+  <section class="people-list" aria-label="示例人员列表">
+    <header class="people-list-heading"><div><h2 id="people-scope">全部人员</h2><p id="people-scope-path">虚构示例人员 · 可点击姓名查看详情</p></div><span id="people-result-count" class="badge" aria-live="polite"></span></header>
+    <div class="people-table-wrap" tabindex="0" aria-label="人员表格，可横向滚动查看全部字段">
+      <table class="people-table"><colgroup><col style="width:120px"><col style="width:112px"><col style="width:154px"><col style="width:120px"><col style="width:114px"><col style="width:130px"><col style="width:122px"><col style="width:74px"><col style="width:76px"></colgroup><thead><tr><th scope="col">姓名</th><th scope="col">工号</th><th scope="col">组织</th><th scope="col">部门</th><th scope="col">分组</th><th scope="col">岗位</th><th scope="col">电话</th><th scope="col">状态</th><th scope="col">操作</th></tr></thead><tbody id="people-table-body"></tbody></table>
+      <p id="people-empty" class="empty" hidden>没有匹配的示例人员，请调整查询条件</p>
+    </div>
+    <footer class="people-pagination"><span id="people-page-info" class="count" aria-live="polite"></span><select id="people-page-size" aria-label="每页人员数"><option value="10">10 条 / 页</option><option value="5">5 条 / 页</option><option value="20">20 条 / 页</option></select><button id="people-prev" type="button">上一页</button><button id="people-next" type="button">下一页</button></footer>
+  </section>
+</div>
+<div class="prototype-label">设计原型 · 全部组织、人员、电话及名下资产均为虚构示例 · 保存、删除、交接、导入导出禁用</div>
+</main>
+</div>
+</div>
+<dialog id="person-detail" class="person-sheet record-shell" aria-labelledby="person-detail-title">
+  <header class="dialog-header person-detail-header record-header">
+    <span class="person-detail-icon" aria-hidden="true"><svg><use href="#people"/></svg></span>
+    <div class="person-detail-summary"><div class="person-detail-heading"><h2 id="person-detail-title">人员详情</h2><span id="person-detail-status" class="person-status"></span></div><p id="person-detail-code" class="dialog-note">虚构人员资料 · 原型预览</p></div>
+    <div class="sheet-actions">
+      <button id="person-detail-expand" class="icon quiet" type="button" aria-label="展开人员详情" title="展开人员详情" aria-pressed="false"><svg><use href="#maximize"/></svg></button>
+      <button id="person-detail-split" class="icon quiet" type="button" data-panel-columns="person-detail" aria-label="正文改为单列" title="正文改为单列" aria-pressed="true"><svg><use href="#columns-2"/></svg></button>
+      <button id="person-detail-edit" class="icon quiet" type="button" aria-label="编辑当前示例人员（原型表单）" title="编辑人员（原型表单）"><svg><use href="#edit"/></svg></button>
+      <details id="person-detail-more" class="person-more record-more"><summary class="icon quiet" aria-label="更多人员操作" title="更多人员操作"><svg><use href="#more"/></svg></summary><div class="menu"><button type="button" disabled><svg><use href="#trash"/></svg>删除人员（原型禁用）</button><small>仅预览，不删除人员或名下资产</small></div></details>
+      <button class="icon quiet" data-close="person-detail" type="button" aria-label="关闭人员详情" title="关闭人员详情"><svg><use href="#close"/></svg></button>
+    </div>
+  </header>
+  <div class="person-detail-tabs record-tabs" role="tablist" aria-label="人员详情分区">
+    <button id="person-tab-profile" class="person-detail-tab" type="button" role="tab" data-person-tab="profile" aria-label="人员资料" title="人员资料" aria-selected="true" aria-controls="person-detail-body" tabindex="0"><svg aria-hidden="true"><use href="#people"/></svg><span class="record-tab-label">人员资料</span></button>
+    <button id="person-tab-organization" class="person-detail-tab" type="button" role="tab" data-person-tab="organization" aria-label="组织归属" title="组织归属" aria-selected="false" aria-controls="person-detail-body" tabindex="-1"><svg aria-hidden="true"><use href="#network"/></svg><span class="record-tab-label">组织归属</span></button>
+    <button id="person-tab-assets" class="person-detail-tab" type="button" role="tab" data-person-tab="assets" aria-label="名下资产" title="名下资产" aria-selected="false" aria-controls="person-detail-body" tabindex="-1"><svg aria-hidden="true"><use href="#monitor"/></svg><span class="record-tab-label">名下资产</span></button>
+    <button id="person-tab-transfer" class="person-detail-tab" type="button" role="tab" data-person-tab="transfer" aria-label="资产交接" title="资产交接" aria-selected="false" aria-controls="person-detail-body" tabindex="-1"><svg aria-hidden="true"><use href="#history"/></svg><span class="record-tab-label">资产交接</span></button>
+  </div>
+  <div id="person-detail-body" class="dialog-body record-body" role="tabpanel" aria-labelledby="person-tab-profile" tabindex="0"></div>
+  <footer class="dialog-footer record-footer person-preview-footer"><span>虚构示例 · 保存、删除及资产交接均禁用</span></footer>
+</dialog>
+<dialog id="person-editor" class="person-editor record-shell" aria-labelledby="person-editor-title">
+  <header class="dialog-header record-header"><div class="person-editor-summary"><h2 id="person-editor-title">新增人员</h2><p class="dialog-note">原型表单 · 不写入业务数据</p></div><div class="sheet-actions"><button id="person-editor-expand" class="icon quiet" type="button" aria-label="展开人员表单" title="展开人员表单" aria-pressed="false"><svg><use href="#maximize"/></svg></button><button class="icon quiet" type="button" data-panel-columns="person-editor" aria-label="正文改为单列" title="正文改为单列" aria-pressed="true"><svg><use href="#columns-2"/></svg></button><button class="icon quiet" data-close="person-editor" type="button" aria-label="关闭人员表单" title="关闭人员表单"><svg><use href="#close"/></svg></button></div></header>
+  <nav class="person-editor-tabs record-tabs" role="tablist" aria-label="人员表单分区">
+    <button id="person-editor-tab-profile" type="button" role="tab" data-person-editor-tab="profile" aria-label="人员资料" title="人员资料" aria-selected="true" aria-controls="person-editor-profile" tabindex="0"><svg aria-hidden="true"><use href="#people"/></svg><span class="record-tab-label">人员资料</span></button>
+    <button id="person-editor-tab-organization" type="button" role="tab" data-person-editor-tab="organization" aria-label="组织归属" title="组织归属" aria-selected="false" aria-controls="person-editor-organization" tabindex="-1"><svg aria-hidden="true"><use href="#network"/></svg><span class="record-tab-label">组织归属</span></button>
+  </nav>
+  <form id="person-form">
+    <div class="dialog-body record-body">
+      <section id="person-editor-profile" class="person-form-section record-section" role="tabpanel" aria-labelledby="person-editor-tab-profile">
+        <h3 class="record-redundant-title">人员资料</h3><div class="fields record-fields">
+          <div class="field"><label for="person-name">姓名<span class="required">*</span></label><input id="person-name" name="name" autocomplete="off" required placeholder="填写姓名"></div>
+          <div class="field"><label for="person-code">工号</label><input id="person-code" name="person_code" autocomplete="off" placeholder="填写工号"></div>
+          <div class="field full"><label for="person-title">岗位</label><input id="person-title" name="title" autocomplete="off" placeholder="填写岗位"></div>
+          <div class="field"><label for="person-phone">电话</label><input id="person-phone" name="phone" type="tel" autocomplete="off" placeholder="填写联系电话"></div>
+          <div class="field"><label for="person-status">状态</label><select id="person-status" name="status"><option value="">请选择状态</option><option>在职</option><option>调休</option><option>离职</option></select></div>
+          <div class="field full"><label for="person-remark">备注</label><textarea id="person-remark" name="remark" rows="3" placeholder="填写备注"></textarea></div>
+        </div><p class="dialog-note">所有输入仅保留在本次表单；切换分区或展开不会清空草稿。</p>
+      </section>
+      <section id="person-editor-organization" class="person-form-section record-section" role="tabpanel" aria-labelledby="person-editor-tab-organization" hidden>
+        <h3 class="record-redundant-title">组织归属</h3><div class="fields record-fields">
+          <div class="field full"><label for="person-organization">所属组织</label><select id="person-organization" name="org_id"></select></div>
+          <div class="field"><label for="person-department">所属部门</label><select id="person-department" name="department_id"></select></div>
+          <div class="field"><label for="person-group">所属分组</label><select id="person-group" name="group_id"></select></div>
+        </div><p id="person-affiliation-preview" class="dialog-note" aria-live="polite"></p><p class="dialog-note">切换组织会清空部门及分组；切换部门会清空分组。所有填写只用于本次原型预览。</p>
+      </section>
+    </div>
+    <footer class="dialog-footer record-footer"><button data-close="person-editor" type="button">取消</button><button id="person-save" class="primary" type="button" disabled title="离线原型不写入业务数据">保存（离线不可用）</button></footer>
+  </form>
+</dialog>
+<dialog id="organization-maintenance" class="organization-maintenance" aria-labelledby="organization-maintenance-title">
+  <header class="dialog-header"><div><h2 id="organization-maintenance-title">维护组织架构</h2><p class="dialog-note">示例目录 · 在右侧直接新增或编辑 · 原型不保存</p></div><button class="icon quiet" data-close="organization-maintenance" type="button" aria-label="关闭组织架构维护"><svg><use href="#close"/></svg></button></header>
+  <div class="maintenance-layout">
+    <section class="maintenance-directory" aria-label="维护组织目录"><label class="search tree-search"><svg><use href="#search"/></svg><input id="maintenance-search" type="search" aria-label="搜索维护组织节点" placeholder="搜索组织、部门或分组"></label><div class="maintenance-create"><button id="organization-add-root" class="primary" type="button"><svg><use href="#plus"/></svg>新增组织</button><button id="organization-add-child" class="primary" type="button">新增部门</button></div><div class="directory-scroll"><div id="maintenance-tree"></div><p id="maintenance-empty" class="empty" hidden>没有匹配的组织节点</p></div></section>
+    <section class="maintenance-editor" aria-label="组织节点原型表单"><form id="organization-node-form"><h3 id="organization-node-heading">编辑组织（原型）</h3><div class="fields">
+      <div class="field full"><label for="organization-node-name">名称<span class="required">*</span></label><input id="organization-node-name" required autocomplete="off" placeholder="填写节点名称"></div>
+      <div class="field full"><label for="organization-node-type">节点类型</label><select id="organization-node-type"><option value="organization">组织</option><option value="department">部门</option><option value="group">分组</option></select></div>
+      <div class="field full"><label for="organization-node-parent">上级节点</label><select id="organization-node-parent"></select></div>
+      <div class="field"><label for="organization-node-sort">排序</label><input id="organization-node-sort" type="number" min="0" step="1"></div>
+      <div class="field"><label for="organization-node-count">引用示例人员</label><input id="organization-node-count" readonly></div>
+    </div><p id="organization-node-path" class="dialog-note" aria-live="polite"></p><p class="dialog-note">组织为顶级，部门只能属于组织，分组只能属于部门。编辑不改变示例目录或人员归属；真实保存和删除均已禁用。</p><div class="node-form-actions"><button type="button" disabled>删除节点（原型禁用）</button><button class="primary" type="button" disabled>保存（原型禁用）</button></div></form></section>
+  </div>
+  <footer class="dialog-footer"><button data-close="organization-maintenance" type="button">关闭</button></footer>
+</dialog>
+<script src="organization-preview.js"></script>
+</body>
+</html>

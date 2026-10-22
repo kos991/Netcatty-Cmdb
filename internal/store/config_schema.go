@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS cmdb_network_types (
     sync_id TEXT,
     name TEXT NOT NULL,
     remark TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     revision INTEGER NOT NULL DEFAULT 1,
     created_at TEXT,
@@ -168,9 +169,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cmdb_work_order_rules_project
 `
 
 func (s *Store) InitConfigSchema() error {
-	if _, err := s.db.Exec(configSchema); err != nil {
-		return fmt.Errorf("init config schema: %w", err)
-	}
+  if _, err := s.db.Exec(configSchema); err != nil {
+    return fmt.Errorf("init config schema: %w", err)
+  }
+  if err := addMissingColumns(s.db, "cmdb_network_types", map[string]string{"color": "TEXT NOT NULL DEFAULT ''"}); err != nil {
+    return fmt.Errorf("add network type color column: %w", err)
+  }
 	if err := addMissingColumns(s.db, "cmdb_persons", map[string]string{
 		"org_id":        "INTEGER NOT NULL DEFAULT 0",
 		"department_id": "INTEGER NOT NULL DEFAULT 0",
@@ -178,10 +182,67 @@ func (s *Store) InitConfigSchema() error {
 	}); err != nil {
 		return fmt.Errorf("add person organization columns: %w", err)
 	}
+	// 机柜作为位置目录项登记，rack_units 为机柜总 U 数；0 表示未设置，按默认 42U 展示。
+	if err := addMissingColumns(s.db, "cmdb_locations", map[string]string{
+		"rack_units":    "INTEGER NOT NULL DEFAULT 0",
+		"location_type": "TEXT NOT NULL DEFAULT ''",
+		"data_center":   "TEXT NOT NULL DEFAULT ''",
+		"cabinet_name":  "TEXT NOT NULL DEFAULT ''",
+	}); err != nil {
+		return fmt.Errorf("add location rack units column: %w", err)
+	}
 	return nil
 }
 
 func migrateLegacyPersonOrgPaths(tx *sql.Tx, now string) error {
+	// 优先信任仍然有效的部门节点。旧测试数据曾把 cmdb_orgs.id 写入 org_id，
+	// 该值可能非零，因此不能只修复 org_id=0 的人员。
+	validRows, err := tx.Query(`
+		SELECT p.id, p.project_id, d.id, d.name, o.id, o.name,
+		       p.group_id, CASE WHEN g.id IS NULL THEN IFNULL(p.group_name,'') ELSE g.name END
+		FROM cmdb_persons p
+		JOIN cmdb_org_nodes d ON d.id=p.department_id AND d.project_id=p.project_id
+		  AND d.node_type=? AND d.deleted_at IS NULL
+		JOIN cmdb_org_nodes o ON o.id=d.parent_id AND o.project_id=p.project_id
+		  AND o.node_type=? AND o.deleted_at IS NULL
+		LEFT JOIN cmdb_org_nodes g ON g.id=p.group_id AND g.project_id=p.project_id
+		  AND g.node_type=? AND g.parent_id=d.id AND g.deleted_at IS NULL
+		WHERE p.deleted_at IS NULL
+		  AND (p.org_id<>o.id OR IFNULL(p.org_name,'')<>o.name OR IFNULL(p.department,'')<>d.name
+		       OR (g.id IS NOT NULL AND IFNULL(p.group_name,'')<>g.name))
+		ORDER BY p.id
+	`, OrgNodeDepartment, OrgNodeOrganization, OrgNodeGroup)
+	if err != nil {
+		return fmt.Errorf("list persons with recoverable organization path: %w", err)
+	}
+	type validPersonPath struct {
+		id, projectID, departmentID, orgID, groupID int64
+		department, orgName, groupName              string
+	}
+	var validPaths []validPersonPath
+	for validRows.Next() {
+		var path validPersonPath
+		if err := validRows.Scan(&path.id, &path.projectID, &path.departmentID, &path.department, &path.orgID, &path.orgName, &path.groupID, &path.groupName); err != nil {
+			validRows.Close()
+			return fmt.Errorf("scan recoverable person organization path: %w", err)
+		}
+		validPaths = append(validPaths, path)
+	}
+	if err := validRows.Err(); err != nil {
+		validRows.Close()
+		return fmt.Errorf("iterate recoverable person organization paths: %w", err)
+	}
+	if err := validRows.Close(); err != nil {
+		return fmt.Errorf("close recoverable person organization paths: %w", err)
+	}
+	for _, path := range validPaths {
+		if _, err := tx.Exec(`UPDATE cmdb_persons
+			SET org_id=?, org_name=?, department=?, group_name=?, updated_at=?
+			WHERE id=? AND project_id=?`, path.orgID, path.orgName, path.department, path.groupName, now, path.id, path.projectID); err != nil {
+			return fmt.Errorf("repair person organization from department: %w", err)
+		}
+	}
+
 	rows, err := tx.Query(`
 		SELECT id, project_id, IFNULL(org_name,''), IFNULL(department,''), IFNULL(group_name,'')
 		FROM cmdb_persons
@@ -214,10 +275,23 @@ func migrateLegacyPersonOrgPaths(tx *sql.Tx, now string) error {
 
 	for _, person := range people {
 		department := strings.TrimSpace(person.department)
+		orgName := strings.TrimSpace(person.orgName)
 		if department == "" {
+			if orgName == "" {
+				continue
+			}
+			orgID, err := findOrCreateMigratedOrgNode(tx, person.projectID, 0, OrgNodeOrganization, orgName, now)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(`
+				UPDATE cmdb_persons SET org_id=?, org_name=?, updated_at=?
+				WHERE id=? AND project_id=?
+			`, orgID, orgName, now, person.id, person.projectID); err != nil {
+				return fmt.Errorf("backfill person organization id: %w", err)
+			}
 			continue
 		}
-		orgName := strings.TrimSpace(person.orgName)
 		if orgName == "" {
 			orgName = "未归属组织"
 		}

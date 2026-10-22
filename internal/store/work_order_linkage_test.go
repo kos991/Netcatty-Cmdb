@@ -207,3 +207,40 @@ func TestServerAppProviderRoundTrip(t *testing.T) {
 		t.Fatalf("业务系统供应商更新失败: apps=%+v err=%v", updated, err)
 	}
 }
+
+func TestServerAppQueryFiltersActualFieldsAndPersistedNetwork(t *testing.T) {
+	s := newCmdbTestStore(t)
+	scope, _ := s.DefaultProjectScope()
+	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "业务网", Category: "专网", CIDR: "10.120.0.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateIPSubnetForProject(scope, &IPSubnet{Name: "外网", Category: "外网", CIDR: "10.121.0.0/24"}); err != nil {
+		t.Fatal(err)
+	}
+	hostID, err := s.CreateCmdbAssetManualForProject(scope, &CmdbAsset{Name: "应用服务器", DeviceType: "server", MgmtIP: "10.120.0.2", BizIP: "10.120.0.10"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	matching := &ServerApp{AppName: "审判系统", AppType: "业务应用", Provider: "甲供应商", Owner: "张三", GroupID: 0, CmdbAssetID: hostID, ServiceIP: "10.120.0.10", NetworkType: "专网", Status: "正常运行"}
+	if _, err := s.CreateAppForProject(scope, matching); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAppForProject(scope, &ServerApp{AppName: "无关系统", AppType: "业务应用", Provider: "乙供应商", Owner: "李四", ServiceIP: "10.121.0.10", Status: "正常运行"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAppForProject(scope, &ServerApp{AppName: "待配置系统"}); err != nil {
+		t.Fatal(err)
+	}
+	rows, total, err := s.QueryServerAppsForProject(scope, ServerAppQuery{Provider: "甲供应商", Owner: "张三", NetworkType: "专网", HostID: hostID, HostLinked: "linked", Page: 1, PageSize: 20})
+	if err != nil || total != 1 || len(rows) != 1 || rows[0].AppName != "审判系统" || rows[0].NetworkType != "专网" {
+		t.Fatalf("业务系统实际字段筛选或独立网络标识错误: rows=%+v total=%d err=%v", rows, total, err)
+	}
+	rows, total, err = s.QueryServerAppsForProject(scope, ServerAppQuery{NetworkType: "专网", HostLinked: "unlinked", Page: 1, PageSize: 20})
+	if err != nil || total != 0 || len(rows) != 0 {
+		t.Fatalf("承载服务器关联筛选错误: rows=%+v total=%d err=%v", rows, total, err)
+	}
+	rows, total, err = s.QueryServerAppsForProject(scope, ServerAppQuery{AppType: AssetUnconfiguredFilter, Status: AssetUnconfiguredFilter, Provider: AssetUnconfiguredFilter, Owner: AssetUnconfiguredFilter, GroupID: -1, HostLinked: "unlinked", NetworkType: AssetUnconfiguredFilter, Page: 1, PageSize: 20})
+	if err != nil || total != 1 || len(rows) != 1 || rows[0].AppName != "待配置系统" {
+		t.Fatalf("未分类、未分组和未配置条件筛选错误: rows=%+v total=%d err=%v", rows, total, err)
+	}
+}

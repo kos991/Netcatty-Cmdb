@@ -2,11 +2,15 @@ package internal
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
+	"strings"
 	"testing"
 
 	"czfy-assets/internal/store"
@@ -21,13 +25,17 @@ func TestWorkOrderAttachmentEndpoints(t *testing.T) {
 	mux := http.NewServeMux()
 	s.RegisterRoutes(mux)
 
+	rawContent := []byte("attachment-data")
+	expectedHash := sha256.Sum256(rawContent)
+	expectedHashHex := hex.EncodeToString(expectedHash[:])
+
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	part, err := writer.CreateFormFile("file", "现场照片.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = part.Write([]byte("attachment-data"))
+	_, _ = part.Write(rawContent)
 	_ = writer.Close()
 	upload := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/cmdb/work-orders/%d/attachments", workOrderID), &body)
 	upload.Header.Set("Content-Type", writer.FormDataContentType())
@@ -43,11 +51,87 @@ func TestWorkOrderAttachmentEndpoints(t *testing.T) {
 	if attachment.ID <= 0 || attachment.FileName != "现场照片.txt" {
 		t.Fatalf("上传响应错误: %+v", attachment)
 	}
+	if attachment.ContentHash != expectedHashHex {
+		t.Fatalf("内容哈希错误: 期望 %s, 得到 %s", expectedHashHex, attachment.ContentHash)
+	}
+	if attachment.S3Status != "pending" {
+		t.Fatalf("初始 S3 状态错误: %s", attachment.S3Status)
+	}
+
+	incompleteSync := httptest.NewRecorder()
+	incompleteSyncRequest := httptest.NewRequest(http.MethodPut,
+		fmt.Sprintf("/api/cmdb/work-orders/%d/attachments/%d/s3-status", workOrderID, attachment.ID),
+		bytes.NewBufferString(`{"s3_status":"synced","s3_key":"attachments/plain.bin"}`))
+	mux.ServeHTTP(incompleteSync, incompleteSyncRequest)
+	if incompleteSync.Code != http.StatusBadRequest || !strings.Contains(incompleteSync.Body.String(), "加密元数据") {
+		t.Fatalf("缺少加密元数据的附件不得标记为已同步: %d %s", incompleteSync.Code, incompleteSync.Body.String())
+	}
+
+	// 测试探测本地哈希存在性
+	checkRec := httptest.NewRecorder()
+	mux.ServeHTTP(checkRec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/cmdb/attachments/hash/%s/status", expectedHashHex), nil))
+	if checkRec.Code != http.StatusOK {
+		t.Fatalf("探测本地哈希失败: %d %s", checkRec.Code, checkRec.Body.String())
+	}
+	var checkResp struct {
+		LocalExists bool  `json:"local_exists"`
+		SizeBytes   int64 `json:"size_bytes"`
+	}
+	if err := json.Unmarshal(checkRec.Body.Bytes(), &checkResp); err != nil || !checkResp.LocalExists || checkResp.SizeBytes != int64(len(rawContent)) {
+		t.Fatalf("探测本地哈希响应异常: %+v", checkResp)
+	}
+
+	// 测试更新 S3 同步状态
+	s3StatusBody := bytes.NewBufferString(`{"s3_status":"synced","s3_key":"attachments/test.bin","cloud_object_id":"object-1","encryption_version":1,"wrapped_key":"wrapped","wrapped_key_iv":"wrap-iv","data_iv":"data-iv"}`)
+	updateS3Rec := httptest.NewRecorder()
+	updateS3Req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/cmdb/work-orders/%d/attachments/%d/s3-status", workOrderID, attachment.ID), s3StatusBody)
+	mux.ServeHTTP(updateS3Rec, updateS3Req)
+	if updateS3Rec.Code != http.StatusOK {
+		t.Fatalf("更新 S3 状态失败: %d %s", updateS3Rec.Code, updateS3Rec.Body.String())
+	}
 
 	list := httptest.NewRecorder()
 	mux.ServeHTTP(list, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/cmdb/work-orders/%d/attachments", workOrderID), nil))
 	if list.Code != http.StatusOK || !bytes.Contains(list.Body.Bytes(), []byte("现场照片.txt")) {
 		t.Fatalf("附件列表失败: status=%d body=%s", list.Code, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), `"s3_status":"synced"`) {
+		t.Fatalf("列表未反映更新后的 S3 状态: %s", list.Body.String())
+	}
+	var listPayload struct {
+		List []struct {
+			LocalExists bool `json:"local_exists"`
+		} `json:"list"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &listPayload); err != nil {
+		t.Fatal(err)
+	}
+	if len(listPayload.List) != 1 || !listPayload.List[0].LocalExists {
+		t.Fatalf("附件列表未返回可靠的本地存在状态: %s", list.Body.String())
+	}
+	if strings.Contains(list.Body.String(), `"stored_path"`) {
+		t.Fatalf("附件列表不得暴露内部存储路径: %s", list.Body.String())
+	}
+	for _, metadata := range []string{`"cloud_object_id":"object-1"`, `"encryption_version":1`, `"wrapped_key":"wrapped"`, `"wrapped_key_iv":"wrap-iv"`, `"data_iv":"data-iv"`} {
+		if !strings.Contains(list.Body.String(), metadata) {
+			t.Fatalf("列表缺少附件加密元数据 %s: %s", metadata, list.Body.String())
+		}
+	}
+
+	retryStatus := httptest.NewRecorder()
+	retryStatusRequest := httptest.NewRequest(http.MethodPut,
+		fmt.Sprintf("/api/cmdb/work-orders/%d/attachments/%d/s3-status", workOrderID, attachment.ID),
+		bytes.NewBufferString(`{"s3_status":"failed","s3_key":"attachments/test.bin"}`))
+	mux.ServeHTTP(retryStatus, retryStatusRequest)
+	if retryStatus.Code != http.StatusOK {
+		t.Fatalf("更新附件重试状态失败: %d %s", retryStatus.Code, retryStatus.Body.String())
+	}
+	stored, err := s.Store.GetWorkOrderAttachmentForProject(store.ProjectScope{ProjectID: attachment.ProjectID}, workOrderID, attachment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.CloudObjectID != "object-1" || stored.WrappedKey != "wrapped" || stored.DataIV != "data-iv" {
+		t.Fatalf("仅更新状态时清空了加密元数据: %+v", stored)
 	}
 
 	download := httptest.NewRecorder()
@@ -60,5 +144,80 @@ func TestWorkOrderAttachmentEndpoints(t *testing.T) {
 	mux.ServeHTTP(remove, httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/cmdb/work-orders/%d/attachments/%d", workOrderID, attachment.ID), nil))
 	if remove.Code != http.StatusOK {
 		t.Fatalf("附件删除失败: status=%d body=%s", remove.Code, remove.Body.String())
+	}
+}
+
+func TestWorkOrderAttachmentUploadValidation(t *testing.T) {
+	s := newCmdbTestServer(t)
+	workOrderID, err := s.Store.CreateCmdbWorkOrder(&store.CmdbWorkOrder{Subject: "上传校验"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	s.RegisterRoutes(mux)
+
+	upload := func(workOrder int64, partFn func(*multipart.Writer) error) *httptest.ResponseRecorder {
+		t.Helper()
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		if partFn != nil {
+			if err := partFn(writer); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_ = writer.Close()
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/cmdb/work-orders/%d/attachments", workOrder), &body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 缺少 file 字段必须拒绝
+	noFile := upload(workOrderID, func(w *multipart.Writer) error {
+		return w.WriteField("extra", "no-file")
+	})
+	if noFile.Code != http.StatusBadRequest {
+		t.Fatalf("缺少 file 字段应返回 400: %d %s", noFile.Code, noFile.Body.String())
+	}
+
+	// 不存在的工单必须拒绝
+	missingOrder := upload(999999, func(w *multipart.Writer) error {
+		part, err := w.CreateFormFile("file", "a.txt")
+		if err != nil {
+			return err
+		}
+		_, err = part.Write([]byte("x"))
+		return err
+	})
+	if missingOrder.Code != http.StatusBadRequest {
+		t.Fatalf("不存在的工单应返回 400: %d %s", missingOrder.Code, missingOrder.Body.String())
+	}
+
+	// 文件名含目录成分被扁平化，且保留声明的 content_type
+	preserved := upload(workOrderID, func(w *multipart.Writer) error {
+		header := textproto.MIMEHeader{
+			"Content-Disposition": {`form-data; name="file"; filename="sub/证据.txt"`},
+			"Content-Type":        {"text/plain; charset=utf-8"},
+		}
+		part, err := w.CreatePart(header)
+		if err != nil {
+			return err
+		}
+		_, err = part.Write([]byte("flattened"))
+		return err
+	})
+	if preserved.Code != http.StatusCreated {
+		t.Fatalf("合法附件上传失败: %d %s", preserved.Code, preserved.Body.String())
+	}
+	var uploaded store.WorkOrderAttachment
+	if err := json.Unmarshal(preserved.Body.Bytes(), &uploaded); err != nil {
+		t.Fatal(err)
+	}
+	if uploaded.FileName != "证据.txt" {
+		t.Fatalf("文件名未扁平化: %q", uploaded.FileName)
+	}
+	if uploaded.ContentType != "text/plain; charset=utf-8" {
+		t.Fatalf("content_type 未保留: %q", uploaded.ContentType)
 	}
 }

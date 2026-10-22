@@ -44,7 +44,7 @@ func (s *Store) ResolveProject(scope ProjectScope) (*CmdbProject, error) {
 }
 
 func (s *Store) ListCmdbProjects() ([]CmdbProject, error) {
-	rows, err := s.db.Query(`SELECT id, sync_id, code, name, revision, created_at, updated_at, deleted_at
+	rows, err := s.db.Query(`SELECT id, sync_id, code, name, COALESCE(attachment_root, ''), revision, created_at, updated_at, deleted_at
 		FROM cmdb_projects WHERE deleted_at IS NULL ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (s *Store) GetCmdbProject(id int64) (*CmdbProject, error) {
 	if id <= 0 {
 		return nil, errors.New("缺少有效项目")
 	}
-	project, err := scanCmdbProject(s.db.QueryRow(`SELECT id, sync_id, code, name, revision, created_at, updated_at, deleted_at
+	project, err := scanCmdbProject(s.db.QueryRow(`SELECT id, sync_id, code, name, COALESCE(attachment_root, ''), revision, created_at, updated_at, deleted_at
 		FROM cmdb_projects WHERE id = ? AND deleted_at IS NULL`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("项目不存在或已删除: %w", ErrProjectScopedNotFound)
@@ -107,6 +107,9 @@ func (s *Store) CreateCmdbProject(project *CmdbProject) (*CmdbProject, error) {
 	if err := insertDefaultNetworkTypes(tx, id, now); err != nil {
 		return nil, err
 	}
+	if err := insertDefaultAssetCategories(tx, id); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -134,6 +137,21 @@ func (s *Store) UpdateCmdbProject(project *CmdbProject) error {
 	return nil
 }
 
+func (s *Store) UpdateProjectAttachmentRoot(projectID int64, root string) error {
+	if projectID <= 0 {
+		return errors.New("缺少有效项目")
+	}
+	result, err := s.db.Exec(`UPDATE cmdb_projects SET attachment_root=?, updated_at=?
+		WHERE id=? AND deleted_at IS NULL`, strings.TrimSpace(root), time.Now().UTC().Format(time.RFC3339Nano), projectID)
+	if err != nil {
+		return err
+	}
+	if err := requireAffected(result, "项目不存在或已删除"); err != nil {
+		return fmt.Errorf("%w: %v", ErrProjectScopedNotFound, err)
+	}
+	return nil
+}
+
 func (s *Store) DeleteCmdbProject(id int64) error {
 	if id <= 0 {
 		return errors.New("缺少有效项目")
@@ -150,7 +168,7 @@ func (s *Store) DeleteCmdbProject(id int64) error {
 func scanCmdbProject(scanner interface{ Scan(...interface{}) error }) (CmdbProject, error) {
 	var project CmdbProject
 	var deletedAt sql.NullString
-	err := scanner.Scan(&project.ID, &project.SyncID, &project.Code, &project.Name, &project.Revision,
+	err := scanner.Scan(&project.ID, &project.SyncID, &project.Code, &project.Name, &project.AttachmentRoot, &project.Revision,
 		&project.CreatedAt, &project.UpdatedAt, &deletedAt)
 	project.DeletedAt = deletedAt.String
 	return project, err

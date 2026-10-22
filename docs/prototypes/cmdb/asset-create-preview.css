@@ -1,0 +1,49 @@
+.asset-create-dialog {
+  width: 860px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  overflow: hidden;
+}
+.asset-create-dialog[open] { display: flex; flex-direction: column; }
+.asset-create-dialog:not([open]) { display: none; }
+.asset-create-dialog .dialog-header { flex: 0 0 auto; gap: 11px; padding: 16px 20px; }
+.asset-create-dialog .create-dialog-identity { flex: 1; min-width: 0; }
+.asset-create-dialog .create-dialog-identity h2 { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.asset-create-dialog .create-dialog-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.asset-create-dialog .dialog-header > button { flex-shrink: 0; }
+.asset-create-dialog .dialog-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 16px 24px 4px; }
+.asset-create-dialog .create-dialog-note { margin: 0 0 20px; }
+.asset-create-dialog .create-form-section { min-width: 0; margin-bottom: 22px; }
+.asset-create-dialog .create-form-section + .create-form-section { border-top: 1px solid var(--border); padding-top: 19px; }
+.asset-create-dialog .create-form-section > h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 15px; font-size: 12px; font-weight: 600; }
+.asset-create-dialog .create-form-section > h3 svg { width: 15px; height: 15px; color: var(--muted); }
+.asset-create-dialog .fields { gap: 15px 20px; }
+.asset-create-dialog .field label { line-height: 1.5; overflow-wrap: anywhere; }
+.asset-create-dialog .field input, .asset-create-dialog .field select, .asset-create-dialog .field textarea { min-width: 0; max-width: 100%; }
+.asset-create-dialog .field textarea { width: 100%; min-height: 72px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); background: var(--bg); font: inherit; resize: vertical; }
+.asset-create-dialog .field textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.asset-create-dialog .field input::placeholder, .asset-create-dialog .field textarea::placeholder { color: var(--muted); opacity: .7; font-size: 11px; }
+.asset-create-dialog .dialog-footer { flex: 0 0 auto; padding: 13px 20px; background: var(--surface); flex-wrap: wrap; }
+.asset-create-dialog .dialog-footer .primary { min-width: 138px; }
+.asset-create-dialog .create-hardware-photos { min-width: 0; margin-top: 18px; }
+.asset-create-dialog .create-hardware-photos h4 { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; color: var(--muted); font-size: 11px; font-weight: 500; }
+.asset-create-dialog .create-hardware-photos h4 svg { width: 14px; height: 14px; }
+.asset-create-dialog .create-hardware-photos > button { height: 29px; font-size: 11px; margin: 10px 8px 0 0; max-width: 100%; white-space: normal; }
+.asset-create-dialog .hardware-photos .detail-photo { min-width: 0; overflow-wrap: anywhere; }
+:is(#asset-sheet-body, #asset-create-body) [hidden] { display: none; }
+:is(#asset-sheet-body, #asset-create-body) > .record-section[role="tabpanel"] { border-top: 0; padding-top: 0; }
+:is(#asset-sheet, #asset-create-dialog) .asset-form-offline { color: var(--accent); font-size: 11px; font-weight: 600; line-height: 1.5; }
+:is(#asset-sheet, #asset-create-dialog) .record-footer > .asset-form-offline { margin-right: auto; }
+:is(#asset-sheet, #asset-create-dialog) .asset-form-photos .create-hardware-photos > button { height: auto; min-height: 30px; margin: 10px 8px 0 0; max-width: 100%; white-space: normal; font-size: 11px; }
+:is(#asset-sheet, #asset-create-dialog) .asset-form-photos h4 { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+:is(#asset-sheet, #asset-create-dialog) .asset-form-photos h4 svg { width: 14px; height: 14px; }
+@media (max-width: 560px) {
+  .asset-create-dialog .dialog-header { padding: 13px 14px; gap: 8px; }
+  .asset-create-dialog .dialog-body { padding: 14px 16px 2px; }
+  .asset-create-dialog .fields { grid-template-columns: minmax(0, 1fr); gap: 13px; }
+  .asset-create-dialog .dialog-footer { padding: 12px 14px; gap: 7px; }
+  .asset-create-dialog .dialog-footer button { padding: 0 10px; }
+  .asset-create-dialog .dialog-footer .primary { min-width: 0; }
+}

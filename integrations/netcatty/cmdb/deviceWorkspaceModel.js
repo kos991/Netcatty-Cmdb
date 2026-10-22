@@ -1,5 +1,11 @@
 const missing = (value) => String(value || '').trim() || '未分配'
 
+export function terminalOwnerPresentation(asset = {}) {
+  const label = String(asset.user_name || '').trim() || '公用 / 闲置'
+  const room = String(asset.room || '').trim()
+  return { label, room, editable: Boolean(asset.id) }
+}
+
 export function resolveDeviceKind(asset = {}) {
   const type = [asset.device_type, asset.category_name, asset.asset_class].filter(Boolean).join(' ').toLowerCase()
   if (/switch|交换机/.test(type)) return 'switch'
@@ -11,7 +17,7 @@ export function resolveDeviceKind(asset = {}) {
 
 export function deviceTypeLabel(asset = {}) {
   const labels = { server: '服务器', virtual_machine: '虚拟机', switch: '交换机', router: '路由器', security_device: '安全设备', storage: '存储设备', hyperconverged: '超融合', cloud_desktop: '云桌面' }
-  return asset.category_name || labels[asset.device_type] || asset.device_type || (asset.source_type === 'legacy_server' ? '服务器' : '未分类')
+  return labels[asset.device_type] || asset.device_type || asset.category_name || (asset.source_type === 'legacy_server' ? '服务器' : '未配置')
 }
 
 const DISTRO_NAMES = {
@@ -216,6 +222,26 @@ export function resolveOperatingSystemPresentation(asset = {}, host = null) {
   }
 }
 
+const GENERIC_OS_WORDS = /\b(?:linux|gnu|advanced|server|enterprise|edition|operating|system)\b/gi
+
+// 列表用的操作系统短名：完整名称留在悬停提示里。
+// “Linux / Sangfor OS”取更具体的一侧，去掉 Linux、Advanced Server 等通用词，保留版本号。
+export function shortOperatingSystemLabel(name = '', version = '') {
+  const parts = clean(name).split(/\s*\/\s*/).filter(Boolean)
+  const specific = parts.length > 1 && /^linux$/i.test(parts[0]) ? parts[1] : parts[0] || ''
+  const short = specific.replace(GENERIC_OS_WORDS, ' ').replace(/\s+/g, ' ').trim() || specific
+  return [short, clean(version)].filter(Boolean).join(' ').replace(/\s*[（(][^）)]*[）)]/g, '').trim()
+}
+
+// 列表用的型号短名：品牌由图标表达，去掉型号里重复的品牌前缀和括号说明。
+export function shortModelLabel(vendor = '', model = '') {
+  const brand = clean(vendor)
+  let text = clean(model)
+  if (brand && text.startsWith(brand)) text = text.slice(brand.length).trim()
+  text = text.replace(/[（(][^）)]*[）)]/g, '').replace(/\s+/g, ' ').trim()
+  return text || brand
+}
+
 export function buildLinkedHostByAssetID(links = [], hosts = []) {
   const hostByID = new Map(hosts.map((host) => [host.id, host]))
   const lookup = new Map()
@@ -286,20 +312,27 @@ export function buildDeviceWorkspaceModel(asset = {}, context = {}) {
 const OPERATION_LABELS = {
   switch: '端口与配置',
   router: '接口运行',
-  server: '硬件与业务',
-  generic: '设备信息',
+  server: '承载业务',
 }
 
-export function buildDeviceWorkspaceTabs(kind = 'generic', showPhotos = true) {
+// 终端资产与基础设施共用的详情分区，顺序即页签顺序；基础设施额外有机柜和设备专属运行页签。
+export function buildDeviceWorkspaceTabs(kind = 'generic', showPhotos = true, options = {}) {
+  const terminal = kind === 'terminal'
+  const showCabinet = !terminal && !options.virtual
+  const photosInCabinet = showCabinet && (kind === 'server' || kind === 'switch')
+  const operationLabel = OPERATION_LABELS[kind]
   return {
-    defaultTab: kind === 'server' || kind === 'generic' ? 'overview' : 'operations',
+    defaultTab: kind === 'switch' || kind === 'router' ? 'operations' : 'hardware',
     tabs: [
-      { key: 'overview', label: '概览' },
-      ...(kind === 'generic' ? [] : [{ key: 'operations', label: OPERATION_LABELS[kind] || OPERATION_LABELS.generic }]),
-      { key: 'network', label: '网络' },
+      { key: 'hardware', label: '硬件信息' },
+      ...(operationLabel ? [{ key: 'operations', label: operationLabel }] : []),
+      { key: 'network', label: '网络配置' },
+      { key: 'usage', label: '使用与位置' },
+      ...(showCabinet ? [{ key: 'cabinet', label: '机柜信息' }] : []),
+      { key: 'system', label: '系统信息' },
+      ...(showPhotos && !photosInCabinet ? [{ key: 'photos', label: '设备照片' }] : []),
+      { key: 'records', label: '设备履历' },
       { key: 'relations', label: '凭证中心' },
-      { key: 'records', label: '履历档案' },
-      ...(showPhotos ? [{ key: 'photos', label: '设备照片' }] : []),
     ],
   }
 }

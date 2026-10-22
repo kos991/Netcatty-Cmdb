@@ -7,9 +7,38 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
+
+	"czfy-assets/internal/store"
 )
 
 const maxWorkOrderAttachmentBytes = 50 << 20
+
+// workOrderAttachmentResponse exposes only client-facing attachment metadata.
+// StoredPath remains an internal field used by download/delete flows.
+type workOrderAttachmentResponse struct {
+	store.WorkOrderAttachment
+	LocalPath   string `json:"local_path"`
+	LocalExists bool   `json:"local_exists"`
+}
+
+func attachmentLocalState(attachment store.WorkOrderAttachment) (string, bool) {
+	path := attachment.StoredPath
+	if path == "" {
+		return "", false
+	}
+	info, err := os.Stat(path)
+	return path, err == nil && !info.IsDir()
+}
+
+func newWorkOrderAttachmentResponse(attachment store.WorkOrderAttachment) workOrderAttachmentResponse {
+	path, exists := attachmentLocalState(attachment)
+	return workOrderAttachmentResponse{
+		WorkOrderAttachment: attachment,
+		LocalPath:           path,
+		LocalExists:         exists,
+	}
+}
 
 func workOrderAttachmentIDs(r *http.Request) (int64, int64, bool) {
 	workOrderID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -34,7 +63,11 @@ func (s *Server) handleListWorkOrderAttachments(w http.ResponseWriter, r *http.R
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"list": list, "total": len(list)})
+	response := make([]workOrderAttachmentResponse, 0, len(list))
+	for _, attachment := range list {
+		response = append(response, newWorkOrderAttachmentResponse(attachment))
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"list": response, "total": len(response)})
 }
 
 func (s *Server) handleUploadWorkOrderAttachment(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +114,7 @@ func (s *Server) handleDownloadWorkOrderAttachment(w http.ResponseWriter, r *htt
 	}
 	file, err := os.Open(attachment.StoredPath)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, "附件文件不存在")
+		writeErr(w, http.StatusNotFound, "附件文件不存在或未下载至本地")
 		return
 	}
 	defer file.Close()
@@ -89,6 +122,88 @@ func (s *Server) handleDownloadWorkOrderAttachment(w http.ResponseWriter, r *htt
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": attachment.FileName}))
 	w.Header().Set("Content-Length", fmt.Sprint(attachment.SizeBytes))
 	_, _ = io.Copy(w, file)
+}
+
+func (s *Server) handleUpdateWorkOrderAttachmentS3Status(w http.ResponseWriter, r *http.Request) {
+	workOrderID, attachmentID, ok := workOrderAttachmentIDs(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "无效的附件 ID")
+		return
+	}
+	var req struct {
+		S3Status          string `json:"s3_status"`
+		S3Key             string `json:"s3_key"`
+		CloudObjectID     string `json:"cloud_object_id"`
+		EncryptionVersion int    `json:"encryption_version"`
+		WrappedKey        string `json:"wrapped_key"`
+		WrappedKeyIV      string `json:"wrapped_key_iv"`
+		DataIV            string `json:"data_iv"`
+	}
+	if err := decodeAttachmentJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	s3Status := strings.TrimSpace(req.S3Status)
+	if s3Status != "synced" && s3Status != "pending" && s3Status != "failed" {
+		writeErr(w, http.StatusBadRequest, "未知的 S3 状态")
+		return
+	}
+	if req.EncryptionVersion < 0 {
+		writeErr(w, http.StatusBadRequest, "附件加密版本不能为负数")
+		return
+	}
+	if s3Status == "synced" && (strings.TrimSpace(req.S3Key) == "" ||
+		strings.TrimSpace(req.CloudObjectID) == "" || req.EncryptionVersion <= 0 ||
+		strings.TrimSpace(req.WrappedKey) == "" || strings.TrimSpace(req.WrappedKeyIV) == "" ||
+		strings.TrimSpace(req.DataIV) == "") {
+		writeErr(w, http.StatusBadRequest, "附件标记为已同步前必须提供完整加密元数据")
+		return
+	}
+	state := store.WorkOrderAttachmentCloudState{
+		S3Status:          s3Status,
+		S3Key:             strings.TrimSpace(req.S3Key),
+		CloudObjectID:     strings.TrimSpace(req.CloudObjectID),
+		EncryptionVersion: req.EncryptionVersion,
+		WrappedKey:        strings.TrimSpace(req.WrappedKey),
+		WrappedKeyIV:      strings.TrimSpace(req.WrappedKeyIV),
+		DataIV:            strings.TrimSpace(req.DataIV),
+	}
+	var updateErr error
+	if state.CloudObjectID != "" || state.EncryptionVersion != 0 || state.WrappedKey != "" || state.WrappedKeyIV != "" || state.DataIV != "" {
+		updateErr = s.Store.UpdateWorkOrderAttachmentCloudState(requestProjectScope(r), workOrderID, attachmentID, state)
+	} else {
+		updateErr = s.Store.UpdateWorkOrderAttachmentS3Status(requestProjectScope(r), workOrderID, attachmentID, state.S3Status, state.S3Key)
+	}
+	if updateErr != nil {
+		writeErr(w, http.StatusBadRequest, updateErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "1"})
+}
+
+func (s *Server) handleCheckAttachmentLocalStatus(w http.ResponseWriter, r *http.Request) {
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	if hash == "" {
+		writeErr(w, http.StatusBadRequest, "缺少文件哈希")
+		return
+	}
+	localPath, err := s.Store.BuildAttachmentLocalPathForProject(requestProjectScope(r), hash)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	exists := false
+	var size int64
+	if stat, err := os.Stat(localPath); err == nil && !stat.IsDir() {
+		exists = true
+		size = stat.Size()
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"content_hash": hash,
+		"local_exists": exists,
+		"local_path":   localPath,
+		"size_bytes":   size,
+	})
 }
 
 func (s *Server) handleDeleteWorkOrderAttachment(w http.ResponseWriter, r *http.Request) {

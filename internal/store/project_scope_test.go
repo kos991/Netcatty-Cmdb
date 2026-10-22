@@ -109,6 +109,90 @@ func TestProjectScopeProjectCRUDAndValidation(t *testing.T) {
 	}
 }
 
+func TestCmdbProjectAttachmentRootIsLocalPerProject(t *testing.T) {
+	s := newCmdbTestStore(t)
+	projectA, err := s.CreateCmdbProject(&CmdbProject{Code: "attachment-a", Name: "附件项目 A"})
+	if err != nil {
+		t.Fatalf("创建项目 A: %v", err)
+	}
+	projectB, err := s.CreateCmdbProject(&CmdbProject{Code: "attachment-b", Name: "附件项目 B"})
+	if err != nil {
+		t.Fatalf("创建项目 B: %v", err)
+	}
+	const root = `D:\cmdb-files\attachment-a`
+	if err := s.UpdateProjectAttachmentRoot(projectA.ID, root); err != nil {
+		t.Fatalf("更新项目附件目录: %v", err)
+	}
+
+	resolvedA, err := s.GetCmdbProject(projectA.ID)
+	if err != nil {
+		t.Fatalf("读取项目 A: %v", err)
+	}
+	resolvedB, err := s.GetCmdbProject(projectB.ID)
+	if err != nil {
+		t.Fatalf("读取项目 B: %v", err)
+	}
+	if resolvedA.AttachmentRoot != root {
+		t.Fatalf("项目 A 附件目录=%q，期望 %q", resolvedA.AttachmentRoot, root)
+	}
+	if resolvedB.AttachmentRoot != "" {
+		t.Fatalf("项目 B 不应继承项目 A 附件目录: %q", resolvedB.AttachmentRoot)
+	}
+
+	resolvedA.Name = "附件项目 A（改名）"
+	resolvedA.AttachmentRoot = `E:\不应由普通资料更新覆盖`
+	if err := s.UpdateCmdbProject(resolvedA); err != nil {
+		t.Fatalf("更新项目资料: %v", err)
+	}
+	resolvedA, err = s.GetCmdbProject(projectA.ID)
+	if err != nil {
+		t.Fatalf("重新读取项目 A: %v", err)
+	}
+	if resolvedA.AttachmentRoot != root {
+		t.Fatalf("普通项目资料更新覆盖了本机附件目录: %q", resolvedA.AttachmentRoot)
+	}
+}
+
+func TestDefaultProjectUsesOnlyActiveProjectAfterCodeChange(t *testing.T) {
+	s := newCmdbTestStore(t)
+	project, err := s.DefaultProject()
+	if err != nil {
+		t.Fatalf("读取初始默认项目: %v", err)
+	}
+	project.Code = "CN2026-ZJFY"
+	project.Name = "法院"
+	if err := s.UpdateCmdbProject(project); err != nil {
+		t.Fatalf("更新项目资料: %v", err)
+	}
+
+	resolved, err := s.DefaultProject()
+	if err != nil {
+		t.Fatalf("唯一项目修改编码后仍应作为默认项目: %v", err)
+	}
+	if resolved.ID != project.ID || resolved.Code != "CN2026-ZJFY" || resolved.Name != "法院" {
+		t.Fatalf("默认项目解析错误: %+v", resolved)
+	}
+}
+
+func TestDefaultProjectDoesNotGuessWhenMultipleActiveProjectsExist(t *testing.T) {
+	s := newCmdbTestStore(t)
+	project, err := s.DefaultProject()
+	if err != nil {
+		t.Fatalf("读取初始默认项目: %v", err)
+	}
+	project.Code = "CN2026-ZJFY"
+	if err := s.UpdateCmdbProject(project); err != nil {
+		t.Fatalf("更新项目编码: %v", err)
+	}
+	if _, err := s.CreateCmdbProject(&CmdbProject{Code: "SECOND", Name: "第二项目"}); err != nil {
+		t.Fatalf("创建第二项目: %v", err)
+	}
+
+	if _, err := s.DefaultProject(); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("多项目且无默认编码时不得猜测项目，err=%v", err)
+	}
+}
+
 // 此测试会在旧资产操作写穿其他项目同 source_id 的 CMDB 记录时失败。
 func TestProjectScopeLegacyWriteThroughDoesNotCrossProject(t *testing.T) {
 	tests := []struct {

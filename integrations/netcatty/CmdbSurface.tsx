@@ -5,12 +5,13 @@ import {
   ChartNoAxesCombined,
   Monitor,
   Network,
-  Settings2,
+  Router,
   Users,
   type LucideIcon,
 } from 'lucide-react';
 import { useIsTabActive } from '../../application/state/activeTabStore';
 import { getVaultSnapshot, useVaultSnapshotActions, useVaultSnapshotField } from '../../application/state/vaultSnapshotStore';
+import { collectWorkSurfaceHostGroups } from '../../application/app/AppHostEditorLayer';
 import { useStoredBoolean } from '../../application/state/useStoredBoolean';
 import { useStoredNumber } from '../../application/state/useStoredNumber';
 import { useTerminalBackend } from '../../application/state/useTerminalBackend';
@@ -29,12 +30,15 @@ import {
   TooltipTrigger,
 } from '../ui/tooltip';
 import CmdbWorkspace from './CmdbWorkspace';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { NetcattyDirectoryProvider } from './NetcattyDirectory';
 import { assertNetcattyLinkReady } from './NetcattyConnection';
 import { MODULES, netcattyDirectorySummaries } from './state';
 import { buildSwitchCommand, normalizeSwitchVendor, parseSwitchOutput } from './switchConfig';
+import { requestHostBrowserPanel } from '../../application/state/hostBrowserPanelRequests';
 import { createNetcattyVaultActions } from './netcattyVaultActions';
 import { readTelnetConfiguration } from './readTelnetConfiguration';
+import { readHostHardware } from './readHostHardware';
 
 const SIDEBAR_COLLAPSED_WIDTH = 56;
 const SIDEBAR_EXPANDED_WIDTH = 208;
@@ -48,9 +52,9 @@ const SWITCH_MAX_OUTPUT_BYTES = 1024 * 1024;
 const MODULE_ICONS: Record<string, LucideIcon> = {
   Monitor,
   Users,
-  Network,
+  Router,
   ChartNoAxesCombined,
-  Settings2,
+  Network,
 };
 
 export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { onConnectHost?: (host: Host) => void }) {
@@ -59,8 +63,26 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
   const vaultHosts = useVaultSnapshotField('hosts');
   const vaultKeys = useVaultSnapshotField('keys');
   const vaultIdentities = useVaultSnapshotField('identities');
+  const vaultCustomGroups = useVaultSnapshotField('customGroups');
+  const vaultGroupConfigs = useVaultSnapshotField('groupConfigs');
   const vaultActions = useVaultSnapshotActions();
+  const netcattyGroups = useMemo(
+    () => collectWorkSurfaceHostGroups([...vaultHosts], [...vaultCustomGroups], [...vaultGroupConfigs]),
+    [vaultHosts, vaultCustomGroups, vaultGroupConfigs],
+  );
   const [activeModule, setActiveModule] = useState('assets');
+  const [workspaceDirty, setWorkspaceDirty] = useState(false);
+  const [workspaceBusy, setWorkspaceBusy] = useState(false);
+  const handleWorkspaceDirtyChange = useCallback((dirty: boolean, busy = false) => {
+    setWorkspaceDirty(dirty);
+    setWorkspaceBusy(busy);
+  }, []);
+  const [pendingModule, setPendingModule] = useState<string | null>(null);
+  const changeModule = useCallback((module: string) => {
+    if (workspaceBusy || module === activeModule) return;
+    if (workspaceDirty) { setPendingModule(module); return; }
+    setActiveModule(module);
+  }, [activeModule, workspaceDirty, workspaceBusy]);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [storedSidebarCollapsed, setStoredSidebarCollapsed] = useStoredBoolean(
     STORAGE_KEY_VAULT_SIDEBAR_COLLAPSED,
@@ -80,6 +102,7 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
     const summaries = netcattyDirectorySummaries({ hosts: [...vaultHosts], keys: [...vaultKeys], identities: [...vaultIdentities] });
     return {
       ...summaries,
+      groups: netcattyGroups,
       connectHost: (hostId: string, credentialId = '') => {
         const snapshot = getVaultSnapshot();
         const host = snapshot.hosts.find((item) => item.id === hostId);
@@ -88,8 +111,22 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
         if (!onConnectHost) throw new Error('Netcatty 连接入口未初始化');
         onConnectHost(host);
       },
+      openBrowser: (hostId: string, url: string) => {
+        const snapshot = getVaultSnapshot();
+        const host = snapshot.hosts.find((item) => item.id === hostId);
+        if (!host) throw new Error('关联的 Netcatty 主机已不存在，请重新关联');
+        if (!url || !/^https?:\/\//i.test(url)) throw new Error('仅支持以 http 或 https 开头的访问地址');
+        requestHostBrowserPanel({ host, url });
+      },
       ...createNetcattyVaultActions(vaultActions, getVaultSnapshot),
       refreshDirectory: () => {},
+      readHardware: async (hostId: string, family: string, credentialId = '') => {
+        const snapshot = getVaultSnapshot();
+        const host = snapshot.hosts.find(item => item.id === hostId);
+        if (!host) throw new Error('关联的 Netcatty 主机不存在');
+        if (credentialId) assertNetcattyLinkReady({ host_id: hostId, credential_id: credentialId }, host, [...snapshot.identities, ...snapshot.keys]);
+        return readHostHardware(terminalBackend, host, snapshot, family);
+      },
       readSwitch: async (hostId: string, vendorName: string, credentialId = '') => {
         const snapshot = getVaultSnapshot();
         const host = snapshot.hosts.find((item) => item.id === hostId);
@@ -152,7 +189,7 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
         return { snapshot: parseSwitchOutput(vendor, output), vendor, protocol, hostId: host.id };
       },
     };
-  }, [onConnectHost, terminalBackend, vaultActions, vaultHosts, vaultIdentities, vaultKeys]);
+  }, [netcattyGroups, onConnectHost, terminalBackend, vaultActions, vaultHosts, vaultIdentities, vaultKeys]);
 
   const setSidebarCollapsed = useCallback((collapsed: boolean) => {
     const nextWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
@@ -204,7 +241,7 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
       className={active ? 'absolute inset-0 z-20 min-h-0' : 'hidden'}
       aria-hidden={!active}
     >
-      <div className="absolute inset-0 flex min-h-0 bg-secondary" data-section="cmdb-view">
+      <div className="cmdb-theme-scope absolute inset-0 flex min-h-0 bg-secondary" data-section="cmdb-view">
         <TooltipProvider delayDuration={100}>
           <aside
             className={cn(
@@ -250,7 +287,8 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
                         )}
                         aria-current={selected ? 'page' : undefined}
                         aria-label={item.label}
-                        onClick={() => setActiveModule(item.key)}
+                        disabled={workspaceBusy}
+                        onClick={() => changeModule(item.key)}
                       >
                         <Icon size={16} className="flex-shrink-0" aria-hidden="true" />
                         {!sidebarCollapsed && item.label}
@@ -283,11 +321,12 @@ export const CmdbSurface = React.memo(function CmdbSurface({ onConnectHost }: { 
             data-section="cmdb-surface"
           >
             <NetcattyDirectoryProvider value={netcattyDirectory}>
-              <CmdbWorkspace activeModule={activeModule} onModuleChange={setActiveModule} />
+              <CmdbWorkspace activeModule={activeModule} onModuleChange={changeModule} onDirtyChange={handleWorkspaceDirtyChange} />
             </NetcattyDirectoryProvider>
           </main>
         </div>
       </div>
+      <ConfirmDialog open={pendingModule !== null} onOpenChange={(open) => { if (!open) setPendingModule(null); }} title="尚有未保存的设备修改" message="离开当前页面将放弃这些修改。可取消并保存后再切换。" confirmLabel="放弃修改并切换" busy={workspaceBusy} onConfirm={() => { if (workspaceBusy) return; if (pendingModule) { setWorkspaceDirty(false); setActiveModule(pendingModule); } setPendingModule(null); }} />
     </section>
   );
 });

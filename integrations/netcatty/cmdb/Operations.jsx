@@ -1,11 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import WorkOrders from './WorkOrders'
 
-export default function Operations({ focusTarget }) {
-  const [view, setView] = useState('create')
-  useEffect(() => {
-    if (focusTarget?.tableKey === 'asset_logs') setView('stats')
-  }, [focusTarget])
-
-  return <div className="flex h-full min-h-0 flex-col"><WorkOrders mode={view} onModeChange={setView} /></div>
+export default function Operations({ focusTarget, onNavigate }) {
+  return <div className="flex h-full min-h-0 flex-col"><WorkOrders focusTarget={focusTarget} onNavigate={onNavigate} /></div>
 }

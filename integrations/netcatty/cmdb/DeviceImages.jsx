@@ -33,7 +33,7 @@ async function preparePhoto(file) {
   }
 }
 
-export default function DeviceImages({ kind, id, draftMode = false, draftImages = {}, onDraftChange, onBusyChange }) {
+export default function DeviceImages({ kind, id, mainOnly = false, draftMode = false, draftImages = {}, onDraftChange, onBusyChange }) {
   const [savedImages, setSavedImages] = useState({ front_image: '', back_image: '' })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
@@ -56,6 +56,7 @@ export default function DeviceImages({ kind, id, draftMode = false, draftImages 
 
   const save = async (side, data) => {
     setBusy(side)
+    onBusyChange?.(true)
     try {
       if (draftMode) onDraftChange((current) => ({ ...current, [`${side}_image`]: data }))
       else {
@@ -68,6 +69,7 @@ export default function DeviceImages({ kind, id, draftMode = false, draftImages 
       setError(failure.message || '保存设备照片失败')
     } finally {
       setBusy('')
+      onBusyChange?.(false)
     }
   }
 
@@ -85,16 +87,17 @@ export default function DeviceImages({ kind, id, draftMode = false, draftImages 
   if (loading) return <p className="text-xs text-muted-foreground">正在读取设备照片…</p>
   return <div className="space-y-2">
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-    <div className="grid grid-cols-2 gap-3">
-      {[['front', '正面'], ['back', '背面']].map(([side, label]) => {
+    <div className="grid grid-cols-1 gap-3">
+      {(mainOnly ? [['front', '设备图片']] : [['front', '正面'], ['back', '背面']]).map(([side, label]) => {
         const src = images[`${side}_image`]
+        const imageLabel = mainOnly ? label : `${label}照片`
         return <div key={side} className="min-w-0 space-y-1.5">
-          <div className="flex h-7 items-center justify-between gap-2"><span className="text-xs font-medium">{label}</span><div className="flex items-center"><ActionIcon label={`上传${label}照片`} disabled={!!busy} onClick={() => inputs[side].current?.click()}><ImagePlus size={14} /></ActionIcon>{src && <ActionIcon label={`移除${label}照片`} disabled={!!busy} danger onClick={() => save(side, '')}><Trash2 size={14} /></ActionIcon>}</div></div>
-          <input ref={inputs[side]} type="file" accept="image/*" className="hidden" aria-label={`选择${label}照片`} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void choose(side, file) }} />
-          {src ? <button type="button" className="grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-md border border-border/70 bg-muted/20" onClick={() => setPreview(side)} title={`查看${label}照片`}><img src={src} alt={`${label}照片`} className="h-full w-full object-contain" /></button> : <Button type="button" variant="outline" className="aspect-[4/3] h-auto w-full border-dashed text-xs text-muted-foreground" disabled={!!busy} onClick={() => inputs[side].current?.click()}>{busy === side ? '保存中…' : '未上传'}</Button>}
+          <div className="flex h-7 items-center justify-between gap-2"><span className="text-xs font-medium">{label}</span><div className="flex items-center"><ActionIcon label={`${src ? '替换' : '上传'}${imageLabel}`} disabled={!!busy} onClick={() => inputs[side].current?.click()}><ImagePlus size={14} /></ActionIcon>{src && <ActionIcon label={`移除${imageLabel}`} disabled={!!busy} danger onClick={() => save(side, '')}><Trash2 size={14} /></ActionIcon>}</div></div>
+          <input ref={inputs[side]} type="file" accept="image/*" className="hidden" aria-label={`选择${imageLabel}`} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void choose(side, file) }} />
+          {src ? <button type="button" className="grid aspect-[5/1] w-full place-items-center overflow-hidden rounded-md border border-border/70 bg-muted/20" onClick={() => setPreview(side)} title={`查看${imageLabel}`}><img src={src} alt={imageLabel} className="h-full w-full object-contain" /></button> : <Button type="button" variant="outline" className="aspect-[5/1] h-auto w-full border-dashed text-xs text-muted-foreground" disabled={!!busy} onClick={() => inputs[side].current?.click()}>{busy === side ? '保存中…' : '未上传'}</Button>}
         </div>
       })}
     </div>
-    <DetailSheet open={!!preview} onOpenChange={(open) => { if (!open) setPreview('') }} title={`设备${preview === 'front' ? '正面' : '背面'}照片`}>{preview && <img src={images[`${preview}_image`]} alt={`设备${preview === 'front' ? '正面' : '背面'}照片`} className="max-h-[80vh] w-full object-contain" />}</DetailSheet>
+    <DetailSheet open={!!preview} onOpenChange={(open) => { if (!open) setPreview('') }} title={mainOnly ? '设备图片' : `设备${preview === 'front' ? '正面' : '背面'}照片`}>{preview && <img src={images[`${preview}_image`]} alt={mainOnly ? '设备图片' : `设备${preview === 'front' ? '正面' : '背面'}照片`} className="max-h-[80vh] w-full object-contain" />}</DetailSheet>
   </div>
 }

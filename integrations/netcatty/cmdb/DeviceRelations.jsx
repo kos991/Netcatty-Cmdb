@@ -8,9 +8,7 @@ import { allPages } from './hooks'
 import NetcattyLinks from './NetcattyLinks'
 import InfrastructureQuickConnect from './InfrastructureQuickConnect'
 import { networkAddressRows } from './infrastructureEditorModel'
-import { deviceTypeLabel, sourceLabel } from './deviceWorkspaceModel'
-import { infrastructureFieldProfile } from './state'
-import { ActionIcon, DefinitionList, ModalForm } from './ui'
+import { ActionIcon, ModalForm } from './ui'
 
 function WorkspaceSection({ title, children, action, dataSection }) {
   return <section className="border-t border-border/60 pt-3 first:border-t-0 first:pt-0" data-section={dataSection}>
@@ -40,11 +38,11 @@ function AddressRows({ rows, ipam, connections, asset }) {
   return <div className="divide-y divide-border/50 border-y border-border/50">{rows.map(row => {
     const pool = ipam.find(item => item.ip === row.ip)
     const connection = connections.find(item => item.host?.hostname === row.ip)
-    return <details key={row.ip} className="group py-2 text-xs"><summary className="flex min-w-0 cursor-pointer list-none items-center gap-2"><span className="min-w-0 flex-1 break-all font-mono text-foreground">{row.ip}</span><span className="shrink-0 text-[10px] text-muted-foreground">{row.purposes.join(' / ')}</span><span className="text-muted-foreground">⌄</span></summary><div className="mt-2 space-y-1 pl-2 text-[11px] text-muted-foreground"><p>接口：{row.interfaceName || '未指定'}{row.interfaceID ? ` #${row.interfaceID}` : ''}</p><p>网络分区：{row.networkZone || '-'} · 网段：{pool?.subnet || pool?.cidr || (row.mask ? `${row.ip}/${row.mask}` : '-')}</p><p>VLAN：{row.vlanID || '-'} · 网关：{row.gateway || '-'}</p><p className="break-all">关联连接：{connection ? `${connection.host.label || connection.link.host_name || 'Netcatty 主机'} · ${connection.host.protocol}://${connection.host.hostname}` : '未关联此地址'}</p><InfrastructureQuickConnect asset={asset} address={row.ip} label="连接此地址" /></div></details>
+    return <div key={row.ip} className="flex items-start gap-1 py-2 text-xs"><details className="group min-w-0 flex-1"><summary className="flex min-w-0 cursor-pointer list-none items-center gap-2"><span className="min-w-0 flex-1 break-all font-mono text-foreground">{row.ip}</span><span className="shrink-0 text-[10px] text-muted-foreground">{row.purposes.join(' / ')}</span><span className="text-muted-foreground">⌄</span></summary><div className="mt-2 space-y-1 pl-2 text-[11px] text-muted-foreground"><p>接口：{row.interfaceName || '未指定'}{row.interfaceID ? ` #${row.interfaceID}` : ''}</p><p>网络分区：{row.networkZone || '-'} · 网段：{pool?.subnet || pool?.cidr || (row.mask ? `${row.ip}/${row.mask}` : '-')}</p><p>VLAN：{row.vlanID || '-'} · 网关：{row.gateway || '-'}</p><p className="break-all">关联连接：{connection ? `${connection.host.label || connection.link.host_name || 'Netcatty 主机'} · ${connection.host.protocol}://${connection.host.hostname}` : '未关联此地址'}</p></div></details><InfrastructureQuickConnect asset={asset} address={row.ip} /></div>
   })}</div>
 }
 
-export default function DeviceRelations({ id, detail, kind, view = 'all', onReload, onOpenAsset, onOpenIP, requestedLocalPort = '', onLinkRequestHandled, connections = [], connectionWarning, onGoConnections }) {
+export default function DeviceRelations({ id, detail, view = 'all', onReload, onOpenAsset, onOpenIP, requestedLocalPort = '', onLinkRequestHandled, connections = [], connectionWarning, onGoConnections }) {
   const [linkEditor, setLinkEditor] = useState(false)
   const [linkValues, setLinkValues] = useState({})
   const [allAssets, setAllAssets] = useState([])
@@ -87,16 +85,6 @@ export default function DeviceRelations({ id, detail, kind, view = 'all', onRelo
       onReload?.()
     } catch (error) { setLinkError(error.message) } finally { setLinkBusy(false) }
   }
-  const fieldProfile = infrastructureFieldProfile(asset.category_name || asset.device_type)
-  const profile = [
-    ['设备类型', deviceTypeLabel(asset)],
-    ...(fieldProfile.brandModel ? [['品牌 / 型号', [asset.vendor, asset.model].filter(Boolean).join(' ')]] : []),
-    ['供应商', asset.provider],
-    ['业务 IP', asset.biz_ip],
-    ...(kind === 'server' ? [['MAC', asset.mac || asset.mac_address], ['操作系统', [asset.os_type, asset.os_version].filter(Boolean).join(' ')]] : []),
-    ['来源', sourceLabel(asset.source_type)],
-    ['备注', asset.remark],
-  ]
   const ipamRows = (detail.ipam || []).map((item) => ({ ...item, label: item.subnet || 'IP 地址', value: item.ip, metaLabel: 'VLAN / VNI', meta: [item.vlan ? `VLAN ${item.vlan}` : '', item.vni ? `VNI ${item.vni}` : ''].filter(Boolean).join(' · ') || item.status, actionLabel: `${item.cidr || '-'}${item.purpose ? ` · ${item.purpose}` : ''}` }))
   const interfaceRows = (detail.interfaces || []).map((item) => ({ id: item.id, label: item.name || item.if_name || '网络接口', value: item.ip, metaLabel: item.network_zone || item.net_zone || '网络区域', meta: [item.mask, item.gateway ? `网关 ${item.gateway}` : '', item.vlan_id ? `VLAN ${item.vlan_id}` : ''].filter(Boolean).join(' · ') || '-', actionLabel: item.mac ? `MAC ${item.mac}` : '' }))
   const addressRows = networkAddressRows({ ...asset, interfaces: detail.interfaces || [] })
@@ -112,7 +100,6 @@ export default function DeviceRelations({ id, detail, kind, view = 'all', onRelo
     </WorkspaceSection> : null}
     {showRelations ? <div data-section="device-netcatty-links"><NetcattyLinks asset={{ ...asset, interfaces: detail.interfaces || [] }} assetType="infrastructure" assetId={id} onChanged={onReload} /></div> : null}
     {showRecords ? <WorkspaceSection title="变更履历" dataSection="device-asset-history"><CompactRows rows={historyRows} empty="暂无变更履历" /></WorkspaceSection> : null}
-    {showRecords ? <WorkspaceSection title="资产档案" dataSection="device-asset-profile"><DefinitionList items={profile} /></WorkspaceSection> : null}
     <ModalForm open={linkEditor} onOpenChange={setLinkEditor} title="添加资产链路" busy={linkBusy} onSubmit={saveLink} wide><Fields fields={linkFields} value={linkValues} onChange={setLinkValues} />{linkError ? <p className="text-xs text-destructive">{linkError}</p> : null}</ModalForm>
     {!linkEditor && linkError ? <p className="text-xs text-destructive">{linkError}</p> : null}
     <ConfirmDialog open={!!deletingLink} onOpenChange={(open) => { if (!open) setDeletingLink(null) }} title="删除资产链路" message={`确认删除 ${deletingLink?.local_port || ''} 到 ${deletingLink?.peer_asset_name || ''} 的链路？`} confirmLabel="删除" destructive busy={linkBusy} onConfirm={async () => { setLinkBusy(true); setLinkError(''); try { await api.deleteInfrastructureLink(deletingLink.id); setDeletingLink(null); onReload?.() } catch (error) { setLinkError(error.message) } finally { setLinkBusy(false) } }} />

@@ -30,7 +30,8 @@ func (s *Store) ListCmdbTaxonomyForProject(scope ProjectScope, kind string) ([]C
 		}
 		q := fmt.Sprintf(`SELECT t.id, t.project_id, IFNULL(t.sync_id,''), t.name, t.parent_id, t.sort_order,
 			%s,
-			(SELECT COUNT(*) FROM %s c WHERE c.project_id=? AND c.asset_scope=? AND c.parent_id=t.id)
+			(SELECT COUNT(*) FROM %s c WHERE c.project_id=? AND c.asset_scope=? AND c.parent_id=t.id),
+			IFNULL(t.short_code,'')
 			FROM %s t WHERE t.project_id=? AND t.asset_scope=? ORDER BY t.sort_order,t.id`, usageSQL, spec.Table, spec.Table)
 		rows, err = s.db.Query(q, scope.ProjectID, scope.ProjectID, spec.AssetScope, scope.ProjectID, spec.AssetScope)
 	} else {
@@ -42,7 +43,7 @@ func (s *Store) ListCmdbTaxonomyForProject(scope ProjectScope, kind string) ([]C
 		}
 		q := fmt.Sprintf(`SELECT t.id, t.project_id, IFNULL(t.sync_id,''), t.name, t.parent_id, t.sort_order,
 			%s,
-			(SELECT COUNT(*) FROM %s c WHERE c.project_id=? AND c.parent_id=t.id)
+			(SELECT COUNT(*) FROM %s c WHERE c.project_id=? AND c.parent_id=t.id), ''
 			FROM %s t WHERE t.project_id=? ORDER BY t.sort_order,t.id`, usageSQL, spec.Table, spec.Table)
 		if kind == "groups" {
 			rows, err = s.db.Query(q, scope.ProjectID, scope.ProjectID, scope.ProjectID, scope.ProjectID, scope.ProjectID)
@@ -57,7 +58,7 @@ func (s *Store) ListCmdbTaxonomyForProject(scope ProjectScope, kind string) ([]C
 	out := make([]CmdbTaxonomyNode, 0, 16)
 	for rows.Next() {
 		var n CmdbTaxonomyNode
-		if err := rows.Scan(&n.ID, &n.ProjectID, &n.SyncID, &n.Name, &n.ParentID, &n.SortOrder, &n.AssetCount, &n.ChildCount); err != nil {
+		if err := rows.Scan(&n.ID, &n.ProjectID, &n.SyncID, &n.Name, &n.ParentID, &n.SortOrder, &n.AssetCount, &n.ChildCount, &n.ShortCode); err != nil {
 			return nil, err
 		}
 		out = append(out, n)
@@ -449,9 +450,29 @@ func (s *Store) ListCmdbCategoriesForProject(scope ProjectScope) ([]CmdbCategory
 	return out, rows.Err()
 }
 
+// 元数据用于完整的型号下拉，不受管理列表的分页上限约束。
 func (s *Store) ListCmdbModelsForProject(scope ProjectScope) ([]CmdbDeviceModel, error) {
-	rows, _, err := s.QueryCmdbModelsForProject(scope, "", 1, 500)
-	return rows, err
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT id, project_id, IFNULL(sync_id,''), IFNULL(vendor,''), IFNULL(model,''), height_u,
+		rated_power_w, max_power_w, IFNULL(weight_kg,0), depth_mm
+		FROM cmdb_device_models WHERE project_id=?
+		ORDER BY IFNULL(vendor,''), IFNULL(model,''), id`, scope.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]CmdbDeviceModel, 0)
+	for rows.Next() {
+		var model CmdbDeviceModel
+		if err := rows.Scan(&model.ID, &model.ProjectID, &model.SyncID, &model.Vendor, &model.Model,
+			&model.HeightU, &model.RatedPowerW, &model.MaxPowerW, &model.WeightKG, &model.DepthMM); err != nil {
+			return nil, err
+		}
+		out = append(out, model)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) SeedCmdbOrgsFromDepartmentsForProject(scope ProjectScope, departments []string) (int, error) {

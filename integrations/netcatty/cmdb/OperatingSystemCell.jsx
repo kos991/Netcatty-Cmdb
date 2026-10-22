@@ -1,7 +1,7 @@
 import React from 'react'
 import { Boxes, HardDrive, Network, Server, ShieldCheck } from 'lucide-react'
 import { DistroAvatar } from '@/components/DistroAvatar'
-import { resolveOperatingSystemPresentation } from './deviceWorkspaceModel'
+import { resolveOperatingSystemPresentation, shortOperatingSystemLabel } from './deviceWorkspaceModel'
 import { VendorBrandIcon } from './VendorBrandIcon'
 import dellemcLogo from './vendor-icons/dellemc.svg'
 import dptechLogo from './vendor-icons/dptech.svg'
@@ -64,7 +64,7 @@ export default function OperatingSystemCell({ asset = {}, host = null, compact =
   return <div className={`flex min-w-0 items-center gap-2 ${hideIcon ? 'pl-7' : ''}`} title={presentation.label} data-os-distro={presentation.distro}>
     {!hideIcon ? <SystemIcon presentation={presentation} /> : null}
     <div className="min-w-0 leading-tight">
-      <p className="truncate text-xs">{compact ? presentation.label : presentation.name}</p>
+      <p className="truncate text-xs">{compact ? shortOperatingSystemLabel(presentation.name, presentation.version) : presentation.name}</p>
       {!compact && presentation.version ? <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{presentation.version}</p> : null}
     </div>
   </div>

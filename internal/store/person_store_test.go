@@ -79,6 +79,121 @@ func TestPersonCRUD(t *testing.T) {
 	}
 }
 
+func TestPersonNodeFilterUsesSameIDsAsOrganizationCount(t *testing.T) {
+	s := newPersonTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.CreateOrgNode(scope, &OrgNode{Name: "机关", NodeType: OrgNodeOrganization})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.CreateOrgNode(scope, &OrgNode{Name: "办事处", NodeType: OrgNodeOrganization})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstDept, err := s.CreateOrgNode(scope, &OrgNode{Name: "技术部", NodeType: OrgNodeDepartment, ParentID: first})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDept, err := s.CreateOrgNode(scope, &OrgNode{Name: "技术部", NodeType: OrgNodeDepartment, ParentID: second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreatePersonForProject(scope, &Person{Name: "甲", OrgID: first, DepartmentID: firstDept, Status: "在职"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreatePersonForProject(scope, &Person{Name: "乙", OrgID: second, DepartmentID: secondDept, Status: "在职"}); err != nil {
+		t.Fatal(err)
+	}
+	list, total, err := s.ListPersonsForProject(scope, PersonQuery{NodeID: firstDept, NodeType: OrgNodeDepartment, Page: 1, PageSize: 10})
+	if err != nil || total != 1 || len(list) != 1 || list[0].Name != "甲" {
+		t.Fatalf("组织人数与列表不一致: total=%d list=%+v err=%v", total, list, err)
+	}
+}
+
+// 旧导入脚本曾把 cmdb_orgs.id 写入人员 org_id；只要 department_id 仍指向
+// 有效部门，迁移就必须按部门的父节点纠正组织，且不能改坏原部门和分组。
+func TestProjectMigrationRepairsPersonOrganizationFromValidDepartment(t *testing.T) {
+	s := newPersonTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orgID, err := s.CreateOrgNode(scope, &OrgNode{Name: "常州中院", NodeType: OrgNodeOrganization})
+	if err != nil {
+		t.Fatal(err)
+	}
+	departmentID, err := s.CreateOrgNode(scope, &OrgNode{Name: "信息技术处", NodeType: OrgNodeDepartment, ParentID: orgID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	groupID, err := s.CreateOrgNode(scope, &OrgNode{Name: "运维组", NodeType: OrgNodeGroup, ParentID: departmentID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	personID, err := s.CreatePersonForProject(scope, &Person{Name: "张三", OrgID: orgID, DepartmentID: departmentID, GroupID: groupID, Status: "在职"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE cmdb_persons SET org_id=987654, org_name='错误组织' WHERE id=?`, personID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateProjectSchema(s.db); err != nil {
+		t.Fatalf("重新执行项目迁移失败: %v", err)
+	}
+	person, err := s.GetPersonForProject(scope, personID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if person.OrgID != orgID || person.OrgName != "常州中院" {
+		t.Fatalf("人员组织没有按有效部门父节点纠正: %+v", person)
+	}
+	if person.DepartmentID != departmentID || person.Department != "信息技术处" || person.GroupID != groupID || person.GroupName != "运维组" {
+		t.Fatalf("纠正组织时不得改坏部门或分组: %+v", person)
+	}
+}
+
+// 旧数据中有直属于根组织、未配置部门的人员；这些人员的
+// org_name 正确但 org_id=0，迁移后必须能被根组织筛选到。
+func TestProjectMigrationRepairsOrganizationOnlyPerson(t *testing.T) {
+	s := newPersonTestStore(t)
+	scope, err := s.DefaultProjectScope()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orgID, err := s.CreateOrgNode(scope, &OrgNode{Name: "常州中院", NodeType: OrgNodeOrganization})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.db.Exec(`
+		INSERT INTO cmdb_persons(project_id, org_id, department_id, group_id, name, org_name, department, status)
+		VALUES(?, 0, 0, 0, '张三', '常州中院', '', '在职')`, scope.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	personID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateProjectSchema(s.db); err != nil {
+		t.Fatalf("重新执行项目迁移失败: %v", err)
+	}
+	person, err := s.GetPersonForProject(scope, personID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if person.OrgID != orgID || person.OrgName != "常州中院" {
+		t.Fatalf("直属根组织的人员没有恢复组织归属: %+v", person)
+	}
+	if person.DepartmentID != 0 || person.GroupID != 0 {
+		t.Fatalf("恢复组织归属时不得伪造部门或分组: %+v", person)
+	}
+}
+
 func TestGetPersonAssets(t *testing.T) {
 	s := newPersonTestStore(t)
 

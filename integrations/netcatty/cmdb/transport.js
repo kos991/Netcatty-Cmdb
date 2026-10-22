@@ -8,6 +8,7 @@ function scheduleCmdbCloudSync() {
     scheduledSync = setTimeout(() => {
       scheduledSync = undefined
       globalThis.window?.dispatchEvent(new CustomEvent('netcatty:cmdb-cloud-sync-request'))
+      globalThis.window?.netcatty?.notifySettingsChanged?.({ key: 'netcatty.cmdb.cloudSync.request', value: Date.now() })
     }, 800)
   } catch {
     // 本机同步设置损坏时，不影响已经成功的 Cmdb 写入。
@@ -22,8 +23,8 @@ export async function requestJson(path, options = {}) {
   const bridge = resolveBridge()
   const method = options.method || 'GET'
   if (typeof bridge?.cmdbRequest === 'function') {
-    const result = await bridge.cmdbRequest({ path, method, body: options.body })
-    if (method !== 'GET' && !path.startsWith('/api/cmdb/sync/')) scheduleCmdbCloudSync()
+    const result = await bridge.cmdbRequest({ path, method, headers: options.headers, body: options.body })
+    if (method !== 'GET' && !options.suppressCloudSync && !path.startsWith('/api/cmdb/sync/')) scheduleCmdbCloudSync()
     return result
   }
   throw new Error('Cmdb 原生请求通道不可用')
@@ -47,16 +48,31 @@ export async function exportFile(path, suggestedName) {
   return bridge.cmdbExportFile({ path, suggestedName })
 }
 
+export async function selectAttachmentDirectory() {
+  const bridge = resolveBridge()
+  if (typeof bridge?.cmdbSelectAttachmentDirectory !== 'function') {
+    throw new Error('Cmdb 原生目录选择通道不可用')
+  }
+  const result = await bridge.cmdbSelectAttachmentDirectory()
+  if (result?.cancelled) return ''
+  if (!result?.directoryPath) throw new Error('未返回有效的附件目录')
+  return result.directoryPath
+}
+
 export async function uploadFile(path, file) {
   const bridge = resolveBridge()
   if (typeof bridge?.cmdbUploadFile !== 'function') {
     throw new Error('Cmdb 原生附件通道不可用')
   }
+  let result
   if (file) {
     if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name} 不能超过 50 MiB`)
-    return bridge.cmdbUploadFile({ path, fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })
+    result = await bridge.cmdbUploadFile({ path, fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })
+  } else {
+    result = await bridge.cmdbUploadFile({ path })
   }
-  return bridge.cmdbUploadFile({ path })
+  if (!result?.cancelled) scheduleCmdbCloudSync()
+  return result
 }
 
 export async function nativeStatus() {
