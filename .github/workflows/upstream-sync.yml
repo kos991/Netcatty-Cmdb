@@ -1,0 +1,109 @@
+name: Sync upstream Netcatty
+
+# 每天检查上游 Netcatty 最新正式 Release；有新版本时更新 upstream.json 并开 PR。
+# 不自动合并、不自动发布：装配失败说明上游结构变了，需要人工适配后再合并。
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve latest upstream release
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repository=$(node -p "require('./integrations/netcatty/upstream.json').repository.replace(/^https:\/\/github.com\//,'').replace(/\.git$/,'')")
+          tag=$(gh api "repos/$repository/releases/latest" --jq .tag_name)
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "上游最新正式版本：$tag"
+      - name: Skip when already pinned or PR exists
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.latest.outputs.tag }}
+        run: |
+          pinned=$(node -p "require('./integrations/netcatty/upstream.json').release")
+          branch="chore/upstream-netcatty-$TAG"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if [ "$pinned" = "$TAG" ]; then echo "已固定在 $TAG"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then echo "分支 $branch 已存在"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+      - name: Checkout upstream release
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          git clone --filter=blob:none --branch "${{ steps.latest.outputs.tag }}" "https://github.com/${{ steps.latest.outputs.repository }}.git" build/netcatty
+      - name: Resolve bundled mosh and et releases
+        if: steps.gate.outputs.skip == 'false'
+        id: binaries
+        working-directory: build/netcatty
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # 与上游自身发布流程一致：用上游脚本解析 mosh-client / et-client 版本。
+          resolved=$(mktemp)
+          GITHUB_ENV="$resolved" node scripts/resolve-mosh-bin-release.cjs
+          GITHUB_ENV="$resolved" node scripts/resolve-et-bin-release.cjs
+          mosh=$(grep '^MOSH_BIN_RELEASE=' "$resolved" | tail -n 1 | cut -d= -f2-)
+          et=$(grep '^ET_BIN_RELEASE=' "$resolved" | tail -n 1 | cut -d= -f2-)
+          if [ -z "$mosh" ] || [ -z "$et" ]; then echo "::error::未能解析 mosh/et 版本"; exit 1; fi
+          echo "mosh=$mosh" >> "$GITHUB_OUTPUT"
+          echo "et=$et" >> "$GITHUB_OUTPUT"
+      - name: Update upstream.json
+        if: steps.gate.outputs.skip == 'false'
+        id: sync
+        run: node scripts/sync-upstream-netcatty.mjs build/netcatty "${{ steps.binaries.outputs.mosh }}" "${{ steps.binaries.outputs.et }}"
+      - name: Try assembly
+        if: steps.gate.outputs.skip == 'false' && steps.sync.outputs.changed == 'true'
+        id: assemble
+        continue-on-error: true
+        run: node scripts/prepare-netcatty.mjs --target build/netcatty 2>&1 | tee assemble.log
+      - name: Open pull request
+        if: steps.gate.outputs.skip == 'false' && steps.sync.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.gate.outputs.branch }}
+          TAG: ${{ steps.latest.outputs.tag }}
+          PREVIOUS: ${{ steps.sync.outputs.previous }}
+          ASSEMBLE: ${{ steps.assemble.outcome }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add integrations/netcatty/upstream.json
+          git commit -m "chore(upstream): Netcatty $PREVIOUS -> $TAG"
+          git push origin "$BRANCH"
+          if [ "$ASSEMBLE" = "success" ]; then
+            status="装配器在新上游上执行成功。CI 通过后可合并，再按发布流程更新 VERSION 并打 tag。"
+          else
+            status="**装配失败**：上游结构有变化，需要在本分支上修改 scripts/prepare-netcatty.mjs 或集成代码后再合并。错误输出见下方。"
+          fi
+          {
+            echo "上游 Netcatty 发布了新版本：[$TAG](https://github.com/${{ steps.latest.outputs.repository }}/releases/tag/$TAG)（当前固定 $PREVIOUS）。"
+            echo
+            echo "- mosh-client：\`${{ steps.binaries.outputs.mosh }}\`"
+            echo "- et-client：\`${{ steps.binaries.outputs.et }}\`"
+            echo
+            echo "$status"
+            if [ "$ASSEMBLE" != "success" ]; then echo; echo '```'; tail -n 40 assemble.log; echo '```'; fi
+          } > pr-body.md
+          gh pr create --base main --head "$BRANCH" --title "chore(upstream): Netcatty $PREVIOUS -> $TAG" --body-file pr-body.md --label feature
+          # GITHUB_TOKEN 创建的 PR 不会触发 pull_request 事件，显式在该分支上运行 CI。
+          gh workflow run ci.yml --ref "$BRANCH"

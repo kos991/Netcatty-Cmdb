@@ -63,23 +63,39 @@ jobs:
           node scripts/fetch-mosh-binaries.cjs --host
           node scripts/fetch-et-binaries.cjs --host
           Pop-Location
-      - name: Build Windows installers and update metadata
+      - name: Write Cmdb build info
+        shell: pwsh
+        run: |
+          $upstream = Get-Content integrations/netcatty/upstream.json | ConvertFrom-Json
+          [ordered]@{
+            cmdbVersion = (Get-Content VERSION -Raw).Trim()
+            upstreamRelease = $upstream.release
+            upstreamCommit = $upstream.commit
+          } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM build/build-info.json
+      - name: Build Windows installer and update metadata
         shell: pwsh
         working-directory: build/netcatty
         env:
           NETCATTY_CMDB_SERVER_SOURCE: ${{ github.workspace }}\build\cmdb-server.exe
+          NETCATTY_CMDB_BUILD_INFO: ${{ github.workspace }}\build\build-info.json
         run: |
           npm.cmd run build
           node ..\..\scripts\check-release-data.mjs ..\cmdb-server.exe .
-          npx.cmd electron-builder --config electron-builder.config.cjs --win nsis portable --x64 --publish=never
+          # 只发 NSIS：便携版不能自动升级，体积与安装包相同。
+          npx.cmd electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish=never
       - name: Check Netcatty release data
         shell: pwsh
         run: node scripts/check-release-data.mjs build/netcatty/release
+      - name: Build offline Cmdb patch
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          node scripts/build-cmdb-patch.mjs build/netcatty/release/win-unpacked build/build-info.json "build/netcatty/release/Netcatty-Cmdb-patch-$version-win-x64.zip"
       - name: Generate checksums
         shell: pwsh
         working-directory: build/netcatty/release
         run: |
-          Get-ChildItem -File | Where-Object { $_.Name -match '\.(exe|blockmap)$' -or $_.Name -eq 'latest.yml' } |
+          Get-ChildItem -File | Where-Object { $_.Name -match '\.(exe|blockmap|zip)$' -or $_.Name -eq 'latest.yml' } |
             ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
             Set-Content -Encoding utf8 SHA256SUMS.txt
       - name: Publish release
@@ -88,6 +104,7 @@ jobs:
           files: |
             build/netcatty/release/*.exe
             build/netcatty/release/*.blockmap
+            build/netcatty/release/*.zip
             build/netcatty/release/latest.yml
             build/netcatty/release/SHA256SUMS.txt
           fail_on_unmatched_files: true
