@@ -924,6 +924,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	scoped("POST /api/cmdb/sync/export", s.handleExportCmdbSnapshot)
 	scoped("POST /api/cmdb/sync/preflight", s.handlePreflightCmdbSnapshot)
 	scoped("POST /api/cmdb/sync/apply", s.handleApplyCmdbSnapshot)
+	scoped("POST /api/cmdb/sync/local-wipe", s.handleWipeLocalCmdbData)
 	scoped("GET /api/cmdb/netcatty-links", s.handleListCmdbNetcattyLinks)
 	scoped("GET /api/cmdb/netcatty-links/host-usage", s.handleCmdbNetcattyHostUsage)
 	scoped("POST /api/cmdb/netcatty-links", s.handleCreateCmdbNetcattyLink)

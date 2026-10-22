@@ -6,8 +6,10 @@ import {
   applyCmdbCloudSnapshot,
   collectCmdbCloudSnapshot,
   readCmdbCloudSyncSettings,
+  registerCmdbAttachmentCloudSyncHook,
   requestCmdbCloudSync,
   scheduleCmdbCloudSync,
+  wipeLocalCmdbData,
   writeCmdbCloudSyncSettings,
 } from './CmdbCloudSync.ts';
 import type { CmdbSyncSnapshot } from './CmdbSyncSnapshot.ts';
@@ -74,6 +76,41 @@ describe('CmdbCloudSync', () => {
       method: 'POST',
       body: JSON.stringify({ include_contacts: true, include_history: true }),
     }]);
+  });
+
+  it('每次导出快照前先补传附件，附件失败不阻断数据同步', async () => {
+    writeCmdbCloudSyncSettings({ enabled: true });
+    const order: string[] = [];
+    const unregister = registerCmdbAttachmentCloudSyncHook(async () => {
+      order.push('attachments');
+      throw new Error('S3 暂不可用');
+    });
+    try {
+      const result = await collectCmdbCloudSnapshot(async (request) => {
+        order.push(request.path);
+        return snapshot;
+      });
+      assert.equal(result, snapshot);
+      assert.deepEqual(order, ['attachments', '/api/cmdb/sync/export']);
+    } finally {
+      unregister();
+    }
+  });
+
+  it('清空本机数据调用服务端清空并重置同步状态', async () => {
+    writeCmdbCloudSyncSettings({ enabled: true, lastStatus: 'success', lastSyncedAt: '2026-10-22T00:00:00Z' });
+    const calls: Array<{ path: string; body?: string }> = [];
+    const result = await wipeLocalCmdbData(async (request) => {
+      calls.push(request);
+      return { backup_path: 'C:/data/assets.db.backup-1' };
+    });
+    assert.equal(result.backup_path, 'C:/data/assets.db.backup-1');
+    assert.equal(calls[0].path, '/api/cmdb/sync/local-wipe');
+    assert.equal(JSON.parse(calls[0].body!).confirm, 'wipe-local-cmdb');
+    const settings = readCmdbCloudSyncSettings();
+    assert.equal(settings.enabled, true);
+    assert.equal(settings.lastStatus, undefined);
+    assert.equal(settings.lastSyncedAt, undefined);
   });
 
   it('迁移旧分项设置，保留总开关与宿主结果并删除分项', () => {
