@@ -24,7 +24,7 @@
 .ip-table tr.ip-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ip-table tr.ip-selected td { background: var(--accent-soft); }
 @keyframes ip-selection-glow { 0%, 100% { box-shadow: 0 0 0 2px var(--accent-soft); } 50% { box-shadow: 0 0 0 5px var(--accent-soft), inset 0 0 0 1px var(--accent); } }
-#pool-editor { width: min(780px, calc(100vw - 32px)); }
+#pool-editor { width: min(980px, calc(100vw - 32px)); }
 #pool-editor .pool-maintenance-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 0; overflow: hidden; }
 .pool-maintenance-directory { display: flex; min-height: 0; flex-direction: column; gap: 8px; padding: 12px; border-right: 1px solid var(--border); background: var(--bg); }
 .pool-editor-search { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--muted); }
@@ -37,6 +37,14 @@
 .pool-editor-item[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 #pool-editor .record-body { min-height: 0; overflow: auto; }
 #pool-editor-scope { margin: 0 0 14px; font-size: 11px; line-height: 1.7; color: var(--muted); }
+.pool-segments { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.pool-segments select { max-width: min(420px, 100%); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); }
+.pool-segments span { color: var(--muted); }
+.pool-segment-title { display: flex; justify-content: space-between; align-items: center; }
+.pool-segment-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; }
+.pool-segment-row label { display: flex; min-width: 0; flex-direction: column; gap: 4px; font-size: 12px; }
+.pool-segment-row input { min-width: 0; width: 100%; height: 34px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; padding: 6px; background: var(--surface); color: var(--fg); }
+#pool-segment-error:not(:empty) { color: #b22; }
 @media (max-width: 720px) {
   #pool-editor .pool-maintenance-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(110px, 30%) minmax(0, 1fr); }
   .pool-maintenance-directory { border-right: 0; border-bottom: 1px solid var(--border); }

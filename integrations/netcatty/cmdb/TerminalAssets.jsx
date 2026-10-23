@@ -159,10 +159,10 @@ function AssetDetails({ id, host, onEdit, onArchive, onClose, onNetcattyChanged,
     {tab === 'usage' ? <AssetPanelSection title="使用与位置" icon={MapPin}><AssetPanelFields items={[
       ['当前使用人', asset.user_name || '公用 / 闲置'],
       ['部门', formatDepartmentName(asset.department) || '未分配部门'],
-      ['房间 / 位置', roomText],
+      ['房间号', roomText],
     ]} /></AssetPanelSection> : null}
     {tab === 'system' ? <AssetPanelSection title="系统信息" icon={MonitorCog}><AssetPanelFields items={[
-      ['操作系统', <OperatingSystemCell asset={asset} host={host} />],
+      ['操作系统', <OperatingSystemCell asset={asset} host={host} hideVersion />],
       ['系统版本', asset.os_version || '-'],
       ['备注', asset.remark || '-'],
     ]} /></AssetPanelSection> : null}

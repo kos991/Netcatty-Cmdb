@@ -2,7 +2,7 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const pools = [
-    { name: '办公内网', category: '内网', prefix: '192.168.10', cidr: '192.168.10.0/24', size: 256, gateway: '192.168.10.1', vlan: '10', vni: '', purpose: '办公终端与网络设备' },
+    { name: '办公内网', category: '内网', prefix: '192.168.10', cidr: '192.168.10.0/24', size: 256, gateway: '192.168.10.1', vlan: '10', vni: '', purpose: '办公终端与网络设备', segments: [{ name: '速载', floor: '3楼', start_ip: '192.168.10.2', end_ip: '192.168.10.40', remark: '' }, { name: '刑一', floor: '4楼', start_ip: '192.168.10.41', end_ip: '192.168.10.60', remark: '' }, { name: '刑二', floor: '4楼', start_ip: '192.168.10.61', end_ip: '192.168.10.80', remark: '' }, { name: '少年', floor: '5楼', start_ip: '192.168.10.81', end_ip: '192.168.10.100', remark: '' }, { name: '行政', floor: '5楼', start_ip: '192.168.10.101', end_ip: '192.168.10.120', remark: '' }, { name: '审监', floor: '6楼', start_ip: '192.168.10.121', end_ip: '192.168.10.140', remark: '' }, { name: '执裁', floor: '6楼', start_ip: '192.168.10.141', end_ip: '192.168.10.160', remark: '' }] },
     { name: '业务专网', category: '专网', prefix: '10.20.30', cidr: '10.20.30.0/24', size: 256, gateway: '10.20.30.1', vlan: '30', vni: '1030', purpose: '业务服务器' },
     { name: '外网出口', category: '外网', prefix: '203.0.113', cidr: '203.0.113.0/28', size: 16, gateway: '203.0.113.1', vlan: '50', vni: '', purpose: '文档示例地址段' },
   ];
@@ -13,6 +13,27 @@
   let ipPage = 1;
   let selectedIP = '';
 
+  const segmentOf = (pool, ip) => (pool.segments || []).find((segment) => numberOf(ip) >= numberOf(segment.start_ip) && numberOf(ip) <= numberOf(segment.end_ip));
+  function numberOf(ip) {
+    const parts = String(ip || '').split('.');
+    if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part) || Number(part) > 255 || (part.length > 1 && part.startsWith('0')))) return NaN;
+    return parts.reduce((value, part) => value * 256 + Number(part), 0);
+  }
+  function segmentStats(pool, segment) {
+    const entries = addresses().filter((entry) => segmentOf(pool, entry.ip) === segment);
+    return { total: entries.filter((entry) => !['network', 'broadcast'].includes(entry.status)).length, used: entries.filter((entry) => entry.status === 'used').length, reserved: entries.filter((entry) => entry.status === 'reserved').length, free: entries.filter((entry) => entry.status === 'free').length };
+  }
+  function renderSegments() {
+    const pool = pools[activePool];
+    const select = $('pool-segment');
+    const chosen = select.value;
+    select.replaceChildren(new Option('整个地址池', ''));
+    (pool.segments || []).forEach((segment, index) => select.add(new Option(`${segment.name} · ${segment.floor} · ${segment.start_ip}–${segment.end_ip}`, String(index))));
+    select.value = chosen !== '' && Number(chosen) < (pool.segments || []).length ? chosen : '';
+    const segment = pool.segments?.[Number(select.value)];
+    const stats = select.value !== '' && segment ? segmentStats(pool, segment) : null;
+    $('pool-segment-summary').textContent = stats ? `可用 ${stats.total} · 已用 ${stats.used} · 预留 ${stats.reserved} · 空闲 ${stats.free}` : `${(pool.segments || []).length} 个已规划分段`;
+  }
   function addresses() {
     const pool = pools[activePool];
     return Array.from({ length: pool.size }, (_, host) => {
@@ -54,6 +75,7 @@
         button.append(cidr);
         button.addEventListener('click', () => {
           activePool = index;
+          $('pool-segment').value = '';
           ipPage = 1;
           selectedIP = '';
           hideAddress();
@@ -72,7 +94,7 @@
     $('ip-detail-title').textContent = entry.ip;
     const fields = $('ip-detail-fields');
     fields.replaceChildren();
-    for (const [label, value] of [['IP 地址', entry.ip], ['地址池', pool.name], ['网络类型', pool.category], ['状态', statusText[entry.status]], ['占用对象', entry.owner || '未关联'], ['位置', entry.owner ? '示例位置' : '—']]) {
+    for (const [label, value] of [['IP 地址', entry.ip], ['地址池', pool.name], ['分段', segmentOf(pool, entry.ip)?.name || '未划分'], ['楼层', segmentOf(pool, entry.ip)?.floor || '—'], ['网络类型', pool.category], ['状态', statusText[entry.status]], ['占用对象', entry.owner || '未关联'], ['位置', entry.owner ? '示例位置' : '—']]) {
       const field = document.createElement('div');
       field.className = 'field' + (['地址池', '占用对象', '位置'].includes(label) ? ' full' : '');
       const term = document.createElement('dt');
@@ -101,6 +123,7 @@
   function renderPool() {
     const pool = pools[activePool];
     const all = addresses();
+    renderSegments();
     $('pool-choice').textContent = pool.name + ' · ' + pool.cidr;
     $('pool-heading').textContent = pool.name + ' · ' + pool.category;
     $('pool-metadata').textContent = `${pool.cidr} · 网关 ${pool.gateway} · VLAN ${pool.vlan}${pool.vni ? ' · VNI ' + pool.vni : ''}`;
@@ -108,7 +131,7 @@
     for (const status of ['used', 'reserved', 'free', 'abnormal']) $('pool-' + status).textContent = all.filter((entry) => entry.status === status).length;
     const query = $('pool-search').value.trim().toLowerCase();
     const status = $('pool-status').value;
-    const filtered = all.filter((entry) => (!status || entry.status === status) && (!query || (entry.ip + ' ' + entry.owner).toLowerCase().includes(query)));
+    const filtered = all.filter((entry) => ($('pool-segment').value === '' || segmentOf(pool, entry.ip) === pool.segments?.[Number($('pool-segment').value)]) && (!status || entry.status === status) && (!query || (entry.ip + ' ' + entry.owner).toLowerCase().includes(query)));
     const size = Number($('pool-page-size').value);
     const pages = Math.max(1, Math.ceil(filtered.length / size));
     ipPage = Math.min(ipPage, pages);
@@ -142,7 +165,7 @@
       link.addEventListener('click', () => showAddress(entry));
       cell.append(link);
       row.append(cell);
-      for (const value of [pool.category, statusText[entry.status], entry.owner || '—', entry.owner ? '示例位置' : '—']) {
+      for (const value of [segmentOf(pool, entry.ip) ? `${segmentOf(pool, entry.ip).name} / ${segmentOf(pool, entry.ip).floor}` : '未划分', pool.category, statusText[entry.status], entry.owner || '—', entry.owner ? '示例位置' : '—']) {
         const field = document.createElement('td');
         field.textContent = value;
         field.title = value;
@@ -161,6 +184,25 @@
   }
   let editorCreate = false;
   let editorIndex = 0;
+  let editorSegments = [];
+  function renderEditorSegments() {
+    const root = $('pool-segment-editor');
+    root.replaceChildren();
+    editorSegments.forEach((segment, index) => {
+      const row = document.createElement('div'); row.className = 'pool-segment-row';
+      const count = document.createElement('span');
+      const updateCount = () => { count.textContent = `数量：${Number.isFinite(numberOf(segment.start_ip)) && Number.isFinite(numberOf(segment.end_ip)) && numberOf(segment.end_ip) >= numberOf(segment.start_ip) ? numberOf(segment.end_ip) - numberOf(segment.start_ip) + 1 : '待填写'}`; };
+      for (const [key, label] of [['name', '部门 / 名称'], ['floor', '楼层'], ['start_ip', '起始 IP'], ['end_ip', '结束 IP'], ['remark', '备注']]) {
+        const field = document.createElement('label'); field.textContent = label;
+        const input = document.createElement('input'); input.value = segment[key] || ''; input.setAttribute('aria-label', `第 ${index + 1} 段${label}`);
+        input.addEventListener('input', () => { segment[key] = input.value; updateCount(); });
+        field.append(input); row.append(field);
+      }
+      updateCount(); row.append(count);
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '删除行'; remove.addEventListener('click', () => { editorSegments.splice(index, 1); renderEditorSegments(); }); row.append(remove);
+      root.append(row);
+    });
+  }
   function renderEditorDirectory() {
     const needle = $('pool-editor-find').value.trim().toLowerCase();
     const root = $('pool-editor-list');
@@ -191,6 +233,9 @@
     const pool = editorCreate ? { category: '内网' } : pools[editorIndex];
     $('pool-editor-title').textContent = editorCreate ? '新增地址池 · 原型预览' : '编辑地址池 · ' + pool.name;
     for (const key of ['name', 'category', 'cidr', 'gateway', 'vlan', 'vni', 'purpose']) $('pool-' + key).value = pool[key] || '';
+    editorSegments = (pool.segments || []).map((segment) => ({ ...segment }));
+    $('pool-segment-error').textContent = '';
+    renderEditorSegments();
     $('pool-editor-scope').textContent = editorCreate ? '新建表单为空白，不继承当前地址池；原型不保存业务数据。' : '左侧可搜索并切换任意地址池，右侧编辑当前所选；原型不保存业务数据。';
     renderEditorDirectory();
     document.querySelectorAll('details').forEach((detail) => detail.open = false);
@@ -202,6 +247,7 @@
     requestAnimationFrame(() => locateSelected());
   }));
   $('pool-find').addEventListener('input', renderPicker);
+  $('pool-segment').addEventListener('change', () => { ipPage = 1; selectedIP = ''; hideAddress(); renderPool(); });
   for (const [id, event] of [['pool-search', 'input'], ['pool-status', 'change'], ['pool-page-size', 'change']]) $(id).addEventListener(event, () => { ipPage = 1; renderPool(); });
   $('pool-prev').addEventListener('click', () => { ipPage--; renderPool(); });
   $('pool-next').addEventListener('click', () => { ipPage++; renderPool(); });
@@ -219,6 +265,27 @@
   }));
   $('pool-editor-find').addEventListener('input', renderEditorDirectory);
   $('pool-selector-edit').addEventListener('click', () => fillPoolEditor(false, activePool));
+  $('pool-segment-add').addEventListener('click', () => { editorSegments.push({ name: '', floor: '', start_ip: '', end_ip: '', remark: '' }); renderEditorSegments(); });
+  $('pool-editor-save').addEventListener('click', () => {
+    const cidr = $('pool-cidr').value.trim();
+    const [networkIP, bitsText] = cidr.split('/');
+    const bits = Number(bitsText);
+    const network = numberOf(networkIP);
+    if (!Number.isFinite(network) || !Number.isInteger(bits) || bits < 0 || bits > 32) { $('pool-segment-error').textContent = '请先填写有效的 IPv4 CIDR'; return; }
+    const mask = bits ? (0xffffffff << (32 - bits)) >>> 0 : 0;
+    for (const [index, segment] of editorSegments.entries()) {
+      const start = numberOf(segment.start_ip); const end = numberOf(segment.end_ip);
+      if (!segment.name.trim() || !Number.isFinite(start) || !Number.isFinite(end) || start > end || (start & mask) !== (network & mask) || (end & mask) !== (network & mask)) { $('pool-segment-error').textContent = `第 ${index + 1} 段名称、起止 IP 或 CIDR 范围不正确`; return; }
+      if (editorSegments.slice(0, index).some((other) => start <= numberOf(other.end_ip) && numberOf(other.start_ip) <= end)) { $('pool-segment-error').textContent = `第 ${index + 1} 段与其他分段重叠`; return; }
+    }
+    const pool = editorCreate ? { size: 256, prefix: networkIP.split('.').slice(0, 3).join('.') } : pools[editorIndex];
+    for (const key of ['name', 'category', 'cidr', 'gateway', 'vlan', 'vni', 'purpose']) pool[key] = $('pool-' + key).value.trim();
+    if (!pool.name) { $('pool-segment-error').textContent = '请填写地址池名称'; return; }
+    pool.segments = editorSegments.map((segment) => ({ ...segment }));
+    if (editorCreate) { pools.push(pool); activePool = pools.length - 1; }
+    $('pool-segment').value = ''; ipPage = 1;
+    renderPicker(); renderPool(); $('pool-editor').close();
+  });
   $('pool-add-ip').addEventListener('click', () => { $('new-ip-address').value = ''; $('new-ip-note').value = ''; $('pool-ip-editor').showModal(); });
   document.querySelectorAll('details').forEach((detail) => detail.addEventListener('toggle', () => {
     if (detail.open && !detail.classList.contains('fold')) document.querySelectorAll('details[open]').forEach((other) => { if (other !== detail && !other.classList.contains('fold')) other.open = false; });

@@ -42,6 +42,7 @@
     <div class="pool-stat"><span>空闲</span><strong id="pool-free"></strong></div>
     <div class="pool-stat abnormal"><span>异常</span><strong id="pool-abnormal"></strong></div>
   </div>
+  <div class="pool-segments"><label for="pool-segment">地址分段</label><select id="pool-segment" aria-label="地址分段"><option value="">整个地址池</option></select><span id="pool-segment-summary"></span></div>
   <div class="pool-controls">
     <div class="segmented" aria-label="地址显示方式"><button data-ip-layout="grid" aria-pressed="true">方格</button><button data-ip-layout="table" aria-pressed="false">列表</button></div>
     <div class="pool-legend"><span><i class="used"></i>已占用</span><span><i></i>空闲</span><span><i class="reserved"></i>预留</span><span><i class="abnormal"></i>异常</span><span><i class="special"></i>网络 / 广播（只读）</span></div>
@@ -49,7 +50,7 @@
   <div id="pool-address-layout" class="pool-address-layout">
   <div class="pool-scroll">
     <div id="ip-grid" class="ip-grid"></div>
-    <table id="ip-table" class="ip-table" hidden><thead><tr><th style="width:22%">IP 地址</th><th style="width:16%">网络类型</th><th style="width:16%">状态</th><th>占用对象</th><th style="width:18%">位置</th></tr></thead><tbody id="ip-table-body"></tbody></table>
+    <table id="ip-table" class="ip-table" hidden><thead><tr><th>IP 地址</th><th>分段 / 楼层</th><th>网络类型</th><th>状态</th><th>占用对象</th><th>位置</th></tr></thead><tbody id="ip-table-body"></tbody></table>
     <p id="pool-empty" class="pool-empty" hidden>没有匹配地址</p>
   </div>
     <aside id="ip-detail" class="record-shell record-inline" aria-label="IP 地址详情" hidden>
@@ -76,9 +77,9 @@
       <div class="field"><label for="pool-vlan">VLAN</label><input id="pool-vlan"></div>
       <div class="field"><label for="pool-vni">VXLAN VNI</label><input id="pool-vni"></div>
       <div class="field full"><label for="pool-purpose">用途</label><input id="pool-purpose"></div>
-    </div></section><p class="dialog-note">这是表单布局预览，不保存或修改业务数据。</p></div>
+    </div></section><section class="record-section"><div class="pool-segment-title"><h3 class="section-title">地址分段</h3><button type="button" id="pool-segment-add">新增分段</button></div><p class="dialog-note">按部门、楼层和起止 IP 规划；数量自动计算。仅在本页内存预览。</p><div id="pool-segment-editor"></div></section><p id="pool-segment-error" class="dialog-note" role="alert"></p></div>
   </div>
-  <footer class="dialog-footer record-footer"><button data-close="pool-editor">关闭</button><button class="primary" disabled>保存地址池</button></footer>
+  <footer class="dialog-footer record-footer"><button data-close="pool-editor">关闭</button><button id="pool-editor-save" class="primary" type="button">保存预览</button></footer>
 </dialog>
 <dialog id="pool-ip-editor" class="record-shell record-dialog" aria-labelledby="pool-ip-editor-title">
   <header class="dialog-header record-header"><h2 id="pool-ip-editor-title">补录 IP</h2><button class="icon quiet" data-close="pool-ip-editor" aria-label="关闭补录 IP">×</button></header>

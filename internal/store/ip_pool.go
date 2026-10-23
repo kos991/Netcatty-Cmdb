@@ -117,6 +117,7 @@ type IPSubnetSummary struct {
 	VLAN      string  `json:"vlan"`
 	VNI       string  `json:"vni"`
 	Purpose   string  `json:"purpose"`
+	Segments []IPSubnetSegment `json:"segments"`
 	RangeFrom string  `json:"range_from"`
 	RangeTo   string  `json:"range_to"`
 	Total     int     `json:"total"`
@@ -318,6 +319,14 @@ func (s *Store) IPPoolSummaryDataForProject(scope ProjectScope) (*IPPoolSummary,
 		}
 		return ipPrefixValue(pi) < ipPrefixValue(pj)
 	})
+	for i := range out.Subnets {
+		for _, def := range defs {
+			if def.Name == out.Subnets[i].Subnet {
+				out.Subnets[i].Segments = def.Segments
+				break
+			}
+		}
+	}
 	out.UsageRate = usageRate(out.Used, out.Total)
 	return out, nil
 }
@@ -463,6 +472,55 @@ func (s *Store) VisualizeIPSubnet(subnet string, page, pageSize int) ([]IPEntry,
 	return s.VisualizeIPSubnetForProject(scope, subnet, page, pageSize)
 }
 
+// VisualizeIPSegmentForProject pages over an inclusive segment range while retaining virtual free cells.
+func (s *Store) VisualizeIPSegmentForProject(scope ProjectScope, subnet string, segmentID int64, page, pageSize int) ([]IPEntry, int, error) {
+	if _, err := s.ResolveProject(scope); err != nil {
+		return nil, 0, err
+	}
+	segment, err := s.IPSubnetSegmentForProject(scope, subnet, segmentID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if page < 1 { page = 1 }
+	if pageSize < 1 || pageSize > 500 { pageSize = 100 }
+	start := netip.MustParseAddr(segment.StartIP)
+	total := segment.Count
+	offset := (page - 1) * pageSize
+	if offset >= total { return []IPEntry{}, total, nil }
+	var cidr, prefix string
+	if err := s.db.QueryRow(`SELECT IFNULL(cidr,''),IFNULL(prefix,'') FROM ip_subnets WHERE project_id=? AND name=?`, scope.ProjectID, subnet).Scan(&cidr, &prefix); err != nil {
+		return nil, 0, err
+	}
+	fullCIDR := normalizeSubnetCIDR(cidr, prefix)
+	first := addIPv4(start, uint32(offset))
+	last := addIPv4(first, uint32(min(pageSize, total-offset)-1))
+	rows := make([]IPEntry, 0, min(pageSize, total-offset))
+	for ip := first; ; ip = ip.Next() {
+		status := specialIPv4Address(fullCIDR, ip.String())
+		if status == "" { status = "空闲" }
+		rows = append(rows, IPEntry{ProjectID: scope.ProjectID, Subnet: subnet, IP: ip.String(), Status: status, SegmentID: segment.ID, SegmentName: segment.Name, SegmentFloor: segment.Floor})
+		if ip == last { break }
+	}
+	dbRows, err := s.db.Query(`SELECT id,project_id,subnet,ip,IFNULL(department,''),IFNULL(room,''),IFNULL(account,''),IFNULL(status,''),IFNULL(remark,''),IFNULL(owner_type,''),IFNULL(owner_id,0),IFNULL(owner_name,'') FROM ip_pool WHERE project_id=? AND subnet=? AND json_valid('['||replace(ip,'.',',')||']') AND `+ipSegmentOrderExpr+` BETWEEN ? AND ?`, scope.ProjectID, subnet, segmentSortKey(first.String()), segmentSortKey(last.String()))
+	if err != nil { return nil, 0, err }
+	byIP := make(map[string]IPEntry)
+	for dbRows.Next() {
+		var entry IPEntry
+		if err := dbRows.Scan(&entry.ID,&entry.ProjectID,&entry.Subnet,&entry.IP,&entry.Department,&entry.Room,&entry.Account,&entry.Status,&entry.Remark,&entry.OwnerType,&entry.OwnerID,&entry.OwnerName); err != nil { dbRows.Close(); return nil, 0, err }
+		byIP[entry.IP] = entry
+	}
+	if err := dbRows.Err(); err != nil { dbRows.Close(); return nil, 0, err }
+	if err := dbRows.Close(); err != nil { return nil, 0, err }
+	for i := range rows {
+		if entry, ok := byIP[rows[i].IP]; ok {
+			rows[i] = entry
+			rows[i].SegmentID, rows[i].SegmentName, rows[i].SegmentFloor = segment.ID, segment.Name, segment.Floor
+		}
+		if kind := specialIPv4Address(fullCIDR, rows[i].IP); kind != "" { rows[i].Status = kind }
+	}
+	if err := s.attachIPOwnersForProject(scope, rows); err != nil { return nil, 0, err }
+	return rows, total, nil
+}
 func (s *Store) VisualizeIPSubnetForProject(scope ProjectScope, subnet string, page, pageSize int) ([]IPEntry, int, error) {
 	if _, err := s.ResolveProject(scope); err != nil {
 		return nil, 0, err
@@ -545,6 +603,9 @@ func (s *Store) VisualizeIPSubnetForProject(scope ProjectScope, subnet string, p
 			rows[i].Status = kind
 		}
 	}
+	if err := s.attachIPSegments(scope, rows); err != nil {
+		return nil, 0, err
+	}
 	return rows, total, nil
 }
 
@@ -565,6 +626,7 @@ func ipPrefixValue(prefix string) uint64 {
 // ============================ 列表（含占用资产） ============================
 
 type IPEntryQuery struct {
+	SegmentID int64
 	Subnet   string
 	Status   string
 	Keyword  string
@@ -579,8 +641,15 @@ func (s *Store) buildIPWhere(q IPEntryQuery) (string, []interface{}) {
 	var where []string
 	var args []interface{}
 	if sub := strings.TrimSpace(q.Subnet); sub != "" && sub != "全部" {
-		where = append(where, "subnet = ?")
+		where = append(where, "ip_pool.subnet = ?")
 		args = append(args, sub)
+	}
+	if q.SegmentID > 0 {
+		where = append(where, `EXISTS (SELECT 1 FROM ip_subnet_segments g JOIN ip_subnets n ON n.id=g.subnet_id AND n.project_id=g.project_id
+			WHERE g.id=? AND g.project_id=ip_pool.project_id AND n.name=ip_pool.subnet AND json_valid('['||replace(ip_pool.ip,'.',',')||']') AND `+ipSegmentOrderExpr+` BETWEEN
+			printf('%03d.%03d.%03d.%03d',CAST(json_extract('['||replace(g.start_ip,'.',',')||']','$[0]') AS INTEGER),CAST(json_extract('['||replace(g.start_ip,'.',',')||']','$[1]') AS INTEGER),CAST(json_extract('['||replace(g.start_ip,'.',',')||']','$[2]') AS INTEGER),CAST(json_extract('['||replace(g.start_ip,'.',',')||']','$[3]') AS INTEGER)) AND
+			printf('%03d.%03d.%03d.%03d',CAST(json_extract('['||replace(g.end_ip,'.',',')||']','$[0]') AS INTEGER),CAST(json_extract('['||replace(g.end_ip,'.',',')||']','$[1]') AS INTEGER),CAST(json_extract('['||replace(g.end_ip,'.',',')||']','$[2]') AS INTEGER),CAST(json_extract('['||replace(g.end_ip,'.',',')||']','$[3]') AS INTEGER)))`)
+		args = append(args, q.SegmentID)
 	}
 	if st := strings.TrimSpace(q.Status); st != "" && st != "全部" {
 		where = append(where, "status = ?")
@@ -647,15 +716,18 @@ func (s *Store) QueryIPEntriesForProject(scope ProjectScope, q IPEntryQuery) ([]
 	if err := s.attachIPOwnersForProject(scope, list); err != nil {
 		return nil, 0, err
 	}
+	if err := s.attachIPSegments(scope, list); err != nil {
+		return nil, 0, err
+	}
 	return list, total, nil
 }
 
 func (s *Store) buildIPWhereForProject(scope ProjectScope, q IPEntryQuery) (string, []interface{}) {
 	where, args := s.buildIPWhere(q)
 	if where == "" {
-		return " WHERE project_id=?", []interface{}{scope.ProjectID}
+		return " WHERE ip_pool.project_id=?", []interface{}{scope.ProjectID}
 	}
-	return " WHERE project_id=? AND " + strings.TrimPrefix(where, " WHERE "), append([]interface{}{scope.ProjectID}, args...)
+	return " WHERE ip_pool.project_id=? AND " + strings.TrimPrefix(where, " WHERE "), append([]interface{}{scope.ProjectID}, args...)
 }
 
 // attachIPOwners 用 IP / 终端 IP 与资产台账做匹配，回填占用设备。
@@ -1449,5 +1521,11 @@ func (s *Store) AllIPEntriesForProject(scope ProjectScope, q IPEntryQuery) ([]IP
 		}
 		list = append(list, e)
 	}
-	return list, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := s.attachIPSegments(scope, list); err != nil {
+		return nil, err
+	}
+	return list, nil
 }

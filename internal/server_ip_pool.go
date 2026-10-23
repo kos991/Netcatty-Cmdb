@@ -32,7 +32,16 @@ func (s *Server) handleIPPoolVisualization(w http.ResponseWriter, r *http.Reques
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("page_size"))
-	list, total, err := s.Store.VisualizeIPSubnetForProject(scope, q.Get("subnet"), page, pageSize)
+	segmentID, _ := strconv.ParseInt(q.Get("segment_id"), 10, 64)
+	if segmentID > 0 && strings.TrimSpace(q.Get("subnet")) == "" { writeErr(w, 400, "请选择分段所属的地址池"); return }
+	var list []store.IPEntry
+	var total int
+	var err error
+	if segmentID > 0 {
+		list, total, err = s.Store.VisualizeIPSegmentForProject(scope, q.Get("subnet"), segmentID, page, pageSize)
+	} else {
+		list, total, err = s.Store.VisualizeIPSubnetForProject(scope, q.Get("subnet"), page, pageSize)
+	}
 	if err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -218,7 +227,8 @@ func (s *Server) handleNormalizeIPPool(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{"normalized": n})
 }
 
-var ipExportColumns = []string{"网段", "IP地址", "状态", "使用人/帐号", "归属部门", "房间", "备注"}
+var ipLegacyColumns = []string{"网段", "IP地址", "状态", "使用人/帐号", "归属部门", "房间", "备注"}
+var ipExportColumns = []string{"网段", "IP地址", "状态", "使用人/帐号", "归属部门", "房间", "备注", "分段名称", "分段楼层", "分段起始IP", "分段结束IP", "分段数量", "分段备注"}
 
 type ipImportRow struct {
 	Row     int           `json:"row"`
@@ -259,7 +269,7 @@ func parseIPPoolImport(r io.Reader) ([]ipImportRow, []string, error) {
 		indexes[strings.TrimSpace(header)] = index
 	}
 	errorsList := []string{}
-	for _, header := range ipExportColumns {
+	for _, header := range ipLegacyColumns {
 		if _, exists := indexes[header]; !exists {
 			errorsList = append(errorsList, "缺少列："+header)
 		}
@@ -268,7 +278,8 @@ func parseIPPoolImport(r io.Reader) ([]ipImportRow, []string, error) {
 		return []ipImportRow{}, errorsList, nil
 	}
 	value := func(row []string, header string) string {
-		index := indexes[header]
+		index, ok := indexes[header]
+		if !ok { return "" }
 		if index >= len(row) {
 			return ""
 		}
@@ -278,6 +289,8 @@ func parseIPPoolImport(r io.Reader) ([]ipImportRow, []string, error) {
 	seen := map[string]bool{}
 	for index, row := range rows[1:] {
 		entry := store.IPEntry{Subnet: value(row, "网段"), IP: value(row, "IP地址"), Status: value(row, "状态"), Account: value(row, "使用人/帐号"), Department: value(row, "归属部门"), Room: value(row, "房间"), Remark: value(row, "备注")}
+		entry.SegmentName = value(row, "分段名称")
+		entry.SegmentFloor = value(row, "分段楼层")
 		if entry.IP == "" && entry.Subnet == "" {
 			continue
 		}
@@ -336,6 +349,10 @@ func (s *Server) handleImportIPPool(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		entries = append(entries, row.IP)
 	}
+	if err := s.Store.ValidateIPEntrySegmentsForProject(requestProjectScope(r), entries); err != nil {
+		writeErr(w, http.StatusBadRequest, "导入失败: "+err.Error())
+		return
+	}
 	if err := s.Store.ImportIPEntriesForProject(requestProjectScope(r), entries); err != nil {
 		writeErr(w, http.StatusBadRequest, "导入失败: "+err.Error())
 		return
@@ -361,22 +378,38 @@ func (s *Server) handleDownloadIPPoolTemplate(w http.ResponseWriter, _ *http.Req
 	_, _ = w.Write(buf.Bytes())
 }
 
-func ipRowValues(e store.IPEntry) []string {
-	return []string{e.Subnet, e.IP, e.Status, e.Account, e.Department, e.Room, e.Remark}
+func ipRowValues(e store.IPEntry, segments map[int64]store.IPSubnetSegment) []string {
+	values := []string{e.Subnet, e.IP, e.Status, e.Account, e.Department, e.Room, e.Remark, e.SegmentName, e.SegmentFloor, "", "", "", ""}
+	if segment, ok := segments[e.SegmentID]; ok {
+		values[9], values[10], values[11], values[12] = segment.StartIP, segment.EndIP, strconv.Itoa(segment.Count), segment.Remark
+	}
+	return values
 }
 
 // handleExportIPPool 按当前筛选导出全部匹配记录（不受当前页限制）。
 func (s *Server) handleExportIPPool(w http.ResponseWriter, r *http.Request) {
 	scope := requestProjectScope(r)
 	q := r.URL.Query()
+	segmentID, _ := strconv.ParseInt(q.Get("segment_id"), 10, 64)
+	if segmentID > 0 && strings.TrimSpace(q.Get("subnet")) == "" { writeErr(w, 400, "请选择分段所属的地址池"); return }
+	if segmentID > 0 {
+		if _, err := s.Store.IPSubnetSegmentForProject(scope, q.Get("subnet"), segmentID); err != nil { writeErr(w, 400, err.Error()); return }
+	}
 	list, err := s.Store.AllIPEntriesForProject(scope, store.IPEntryQuery{
 		Subnet:  q.Get("subnet"),
+		SegmentID: segmentID,
 		Status:  q.Get("status"),
 		Keyword: q.Get("keyword"),
 	})
 	if err != nil {
 		writeErr(w, 500, err.Error())
 		return
+	}
+	defs, err := s.Store.ListIPSubnetsForProject(scope)
+	if err != nil { writeErr(w, 500, err.Error()); return }
+	segments := make(map[int64]store.IPSubnetSegment)
+	for _, def := range defs {
+		for _, segment := range def.Segments { segments[segment.ID] = segment }
 	}
 	format := q.Get("format")
 	if format == "" {
@@ -392,7 +425,7 @@ func (s *Server) handleExportIPPool(w http.ResponseWriter, r *http.Request) {
 		cw := csv.NewWriter(w)
 		_ = cw.Write(ipExportColumns)
 		for _, e := range list {
-			_ = cw.Write(ipRowValues(e))
+			_ = cw.Write(ipRowValues(e, segments))
 		}
 		cw.Flush()
 	case "xlsx":
@@ -407,7 +440,7 @@ func (s *Server) handleExportIPPool(w http.ResponseWriter, r *http.Request) {
 			_ = f.SetCellValue(sheet, cell, c)
 		}
 		for ri, e := range list {
-			for ci, v := range ipRowValues(e) {
+			for ci, v := range ipRowValues(e, segments) {
 				cell, _ := excelize.CoordinatesToCellName(ci+1, ri+2)
 				_ = f.SetCellValue(sheet, cell, v)
 			}

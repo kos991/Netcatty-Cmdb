@@ -498,6 +498,15 @@ func insertProjectScopedRow(t *testing.T, db *sql.DB, table, prefix string) int6
 		result, err = db.Exec(`INSERT INTO ip_pool(ip) VALUES (?)`, value)
 	case "ip_subnets":
 		result, err = db.Exec(`INSERT INTO ip_subnets(name) VALUES (?)`, value)
+	case "ip_subnet_segments":
+		var subnetID int64
+		err = db.QueryRow(`SELECT id FROM ip_subnets ORDER BY id LIMIT 1`).Scan(&subnetID)
+		if err == sql.ErrNoRows {
+			subnetID = insertProjectScopedRow(t, db, "ip_subnets", prefix+"-segment")
+		} else if err != nil {
+			t.Fatalf("读取地址池分段关联 ID: %v", err)
+		}
+		result, err = db.Exec(`INSERT INTO ip_subnet_segments(subnet_id,name,start_ip,end_ip,count) VALUES(?,?,?,?,?)`, subnetID, value, "192.0.2.2", "192.0.2.5", 4)
 	case "servers":
 		result, err = db.Exec(`INSERT INTO servers(asset_code, updated_at) VALUES (?, '')`, value)
 	case "server_apps":

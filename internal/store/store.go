@@ -266,5 +266,8 @@ func (s *Store) InitSchema() error {
 	if err := s.InitIPSubnetSchema(); err != nil {
 		return fmt.Errorf("init ip subnet schema: %w", err)
 	}
+	if _, err := s.db.Exec(ipSubnetSegmentsSchema); err != nil {
+		return fmt.Errorf("init ip subnet segments schema: %w", err)
+	}
 	return nil
 }
