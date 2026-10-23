@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { initialSubnetDraft, subnetSelectorGroups, subnetSelectorItems } from './ipamLayoutModel.js'
+import { initialSubnetDraft, parseSegmentsFromRemark, segmentAddressCount, subnetSelectorGroups, subnetSelectorItems } from './ipamLayoutModel.js'
 
 test('网段选择器保留名称、CIDR、VLAN/VXLAN 和使用率摘要', () => {
   assert.deepEqual(subnetSelectorItems([
@@ -69,4 +69,24 @@ test('地址池目录搜索保留类别和所有同类命中，不修改权威�
   draft.name = '未保存名称'
   assert.equal(subnets[1].name, '办公二网')
   assert.equal(initialSubnetDraft(subnets, { initialSubnetID: 2 }).name, '办公二网')
+})
+
+test('备注中的部门区间行可生成分段，结束地址允许只写末段', () => {
+  const remark = '速载\t3楼\t31\t192.0.2.2－40\n刑一\t4楼\t12\t192.0.2.41－60\n刑二\t4楼\t10\t192.0.2.61－80\n其它\t\t9\t\n'
+  const segments = parseSegmentsFromRemark(remark)
+  assert.deepEqual(segments.map(({ name, floor, start_ip, end_ip, count }) => [name, floor, start_ip, end_ip, count]), [
+    ['速载', '3楼', '192.0.2.2', '192.0.2.40', 31],
+    ['刑一', '4楼', '192.0.2.41', '192.0.2.60', 12],
+    ['刑二', '4楼', '192.0.2.61', '192.0.2.80', 10],
+  ])
+  assert.equal(segmentAddressCount(segments[0]), 39)
+  assert.deepEqual(parseSegmentsFromRemark('只有说明文字，没有区间'), [])
+  assert.deepEqual(parseSegmentsFromRemark(''), [])
+})
+
+test('地址池目录在有分段时显示分段名称摘要', () => {
+  const items = subnetSelectorItems([{ id: 1, name: '新大楼3-6楼', category: '内网', cidr: '192.0.2.0/24', segments: [{ name: '速载' }, { name: '刑一' }] }], [])
+  assert.equal(items[0].segmentNames, '速载、刑一')
+  assert.match(items[0].description, /2 个分段/)
+  assert.equal(subnetSelectorItems([{ id: 2, name: '无分段', cidr: '198.51.100.0/24' }], [])[0].segmentNames, undefined)
 })

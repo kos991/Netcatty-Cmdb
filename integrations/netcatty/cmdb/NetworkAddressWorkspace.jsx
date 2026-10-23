@@ -49,6 +49,7 @@ function IPDetails({ record, onNavigate }) {
 export default function NetworkAddressWorkspace({ focusTarget, navigation, onNavigate, onDirtyChange }) {
   const [subnet, setSubnet] = useState('')
   const [segmentID, setSegmentID] = useState(0)
+  const [expandedSegments, setExpandedSegments] = useState('')
   const [keyword, setKeyword] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -211,8 +212,15 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
             <SearchBox value={subnetPickerKeyword} onChange={setSubnetPickerKeyword} placeholder="搜索地址池、CIDR、VLAN 或 VNI" className="min-w-0 max-w-none" />
             <div className="mt-2 max-h-64 overflow-y-auto">{subnets.loading ? <p className="px-2 py-5 text-center text-xs text-muted-foreground">加载地址池...</p> : subnets.error ? <ErrorBanner message={subnets.error} onRetry={subnets.reload} /> : subnetGroups.length ? subnetGroups.map((group) => <section key={group.category} data-ipam-subnet-group={group.category}>
               <h3 className="sticky top-0 bg-background px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground">{group.category}</h3>
-              {group.items.map((item) => <button type="button" key={item.id || item.value} data-ipam-subnet-option={item.value} onClick={() => { if (!mayChangePool()) return; setSubnet(item.value); setSegmentID(0); setPage(1); setDetail(null); setSubnetPickerOpen(false); setSubnetPickerKeyword('') }} className={`mb-1 w-full rounded-md px-2.5 py-2 text-left hover:bg-secondary ${subnet === item.value ? 'bg-[color-mix(in_srgb,var(--cmdb-accent)_12%,transparent)] text-[var(--cmdb-accent)]' : ''}`}><strong className="block truncate text-xs" title={item.label}>{item.label}</strong><span className="mt-0.5 block truncate text-[11px] text-muted-foreground" title={item.description}>{item.description}</span></button>)}
+              {group.items.map((item) => <div key={item.id || item.value} className="mb-1 rounded-md">
+                <div className={`flex items-stretch rounded-md hover:bg-secondary ${subnet === item.value ? 'bg-[color-mix(in_srgb,var(--cmdb-accent)_12%,transparent)] text-[var(--cmdb-accent)]' : ''}`}>
+                  <button type="button" data-ipam-subnet-option={item.value} onClick={() => { if (!mayChangePool()) return; setSubnet(item.value); setSegmentID(0); setPage(1); setDetail(null); setSubnetPickerOpen(false); setSubnetPickerKeyword('') }} className="min-w-0 flex-1 px-2.5 py-2 text-left"><strong className="block truncate text-xs" title={item.label}>{item.label}</strong><span className="mt-0.5 block truncate text-[11px] text-muted-foreground" title={item.description}>{item.description}</span></button>
+                  {item.segmentNames ? <button type="button" aria-label={`${item.label} 分段设置`} aria-expanded={expandedSegments === item.value} onClick={() => setExpandedSegments((current) => current === item.value ? '' : item.value)} className="grid w-9 shrink-0 place-items-center text-muted-foreground hover:text-foreground" title={`${item.segmentCount} 个分段，点击展开`}><ChevronDown size={14} className={expandedSegments === item.value ? 'rotate-180 transition-transform' : 'transition-transform'} /></button> : null}
+                </div>
+                {expandedSegments === item.value && item.segments?.length ? <div data-ipam-segment-preview className="ml-2 border-l border-border/70 pl-2 py-1">{item.segments.map((segment) => <button key={segment.name + segment.start_ip} type="button" onClick={() => { if (!mayChangePool()) return; setSubnet(item.value); setSegmentID(Number(segment.id)); setPage(1); setDetail(null); setSubnetPickerOpen(false); setSubnetPickerKeyword('') }} className="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left text-[11px] hover:bg-secondary"><span className="min-w-0 truncate">{segment.name}{segment.floor ? ` · ${segment.floor}` : ''}</span><span className="shrink-0 tabular-nums text-muted-foreground">{segment.start_ip.split('.').pop()}–{segment.end_ip.split('.').pop()}</span></button>)}</div> : null}
+              </div>)}
             </section>) : <p className="px-2 py-5 text-center text-xs text-muted-foreground">暂无匹配地址池</p>}</div>
+
             <Button data-ipam-edit-subnet type="button" variant="ghost" className="mt-2 h-[34px] w-full justify-start gap-2 border-t border-border text-xs" disabled={!activeSubnet?.id || subnets.loading || !!subnets.error} onClick={() => { if (!mayChangePool()) return; setSubnetPickerOpen(false); setSettings({ initialSubnetID: activeSubnet.id }) }}><Pencil size={14} />编辑当前地址池</Button>
           </DropdownContent>
         </Dropdown>

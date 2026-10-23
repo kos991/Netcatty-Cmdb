@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Network, Plus, Trash2 } from 'lucide-react'
+import { Network, Plus, Trash2, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -7,33 +7,26 @@ import { Spinner } from '@/components/ui/spinner'
 import { api } from './api'
 import { choices, Fields, textFields, validateFields } from './Fields'
 import { directoryChanged, useAction, useQuery } from './hooks'
-import { EmptyState, ErrorBanner, SearchBox } from './ui'
-import { initialSubnetDraft } from './ipamLayoutModel'
+import { ActionIcon, EmptyState, ErrorBanner, SearchBox } from './ui'
+import { initialSubnetDraft, ipv4Number, parseSegmentsFromRemark, segmentAddressCount } from './ipamLayoutModel'
 import './network-address.css'
 
 const loadSubnets = async () => (await api.ipSubnets()).list || []
 const segmentDraft = () => ({ name: '', floor: '', start_ip: '', end_ip: '', count: 0, remark: '' })
-const ipNumber = (value) => {
-  const parts = String(value || '').trim().split('.')
-  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part) || Number(part) > 255 || (part.length > 1 && part.startsWith('0')))) return null
-  return parts.reduce((value, part) => value * 256 + Number(part), 0)
-}
-const segmentCount = (row) => {
-  const start = ipNumber(row.start_ip); const end = ipNumber(row.end_ip)
-  return start == null || end == null || start > end ? 0 : end - start + 1
-}
+const segmentCount = segmentAddressCount
 const validateSegments = (rows) => {
   rows.forEach((row, index) => {
     if (!row.name?.trim()) throw new Error(`第 ${index + 1} 个分段请填写部门或名称`)
-    const start = ipNumber(row.start_ip); const end = ipNumber(row.end_ip)
+    const start = ipv4Number(row.start_ip); const end = ipv4Number(row.end_ip)
     if (start == null || end == null) throw new Error(`分段「${row.name}」请填写有效的起止 IPv4 地址`)
     if (start > end) throw new Error(`分段「${row.name}」起始 IP 不能大于结束 IP`)
     for (let earlier = 0; earlier < index; earlier++) {
       const other = rows[earlier]
-      if (start <= ipNumber(other.end_ip) && ipNumber(other.start_ip) <= end) throw new Error(`分段「${row.name}」与「${other.name}」地址重叠`)
+      if (start <= ipv4Number(other.end_ip) && ipv4Number(other.start_ip) <= end) throw new Error(`分段「${row.name}」与「${other.name}」地址重叠`)
     }
   })
 }
+
 
 
 export default function SubnetMaintenance({ open, onOpenChange, onChanged, onDirtyChange, onBusyChange, initialCreate = false, initialSubnetID, networkTypes = [] }) {
@@ -75,7 +68,7 @@ export default function SubnetMaintenance({ open, onOpenChange, onChanged, onDir
   const fields = [
     { key: 'name', label: '网段名称', required: true },
     { key: 'category', label: '网络类型', required: true, options: choices([...new Set([...networkTypes, draft?.category].filter(Boolean))]) },
-    ...textFields([['prefix', '地址前缀'], ['cidr', 'CIDR'], ['gateway', '网关'], ['vlan', 'VLAN'], ['vni', 'VXLAN VNI'], ['purpose', '用途'], ['sort_order', '排序', 'number'], ['remark', '备注', 'textarea']]),
+    ...textFields([['cidr', 'CIDR'], ['gateway', '网关'], ['vlan', 'VLAN'], ['vni', 'VXLAN VNI'], ['purpose', '用途'], ['sort_order', '排序', 'number'], ['remark', '备注', 'textarea']]),
   ]
   const disabled = action.busy || query.loading || Boolean(query.error)
   const changeSegment = (index, key, value) => setDraft((current) => ({ ...current, segments: current.segments.map((segment, rowIndex) => {
@@ -135,15 +128,43 @@ export default function SubnetMaintenance({ open, onOpenChange, onChanged, onDir
                 <section className="cmdb-record-section">
                   <h3>{draft.id ? '地址池资料' : '新增地址池'}</h3>
                   <fieldset disabled={disabled} className="min-w-0"><Fields fields={fields} value={draft} onChange={(next) => { setError(''); setDraft(next) }} /></fieldset>
-                </section>
-                <section className="cmdb-record-section" aria-label="地址分段">
-                  <div className="mb-3 flex items-center justify-between gap-2"><div><h3>地址分段</h3><p className="text-xs text-muted-foreground">按部门和楼层划分 IP 范围；数量按起止地址自动计算。</p></div><Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => setDraft((current) => ({ ...current, segments: [...(current.segments || []), segmentDraft()] }))}><Plus size={14} />新增分段</Button></div>
-                  <div className="space-y-3">{(draft.segments || []).map((segment, index) => <fieldset key={segment.id || `new-${index}`} disabled={disabled} className="network-segment-editor rounded-md border border-border p-3">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {[['name', '部门 / 分段名称'], ['floor', '楼层'], ['start_ip', '起始 IP'], ['end_ip', '结束 IP'], ['remark', '备注']].map(([key, label]) => <label key={key} className="min-w-0 text-xs">{label}<input aria-label={`第 ${index + 1} 段${label}`} className="mt-1 h-[34px] w-full rounded-md border border-input bg-background px-2 text-sm text-foreground" value={segment[key] || ''} onChange={(event) => changeSegment(index, key, event.target.value)} /></label>)}
-                      <div className="flex items-end justify-between gap-2 text-xs"><span>数量：{segmentCount(segment) || '待填写'}{segment.start_ip && segment.end_ip && !segmentCount(segment) ? ' · 请检查起止 IP' : ''}</span><Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setDraft((current) => ({ ...current, segments: current.segments.filter((_, rowIndex) => rowIndex !== index) }))}><Trash2 size={14} />删除行</Button></div>
+                  <div className="mt-3 rounded-md border border-border/70 bg-secondary/20 p-3" data-subnet-segments aria-label="地址分段">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-semibold">地址分段</h4>
+                      <p className="text-[11px] text-muted-foreground">按部门和楼层划分 CIDR 内的 IP 范围，数量自动计算。</p>
                     </div>
-                  </fieldset>)}</div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => setDraft((current) => ({ ...current, segments: parseSegmentsFromRemark(current.remark) }))} title="按备注中「部门 楼层 数量 起止区间」的行自动生成分段"><Wand2 size={14} />按备注生成</Button>
+                      <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => setDraft((current) => ({ ...current, segments: [...(current.segments || []), segmentDraft()] }))}><Plus size={14} />新增分段</Button>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] table-fixed border-collapse text-xs">
+                      <thead>
+                        <tr className="text-left text-[11px] text-muted-foreground">
+                          <th className="w-[150px] px-1 pb-1.5 font-normal">部门 / 分段</th>
+                          <th className="w-[78px] px-1 pb-1.5 font-normal">楼层</th>
+                          <th className="w-[140px] px-1 pb-1.5 font-normal">起始 IP</th>
+                          <th className="w-[140px] px-1 pb-1.5 font-normal">结束 IP</th>
+                          <th className="w-[64px] px-1 pb-1.5 text-right font-normal">数量</th>
+                          <th className="w-[150px] px-1 pb-1.5 font-normal">备注</th>
+                          <th className="w-[40px] px-1 pb-1.5" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(draft.segments || []).map((segment, index) => <tr key={segment.id || `new-${index}`} className="border-t border-border/50">
+                          {[['name', '部门 / 分段名称', ''], ['floor', '楼层', ''], ['start_ip', '起始 IP', ''], ['end_ip', '结束 IP', ''], ['remark', '备注', '']].map(([key, label]) => <td key={key} className="px-1 py-1.5">
+                            <input aria-label={`第 ${index + 1} 段${label}`} className="h-[30px] w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground" value={segment[key] || ''} onChange={(event) => changeSegment(index, key, event.target.value)} />
+                          </td>)}
+                          <td className="px-1 py-1.5 text-right tabular-nums text-muted-foreground" title={segment.start_ip && segment.end_ip && !segmentCount(segment) ? '请检查起止 IP' : undefined}>{segmentCount(segment) || '—'}</td>
+                          <td className="px-1 py-1.5 text-right"><ActionIcon label={`删除第 ${index + 1} 段`} danger onClick={() => setDraft((current) => ({ ...current, segments: current.segments.filter((_, rowIndex) => rowIndex !== index) }))}><Trash2 size={13} /></ActionIcon></td>
+                        </tr>)}
+                      </tbody>
+                    </table>
+                  </div>
+                  {!(draft.segments || []).length ? <p className="mt-2 text-xs text-muted-foreground">还没有分段。点“按备注生成”可从备注里的区间行自动生成，或手动新增。</p> : null}
+                  </div>
                 </section>
               </div>
               <footer className="cmdb-record-footer flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-3">
