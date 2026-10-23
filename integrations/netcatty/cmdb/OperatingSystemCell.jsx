@@ -59,13 +59,13 @@ function SystemIcon({ presentation }) {
   return <DistroAvatar size="sm" fallback={presentation.name} host={{ distro: presentation.distro, distroMode: 'auto', os: presentation.distro === 'windows' ? 'windows' : presentation.distro === 'macos' ? 'macos' : 'linux' }} />
 }
 
-export default function OperatingSystemCell({ asset = {}, host = null, compact = false, hideIcon = false }) {
+export default function OperatingSystemCell({ asset = {}, host = null, compact = false, hideIcon = false, hideVersion = false }) {
   const presentation = resolveOperatingSystemPresentation(asset, host)
   return <div className={`flex min-w-0 items-center gap-2 ${hideIcon ? 'pl-7' : ''}`} title={presentation.label} data-os-distro={presentation.distro}>
     {!hideIcon ? <SystemIcon presentation={presentation} /> : null}
     <div className="min-w-0 leading-[1.45]">
       <p className="truncate text-xs" title={presentation.name}>{compact ? shortOperatingSystemLabel(presentation.name, presentation.version) : presentation.name}</p>
-      {!compact && presentation.version ? <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground" title={presentation.version}>{presentation.version}</p> : null}
+      {!compact && !hideVersion && presentation.version ? <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground" title={presentation.version}>{presentation.version}</p> : null}
     </div>
   </div>
 }

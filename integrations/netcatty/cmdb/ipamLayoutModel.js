@@ -25,7 +25,7 @@ export function subnetSelectorGroups(subnets = [], summaries = [], keyword = '')
 }
 
 export function initialSubnetDraft(subnets = [], { initialCreate = false, initialSubnetID } = {}) {
-  if (initialCreate) return { name: '', category: '', prefix: '', cidr: '', gateway: '', vlan: '', vni: '', purpose: '', sort_order: 0, remark: '' }
+  if (initialCreate) return { name: '', category: '', prefix: '', cidr: '', gateway: '', vlan: '', vni: '', purpose: '', sort_order: 0, remark: '', segments: [] }
   const selected = initialSubnetID == null ? subnets[0] : subnets.find((item) => String(item.id) === String(initialSubnetID))
   return selected ? { ...selected } : null
 }

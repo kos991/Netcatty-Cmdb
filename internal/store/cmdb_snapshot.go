@@ -66,7 +66,7 @@ var snapshotApplyOrder = []string{
 	"cmdb_custom_fields", "assets", "servers", "server_apps", "cmdb_assets", "cmdb_asset_interfaces",
 	"cmdb_asset_links", "cmdb_netcatty_links", "cmdb_switch_snapshots", "cmdb_asset_history", "cmdb_work_orders",
 	"cmdb_work_order_asset_links", "cmdb_work_order_logs", "cmdb_inventory_tasks", "cmdb_credentials", "cmdb_labels",
-	"cmdb_asset_software", "ip_subnets", "ip_pool", "asset_logs", "server_app_logs", "cmdb_work_order_attachments",
+	"cmdb_asset_software", "ip_subnets", "ip_subnet_segments", "ip_pool", "asset_logs", "server_app_logs", "cmdb_work_order_attachments",
 }
 
 func (s *Store) ExportCmdbSnapshot(scope ProjectScope, options SnapshotExportOptions) (*CmdbSnapshot, error) {
@@ -636,6 +636,7 @@ func isSnapshotHistoryTable(table string) bool {
 }
 
 var snapshotStaticReferences = map[string]map[string]string{
+	"ip_subnet_segments":          {"subnet_id": "ip_subnets"},
 	"asset_logs":                  {"asset_id": "assets"},
 	"assets":                      {"group_id": "cmdb_groups"},
 	"server_apps":                 {"server_id": "servers", "cmdb_asset_id": "cmdb_assets", "group_id": "cmdb_groups"},

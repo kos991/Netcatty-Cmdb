@@ -96,6 +96,9 @@ func (s *Store) ListIPSubnetsForProject(scope ProjectScope) ([]IPSubnet, error) 
 			out[i].Free = max(0, capacity-out[i].Used-out[i].Reserved-out[i].Abnormal)
 		}
 	}
+	if err := s.loadIPSubnetSegments(scope, out); err != nil {
+		return nil, err
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		pi, pj := out[i].Prefix, out[j].Prefix
 		if pi == "" {
@@ -124,6 +127,11 @@ func (s *Store) CreateIPSubnetForProject(scope ProjectScope, v *IPSubnet) (int64
 		v.Category = "专网"
 	}
 	v.CIDR = normalizeSubnetCIDR(v.CIDR, v.Prefix)
+	if v.Segments != nil {
+		if err := validateIPSubnetSegments(v.CIDR, v.Prefix, v.Segments); err != nil {
+			return 0, err
+		}
+	}
 	now := time.Now().Format("2006-01-02 15:04:05")
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -147,6 +155,11 @@ func (s *Store) CreateIPSubnetForProject(scope ProjectScope, v *IPSubnet) (int64
 	v.ID = id
 	v.ProjectID = scope.ProjectID
 	v.Defined = true
+	if v.Segments != nil {
+		if err := replaceIPSubnetSegments(tx, scope.ProjectID, id, v.Segments); err != nil {
+			return 0, err
+		}
+	}
 	if err := backfillSubnetAssetIPs(tx, scope.ProjectID, v); err != nil {
 		return 0, err
 	}
@@ -282,6 +295,11 @@ func (s *Store) GetIPSubnetForProject(scope ProjectScope, id int64) (*IPSubnet, 
 		return nil, err
 	}
 	v.Defined = true
+	loaded := []IPSubnet{v}
+	if err := s.loadIPSubnetSegments(scope, loaded); err != nil {
+		return nil, err
+	}
+	v = loaded[0]
 	return &v, nil
 }
 
@@ -301,6 +319,13 @@ func (s *Store) UpdateIPSubnetForProject(scope ProjectScope, v *IPSubnet) error 
 		v.Category = cur.Category
 	}
 	v.CIDR = normalizeSubnetCIDR(v.CIDR, v.Prefix)
+	if v.Segments != nil {
+		if err := validateIPSubnetSegments(v.CIDR, v.Prefix, v.Segments); err != nil {
+			return err
+		}
+	} else if err := validateIPSubnetSegments(v.CIDR, v.Prefix, cur.Segments); err != nil {
+		return err
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -328,6 +353,11 @@ func (s *Store) UpdateIPSubnetForProject(scope ProjectScope, v *IPSubnet) error 
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("网段不属于当前项目: %w", ErrProjectScopedNotFound)
 	}
+	if v.Segments != nil {
+		if err := replaceIPSubnetSegments(tx, scope.ProjectID, v.ID, v.Segments); err != nil {
+			return err
+		}
+	}
 	if err := backfillSubnetAssetIPs(tx, scope.ProjectID, v); err != nil {
 		return err
 	}
@@ -349,12 +379,20 @@ func (s *Store) DeleteIPSubnetForProject(scope ProjectScope, id int64) error {
 	if count > 0 {
 		return fmt.Errorf("网段「%s」下还有 %d 个 IP，请先转移或删除这些 IP", cur.Name, count)
 	}
-	res, err := s.db.Exec(`DELETE FROM ip_subnets WHERE id=? AND project_id=?`, id, scope.ProjectID)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM ip_subnet_segments WHERE project_id=? AND subnet_id=?`, scope.ProjectID, id); err != nil {
+		return err
+	}
+	res, err := tx.Exec(`DELETE FROM ip_subnets WHERE id=? AND project_id=?`, id, scope.ProjectID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("网段不属于当前项目: %w", ErrProjectScopedNotFound)
 	}
-	return nil
+	return tx.Commit()
 }

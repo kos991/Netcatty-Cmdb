@@ -42,12 +42,13 @@ function IPDetails({ record, onNavigate }) {
   const target = record.owner_type === 'infrastructure' && looksTerminal ? { tableKey: 'assets', id: record.owner_id, keyword: record.asset_code } : declared
   const presentation = ipAddressPresentation(record)
   return <div className="space-y-4"><DefinitionList items={[
-    ['IP 地址', record.ip], ['网段', record.subnet], ['状态', presentation.label], ['占用类型', ownerTypeLabel(record.owner_type)], ['占用对象', record.owner_name || record.asset_code], ['部门', record.department], ['位置', record.room], ['使用人 / 负责人', record.account || record.asset_user], ['备注', record.remark],
+    ['IP 地址', record.ip], ['网段', record.subnet], ['分段', record.segment_name], ['楼层', record.segment_floor], ['状态', presentation.label], ['占用类型', ownerTypeLabel(record.owner_type)], ['占用对象', record.owner_name || record.asset_code], ['部门', record.department], ['位置', record.room], ['使用人 / 负责人', record.account || record.asset_user], ['备注', record.remark],
   ]} />{record.applications?.length ? <div className="space-y-1"><p className="text-xs text-muted-foreground">使用此地址的业务系统</p>{record.applications.map(app => <Button key={app.id} variant="link" size="sm" onClick={() => onNavigate({ tableKey: 'server_apps', id: app.id })}>{app.app_name}</Button>)}</div> : null}{specialIP(record) && <p className="text-xs text-muted-foreground">该地址由网段 CIDR 识别，不可预留或分配。</p>}{target ? <Button variant="outline" size="sm" onClick={() => onNavigate(target)}>查看{ownerTypeLabel(target.tableKey === 'assets' ? 'terminal' : record.owner_type)}</Button> : !specialIP(record) ? <p className="text-xs text-muted-foreground">当前地址未关联资产</p> : null}</div>
 }
 
 export default function NetworkAddressWorkspace({ focusTarget, navigation, onNavigate, onDirtyChange }) {
   const [subnet, setSubnet] = useState('')
+  const [segmentID, setSegmentID] = useState(0)
   const [keyword, setKeyword] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -76,8 +77,8 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
   const summary = useQuery(loadSummary)
   const assets = useQuery(loadAssets, [])
   const networkTypes = useDirectory(loadNetworkTypes)
-  const listLoader = useCallback(() => api.ipEntries({ subnet, keyword: search, status, page, page_size: pageSize }), [subnet, search, status, page, pageSize])
-  const visualLoader = useCallback(() => subnet ? api.ipVisualization({ subnet, page, page_size: pageSize }) : Promise.resolve({ list: [], total: 0 }), [subnet, page, pageSize])
+  const listLoader = useCallback(() => api.ipEntries({ subnet, segment_id: segmentID || undefined, keyword: search, status, page, page_size: pageSize }), [subnet, segmentID, search, status, page, pageSize])
+  const visualLoader = useCallback(() => subnet ? api.ipVisualization({ subnet, segment_id: segmentID || undefined, page, page_size: pageSize }) : Promise.resolve({ list: [], total: 0 }), [subnet, segmentID, page, pageSize])
   const listQuery = useQuery(listLoader)
   const visualQuery = useQuery(visualLoader)
   const query = view === 'grid' ? visualQuery : listQuery
@@ -127,6 +128,7 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
       const record = records.find((item) => focusTarget.id != null ? String(item.id) === String(focusTarget.id) : item.ip === focusTarget.title)
       if (!record) { toast.error('关联的 IP 地址不存在或已移出当前项目'); return }
       setSubnet(record.subnet)
+      setSegmentID(0)
       setKeyword(record.ip)
       setSearch(record.ip)
       setStatus('')
@@ -180,7 +182,7 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
     { key: 'ip', label: 'IP 地址', render: (value, row) => <Button data-ipam-selected={isSelected(row) ? 'true' : undefined} aria-pressed={isSelected(row)} variant="link" className="h-auto p-0 font-mono" onClick={() => setDetail(row)}>{value}</Button> },
     { key: 'status', label: '状态', render: (_, row) => { const presentation = ipAddressPresentation(row); return <StatusPill tone={presentation.kind === 'special' ? 'neutral' : presentation.kind === 'used' ? 'info' : presentation.kind === 'free' ? 'neutral' : 'warning'}>{presentation.label}</StatusPill> } },
     { key: 'owner_type', label: '占用类型', render: value => ownerTypeLabel(value) || '-' },
-    ...textFields([['subnet', '网段'], ['owner_name', '占用对象'], ['account', '使用人'], ['department', '部门'], ['room', '位置']]),
+    ...textFields([['segment_name', '分段'], ['segment_floor', '楼层'], ['subnet', '网段'], ['owner_name', '占用对象'], ['account', '使用人'], ['department', '部门'], ['room', '位置']]),
     { key: 'actions', label: '操作', render: (_, row) => specialIP(row) ? null : <div className="flex">
       <ActionIcon label="编辑 IP" onClick={() => open(row)}><Pencil size={15} /></ActionIcon>
       {!usedIP(row) && !reservedIP(row) && <ActionIcon label="预留 IP" onClick={() => open(row, 'reserve')}><Lock size={15} /></ActionIcon>}
@@ -191,7 +193,9 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
   ]
   const rows = query.error ? [] : query.data?.list || []
   const activeSubnet = (subnets.data || []).find((item) => item.name === subnet)
-  const activeSummary = summary.data?.subnets?.find((item) => item.subnet === subnet) || {}
+  const activeSegments = activeSubnet?.segments || []
+  const selectedSegment = activeSegments.find((item) => Number(item.id) === Number(segmentID))
+  const activeSummary = selectedSegment || summary.data?.subnets?.find((item) => item.subnet === subnet) || {}
   const activeNetwork = activeSubnet || activeSummary
   const subnetGroups = subnetSelectorGroups(subnets.data || [], summary.data?.subnets || [], subnetPickerKeyword)
   return <div data-ipam-page="network" className="cmdb-theme-scope network-address-workspace flex h-full min-h-0 min-w-0 flex-col">
@@ -207,7 +211,7 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
             <SearchBox value={subnetPickerKeyword} onChange={setSubnetPickerKeyword} placeholder="搜索地址池、CIDR、VLAN 或 VNI" className="min-w-0 max-w-none" />
             <div className="mt-2 max-h-64 overflow-y-auto">{subnets.loading ? <p className="px-2 py-5 text-center text-xs text-muted-foreground">加载地址池...</p> : subnets.error ? <ErrorBanner message={subnets.error} onRetry={subnets.reload} /> : subnetGroups.length ? subnetGroups.map((group) => <section key={group.category} data-ipam-subnet-group={group.category}>
               <h3 className="sticky top-0 bg-background px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground">{group.category}</h3>
-              {group.items.map((item) => <button type="button" key={item.id || item.value} data-ipam-subnet-option={item.value} onClick={() => { if (!mayChangePool()) return; setSubnet(item.value); setPage(1); setDetail(null); setSubnetPickerOpen(false); setSubnetPickerKeyword('') }} className={`mb-1 w-full rounded-md px-2.5 py-2 text-left hover:bg-secondary ${subnet === item.value ? 'bg-[color-mix(in_srgb,var(--cmdb-accent)_12%,transparent)] text-[var(--cmdb-accent)]' : ''}`}><strong className="block truncate text-xs" title={item.label}>{item.label}</strong><span className="mt-0.5 block truncate text-[11px] text-muted-foreground" title={item.description}>{item.description}</span></button>)}
+              {group.items.map((item) => <button type="button" key={item.id || item.value} data-ipam-subnet-option={item.value} onClick={() => { if (!mayChangePool()) return; setSubnet(item.value); setSegmentID(0); setPage(1); setDetail(null); setSubnetPickerOpen(false); setSubnetPickerKeyword('') }} className={`mb-1 w-full rounded-md px-2.5 py-2 text-left hover:bg-secondary ${subnet === item.value ? 'bg-[color-mix(in_srgb,var(--cmdb-accent)_12%,transparent)] text-[var(--cmdb-accent)]' : ''}`}><strong className="block truncate text-xs" title={item.label}>{item.label}</strong><span className="mt-0.5 block truncate text-[11px] text-muted-foreground" title={item.description}>{item.description}</span></button>)}
             </section>) : <p className="px-2 py-5 text-center text-xs text-muted-foreground">暂无匹配地址池</p>}</div>
             <Button data-ipam-edit-subnet type="button" variant="ghost" className="mt-2 h-[34px] w-full justify-start gap-2 border-t border-border text-xs" disabled={!activeSubnet?.id || subnets.loading || !!subnets.error} onClick={() => { if (!mayChangePool()) return; setSubnetPickerOpen(false); setSettings({ initialSubnetID: activeSubnet.id }) }}><Pencil size={14} />编辑当前地址池</Button>
           </DropdownContent>
@@ -222,7 +226,7 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
               <div className="flex justify-end gap-2"><Button type="button" variant="outline" size="sm" onClick={() => { setKeyword(''); setSearch(''); setStatus(''); setPage(1); setDetail(null); setFilterOpen(false) }}>重置</Button><Button type="button" size="sm" onClick={() => { setSearch(keyword.trim()); if (keyword.trim() || status) setView('table'); setPage(1); setDetail(null); setFilterOpen(false) }}>查询</Button></div>
             </DropdownContent>
           </Dropdown>
-          <AssetTransferMenu importTitle="导入 IP" importer={api.importIPs} onImported={refresh} exporter={() => api.exportIPs({ subnet, keyword: search, status })} />
+          <AssetTransferMenu importTitle="导入 IP" importer={api.importIPs} onImported={refresh} exporter={() => api.exportIPs({ subnet, segment_id: segmentID || undefined, keyword: search, status })} />
           <span aria-hidden="true" className="ml-1 mr-0 h-4 w-px shrink-0 bg-border" />
           {navigation}
       </VaultPageHeader>
@@ -230,9 +234,11 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
         <div className="col-span-2 border-b border-border/70 px-4 py-2 lg:col-span-1 lg:border-b-0 lg:border-r">
           <strong className="text-sm font-semibold">{subnet || '请选择地址池'}</strong>
           <p data-subnet-network-fields className="mt-1 font-mono text-[11px] text-muted-foreground">{activeNetwork.cidr || activeNetwork.prefix || 'CIDR 未配置'} · 网关：{activeNetwork.gateway || '未配置'} · VLAN：{activeNetwork.vlan || '未配置'}{activeNetwork.vni ? ` · VNI：${activeNetwork.vni}` : ''}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{activeSegments.length ? `${activeSegments.length} 个分段 · 已规划 ${activeSegments.reduce((total, row) => total + (row.total || 0), 0)} 个可用地址` : '尚未规划地址分段'}</p>
         </div>
         {[['地址总数', visualQuery.loading || visualQuery.error ? '—' : visualQuery.data?.total ?? 0], ['已占用', activeSummary.used || 0], ['已预留', activeSummary.reserved || 0], ['空闲', activeSummary.free || 0], ['异常', activeSummary.abnormal || 0]].map(([label, value]) => <div key={label} className="border-r border-border/70 px-3 py-2 last:border-r-0"><span className="text-[10px] text-muted-foreground">{label}</span><strong className="mt-0.5 block font-mono text-base tabular-nums">{value}</strong></div>)}
       </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 px-4 py-2" aria-label="地址分段筛选"><span className="text-xs text-muted-foreground">地址分段</span><SelectControl aria-label="地址分段" className="min-w-[180px] max-w-[360px]" value={segmentID} onChange={(value) => { setSegmentID(Number(value)); setPage(1); setDetail(null) }} options={[{ value: 0, label: '全部分段 / 整个地址池' }, ...activeSegments.map((item) => ({ value: item.id, label: `${item.name}${item.floor ? ` · ${item.floor}` : ''} · ${item.start_ip}–${item.end_ip}` }))]} />{selectedSegment && <span className="text-xs text-muted-foreground">已用 {selectedSegment.used} · 预留 {selectedSegment.reserved} · 空闲 {selectedSegment.free} · 异常 {selectedSegment.abnormal} · {selectedSegment.remark || '无备注'}</span>}</div>
       <Toolbar><div role="group" aria-label="地址显示方式" className="inline-flex overflow-hidden rounded-md border border-border"><Button type="button" variant="ghost" size="sm" aria-pressed={view === 'grid'} className={`rounded-none border-r border-border text-xs ${view === 'grid' ? 'bg-[color-mix(in_srgb,var(--cmdb-accent)_12%,transparent)] text-[var(--cmdb-accent)]' : ''}`} onClick={() => { if (view === 'grid') return; setView('grid'); setSearch(''); setKeyword(''); setStatus(''); setPage(1); setDetail(null) }}>方格</Button><Button type="button" variant="ghost" size="sm" aria-pressed={view === 'table'} className={`rounded-none text-xs ${view === 'table' ? 'bg-[color-mix(in_srgb,var(--cmdb-accent)_12%,transparent)] text-[var(--cmdb-accent)]' : ''}`} onClick={() => { if (view === 'table') return; setView('table'); setPage(1); setDetail(null) }}>列表</Button></div><div className="ml-auto flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground"><span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm border border-primary/60 bg-primary/15" />已占用</span><span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm border border-border/70 bg-transparent" />空闲</span><span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm border border-dashed border-amber-500/60 bg-amber-500/10" />预留</span><span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm border border-destructive/70 bg-destructive/10" />异常</span><span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm border border-dashed border-border/70 bg-muted/30" />网络 / 广播（只读）</span></div></Toolbar>
       {(query.error || summary.error || subnets.error || assets.error) && <ErrorBanner message={query.error || summary.error || subnets.error || assets.error} onRetry={refresh} />}
       <div data-ipam-address-layout className={`network-address-layout${detail ? ' has-ip-detail' : ''}`}>
@@ -255,8 +261,8 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
       {(view === 'table' || subnet) && (() => { const total = query.data?.total || 0; const pages = Math.max(1, Math.ceil(total / pageSize)); const sizes = view === 'grid' ? [96, 128, 256, 500] : [20, 50, 96, 100, 128, 256, 500]; return <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 px-4 py-2 text-xs text-muted-foreground"><span>{`共 ${total} 条 · 第 ${page} / ${pages} 页`}</span><div className="flex items-center gap-2"><SelectControl value={pageSize} onChange={(size) => { setPage(1); setPageSize(Number(size)); setDetail(null) }} options={sizes.map((size) => ({ value: size, label: `${size} 条 / 页` }))} className="w-[108px] min-w-0" /><Button type="button" variant="outline" className="h-[29px] px-3 text-[11px]" disabled={page <= 1} onClick={() => { setPage(page - 1); setDetail(null) }}>上一页</Button><Button type="button" variant="outline" className="h-[29px] px-3 text-[11px]" disabled={page >= pages} onClick={() => { setPage(page + 1); setDetail(null) }}>下一页</Button></div></footer> })()}
     </section>
     {settings && <SubnetMaintenance open onOpenChange={(next) => { if (!next && !subnetBusy) setSettings(null) }} onDirtyChange={setSubnetDirty} onBusyChange={setSubnetBusy} initialCreate={settings.initialCreate} initialSubnetID={settings.initialSubnetID} networkTypes={(networkTypes.data || []).map((item) => item.name)} onChanged={({ name, previousName, removed }) => {
-      if (removed) { if (subnet === previousName) { setSubnet(''); setPage(1); setDetail(null) } }
-      else if (name) { setSubnet(name); setPage(1); setDetail(null) }
+      if (removed) { if (subnet === previousName) { setSubnet(''); setSegmentID(0); setPage(1); setDetail(null) } }
+      else if (name) { setSubnet(name); setSegmentID(0); setPage(1); setDetail(null) }
       refresh()
     }} />}
     {suggesting && <SubnetSuggestions open onOpenChange={(next) => { if (!next) setSuggesting(false) }} onDirtyChange={setSuggestionDirty} onBusyChange={setSuggestionBusy} networkTypes={(networkTypes.data || []).map((item) => item.name)} onCreated={() => refresh()} />}

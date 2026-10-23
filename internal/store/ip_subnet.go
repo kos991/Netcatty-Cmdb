@@ -49,6 +49,7 @@ type IPSubnet struct {
 	SortOrder int64  `json:"sort_order"`
 	Remark    string `json:"remark"`
 	Total     int    `json:"total"`
+	Segments  []IPSubnetSegment `json:"segments"`
 	Used      int    `json:"used"`
 	Reserved  int    `json:"reserved"`
 	Abnormal  int    `json:"abnormal"`

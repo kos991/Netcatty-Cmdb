@@ -701,6 +701,11 @@ func (s *Server) handleListIPPool(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+	segmentID, _ := strconv.ParseInt(q.Get("segment_id"), 10, 64)
+	if segmentID > 0 && strings.TrimSpace(q.Get("subnet")) == "" { writeErr(w, 400, "请选择分段所属的地址池"); return }
+	if segmentID > 0 {
+		if _, err := s.Store.IPSubnetSegmentForProject(scope, q.Get("subnet"), segmentID); err != nil { writeErr(w, 400, err.Error()); return }
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -709,6 +714,7 @@ func (s *Server) handleListIPPool(w http.ResponseWriter, r *http.Request) {
 	}
 	list, total, err := s.Store.QueryIPEntriesForProject(scope, store.IPEntryQuery{
 		Subnet:   q.Get("subnet"),
+		SegmentID: segmentID,
 		Status:   q.Get("status"),
 		Keyword:  q.Get("keyword"),
 		Page:     page,

@@ -31,6 +31,7 @@ var projectScopedTables = []string{
 	"asset_logs",
 	"ip_pool",
 	"ip_subnets",
+	"ip_subnet_segments",
 	"servers",
 	"server_apps",
 	"server_app_logs",

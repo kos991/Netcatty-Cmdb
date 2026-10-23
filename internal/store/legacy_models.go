@@ -187,6 +187,9 @@ type IPEntry struct {
 	ProjectID    int64       `json:"project_id"`
 	Subnet       string      `json:"subnet"`
 	IP           string      `json:"ip"`
+	SegmentID    int64       `json:"segment_id"`
+	SegmentName  string      `json:"segment_name"`
+	SegmentFloor string      `json:"segment_floor"`
 	Department   string      `json:"department"`
 	Room         string      `json:"room"`
 	Account      string      `json:"account"`
