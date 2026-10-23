@@ -251,14 +251,41 @@ export default function NetworkAddressWorkspace({ focusTarget, navigation, onNav
       {(query.error || summary.error || subnets.error || assets.error) && <ErrorBanner message={query.error || summary.error || subnets.error || assets.error} onRetry={refresh} />}
       <div data-ipam-address-layout className={`network-address-layout${detail ? ' has-ip-detail' : ''}`}>
       <div ref={addressPane} className="flex min-h-0 min-w-0 flex-col overflow-hidden [&_tr:has([data-ipam-selected=true])>td]:bg-[color-mix(in_srgb,var(--cmdb-accent)_12%,transparent)] [&_tr:has([data-ipam-selected=true])]:ring-2 [&_tr:has([data-ipam-selected=true])]:ring-inset [&_tr:has([data-ipam-selected=true])]:ring-[var(--cmdb-accent)]">
-      {view === 'table' ? <DataTable dense rows={rows} loading={query.loading} columns={columns} /> : <div data-ipam-grid-scroll className="min-h-0 flex-1 overflow-auto p-3">{query.loading ? <p className="text-sm text-muted-foreground">加载中...</p> : !rows.length ? <p className="p-6 text-center text-xs text-muted-foreground">没有匹配地址</p> : <div data-ipam-address-grid className="grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-[5px]">{rows.map((row) => {
-        const presentation = ipAddressPresentation(row)
-        const used = presentation.kind === 'used'
-        const abnormal = presentation.kind === 'abnormal'
-        const special = presentation.kind === 'special'
-        const address = String(row.ip || '').split('.').pop()
-        return <button type="button" key={row.id || row.ip} data-ipam-selected={isSelected(row) ? 'true' : undefined} aria-pressed={isSelected(row)} onClick={() => setDetail(row)} title={[row.ip, presentation.label, row.owner_name, row.account, row.department, row.room, row.remark].filter(Boolean).join(' · ')} aria-label={`${row.ip} ${presentation.label}`} className={`h-9 min-w-0 rounded border px-1 text-center font-mono text-xs tabular-nums focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${isSelected(row) ? 'ring-2 ring-[var(--cmdb-accent)] ring-offset-1 ring-offset-background' : ''} ${special ? 'border-dashed border-border/70 bg-muted/30 text-muted-foreground' : abnormal ? 'border-destructive/70 bg-destructive/10 text-destructive' : used ? 'border-primary/60 bg-primary/15 text-primary' : reservedIP(row) ? 'border-dashed border-amber-500/60 bg-amber-500/10 text-amber-800 hover:bg-amber-500/15 dark:text-amber-300' : 'border-border/70 bg-transparent text-muted-foreground hover:bg-muted/60'}`}><span data-ipam-address-value>{address}</span></button>
-      })}</div>}</div>}
+      {view === 'table' ? <DataTable dense rows={rows} loading={query.loading} columns={columns} /> : <div data-ipam-grid-scroll className="min-h-0 flex-1 overflow-auto p-3">{query.loading ? <p className="text-sm text-muted-foreground">加载中...</p> : !rows.length ? <p className="p-6 text-center text-xs text-muted-foreground">没有匹配地址</p> : <>
+        {query.data?.segments?.length ? (
+          <div className="space-y-3">
+            {query.data.segments.map(seg => (
+              <div key={seg.id} className="space-y-1 rounded-md border border-border/20 bg-secondary/30 p-2">
+                <button type="button" className="flex w-full items-center justify-between gap-3 text-left text-xs font-medium hover:text-foreground" onClick={() => { setSegmentID(Number(seg.id)); setPage(1); setDetail(null) }}>
+                  <span className="flex-1 truncate font-semibold">{seg.name}{seg.floor ? ` · ${seg.floor}` : ''}</span>
+                  <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">{seg.start_ip}–{seg.end_ip}</span>
+                </button>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-[5px]">
+                  {seg.entries?.map((row) => {
+                    const presentation = ipAddressPresentation(row)
+                    const used = presentation.kind === 'used'
+                    const abnormal = presentation.kind === 'abnormal'
+                    const special = presentation.kind === 'special'
+                    const address = String(row.ip || '').split('.').pop()
+                    return <button type="button" key={row.id || row.ip} data-ipam-selected={isSelected(row) ? 'true' : undefined} aria-pressed={isSelected(row)} onClick={() => setDetail(row)} title={[row.ip, presentation.label, row.owner_name, row.account, row.department, row.room, row.remark].filter(Boolean).join(' - ')} aria-label={`${row.ip} ${presentation.label}`} className={`h-9 min-w-0 rounded border px-1 text-center font-mono text-xs tabular-nums focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${isSelected(row) ? 'ring-2 ring-[var(--cmdb-accent)] ring-offset-1 ring-offset-background' : ''} ${special ? 'border-dashed border-border/70 bg-muted/30 text-muted-foreground' : abnormal ? 'border-destructive/70 bg-destructive/10 text-destructive' : used ? 'border-primary/60 bg-primary/15 text-primary' : 'border-border/70 bg-transparent text-muted-foreground hover:bg-muted/60'}`}>{address}</button>
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div data-ipam-address-grid className="grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-[5px]">
+            {rows.map((row) => {
+              const presentation = ipAddressPresentation(row)
+              const used = presentation.kind === 'used'
+              const abnormal = presentation.kind === 'abnormal'
+              const special = presentation.kind === 'special'
+              const address = String(row.ip || '').split('.').pop()
+              return <button type="button" key={row.id || row.ip} data-ipam-selected={isSelected(row) ? 'true' : undefined} aria-pressed={isSelected(row)} onClick={() => setDetail(row)} title={[row.ip, presentation.label, row.owner_name, row.account, row.department, row.room, row.remark].filter(Boolean).join(' - ')} aria-label={`${row.ip} ${presentation.label}`} className={`h-9 min-w-0 rounded border px-1 text-center font-mono text-xs tabular-nums focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${isSelected(row) ? 'ring-2 ring-[var(--cmdb-accent)] ring-offset-1 ring-offset-background' : ''} ${special ? 'border-dashed border-border/70 bg-muted/30 text-muted-foreground' : abnormal ? 'border-destructive/70 bg-destructive/10 text-destructive' : used ? 'border-primary/60 bg-primary/15 text-primary' : 'border-border/70 bg-transparent text-muted-foreground hover:bg-muted/60'}`}>{address}</button>
+            })}
+          </div>
+        )}
+      </>
       </div>
       {detail && <aside aria-label="IP 地址详情" className="cmdb-record-shell network-ip-detail flex min-h-0 min-w-0 flex-col bg-background">
         <header className="cmdb-record-header"><div className="min-w-0 flex-1"><h2 className="break-all font-mono text-sm font-semibold">{detail.ip}</h2><p className="mt-1 text-[11px] text-muted-foreground">IP 地址详情 · {ipAddressPresentation(detail).label}</p></div><ActionIcon label="关闭 IP 详情" onClick={() => setDetail(null)}><X size={16} /></ActionIcon></header>
