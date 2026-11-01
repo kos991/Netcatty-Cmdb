@@ -1,97 +1,43 @@
-# Netcatty-CMDB
+# Cmdb 原生桌面
 
-[![CI](https://github.com/kos991/Netcatty-Cmdb/actions/workflows/ci.yml/badge.svg)](https://github.com/kos991/Netcatty-Cmdb/actions/workflows/ci.yml)
-[![Release](https://github.com/kos991/Netcatty-Cmdb/actions/workflows/release.yml/badge.svg)](https://github.com/kos991/Netcatty-Cmdb/actions/workflows/release.yml)
+[![Windows CI](https://github.com/kos991/Netcatty-Cmdb/actions/workflows/rust.yml/badge.svg)](https://github.com/kos991/Netcatty-Cmdb/actions/workflows/rust.yml)
 
-Netcatty-CMDB 将本项目的 Go + SQLite CMDB 服务作为内置服务集成到
-[Netcatty](https://github.com/binaricat/Netcatty) 桌面客户端。Netcatty 保留 SSH、SFTP、终端和主机管理能力，
-Cmdb 提供设备资产统一查询、终端资产、基础设施、业务系统、组织架构、IPAM/IP、统计与履历和配置中心，直接复用 Netcatty 原生组件。
+当前版本：`1.0.202610221542`，以 `VERSION` 为准。本分支是 Rust + GPUI Windows 原生桌面开发构建，没有创建新发布版本。
 
-当前版本：`1.0.202610221542`（格式 `1.0.YYYYMMDDHHmm`，以 `VERSION` 为准）。正式架构为 **Netcatty + Go + SQLite** 集成版。后续规划的 **Rust + GPUI 原生桌面版本** 架构已记录在 [GPUI 架构文档](docs/GPUI-Architecture.md)，暂未启动实施。
-## 集成结构
+当前已实现原生窗口、暗色界面、可新增／切换／关闭的标签、左右分栏与合并、页面导航和键盘操作。Logo 只有图形，无“资产全景”文字，也没有额外全局搜索或通知工具。窗口由 GPUI 绘制，不使用 HTML、WebView 或 Electron。
 
-```text
-Netcatty 桌面客户端
-├─ 原有 SSH / SFTP / 终端能力
-├─ 原生 Cmdb 工作区
-│  ├─ 设备资产（终端资产 / 基础设施 / 业务系统）
-│  ├─ 组织架构、IPAM/IP
-│  ├─ 统计与履历
-│  └─ 配置中心
-└─ 自动管理 cmdb-server 子进程
+业务页面保持已确认的分类与字段语义，未迁移的业务明确显示“业务服务尚未接入”，不会注入原型示例数据、生成虚假资产或把空列表标成真实查询结果。资产 CRUD、组织维护、地址分配、机柜编辑、工单、数据库、认证、采集与导入导出尚未实现。本次只交付可运行的桌面工作区，不宣称完成全业务迁移。
 
-cmdb-server
-├─ Go HTTP API
-└─ SQLite 数据库（只提供本地 API，不包含浏览器界面）
-```
+## 运行
 
-Netcatty 前端不直接访问 SQLite。桌面主进程在固定回环地址 `http://127.0.0.1:18080`
-启动 CMDB 服务，原生工作区通过 preload IPC bridge 调用服务；应用退出时会回收服务进程。
+从本分支 [Windows CI](https://github.com/kos991/Netcatty-Cmdb/actions/workflows/rust.yml) 的成功运行下载 `cmdb-desktop-windows-x64` 制品，解压后运行 `cmdb-desktop.exe`。制品同时包含 `SHA256SUMS.txt` 与实际解析的 `Cargo.lock`。这是开发构建，不是安装器或正式 Release。
 
-## 仓库目录
+- 点击 `+` 选择页面，可重复打开同类页面。
+- 点击标签切换，点击标签上的 `×` 关闭；全部关闭后可以重新打开。
+- 点击“左右分栏”并排查看两个标签；点击右侧对应标签会交换两栏；“合并分栏”恢复单栏。
+- `Ctrl+T` 打开标签菜单，`Ctrl+W` 关闭当前标签，`Ctrl+\` 切换分栏，`Esc` 关闭菜单。
+- 最小化、最大化／还原、关闭使用真实 Windows 标题栏。关闭最后一个窗口退出进程。
+
+## 源码与构建
 
 ```text
-internal/                       Go API 与 SQLite 存储层
-integrations/netcatty/cmdb/      唯一正式界面源码（Netcatty 原生组件）
-integrations/netcatty/update/   集成版自动更新（指向本仓库 Release）
-integrations/netcatty/electron/ CMDB 子进程生命周期模块与测试
-integrations/netcatty/upstream.json  已验证的 Netcatty 上游提交
-integrations/netcatty/patch/    离线 Cmdb 补丁的安装脚本与说明
-scripts/prepare-netcatty.mjs    可重复的 Netcatty 集成装配器
-scripts/build-cmdb-patch.mjs    生成离线 Cmdb 补丁包
-.github/workflows/ci.yml        CMDB、原生 Bridge 和 Netcatty 集成验证
-.github/workflows/release.yml   Windows 集成版客户端与离线补丁发布
-.github/workflows/upstream-sync.yml  每天检查上游 Netcatty 新版本并开 PR
+crates/cmdb-desktop/src/main.rs   GPUI 桌面 binary 与事件绑定
+crates/cmdb-engine/src/lib.rs     无 UI 依赖的标签／分栏状态规则
+.github/workflows/rust.yml       Windows x64 CI 与 exe 制品
+rust-toolchain.toml              固定 Rust 1.91.1
+.cargo/config.toml               MSVC 静态运行库与 GPUI Windows 配置
 ```
 
-## 交互设计原型
+GPUI 固定为官方 Zed [v0.218.7](https://github.com/zed-industries/zed/tree/41bab92dac34777ae4256e5041f7b7236fd16cdd) 的提交 `41bab92dac34777ae4256e5041f7b7236fd16cdd`。Rust 版本遵循该提交的官方工具链文件。Windows 构建使用 `windows-2022`、MSVC x64 和 Windows SDK；依赖依据 [官方 Windows 构建文档](https://github.com/zed-industries/zed/blob/41bab92dac34777ae4256e5041f7b7236fd16cdd/docs/src/development/windows.md)。
 
-当前评审原型、预览图片及资源说明见 [Cmdb 交互设计原型](docs/prototypes/cmdb/README.md)。
-本地可直接打开 [HTML 交互入口](docs/prototypes/cmdb/device-assets-preview.html#terminal)，无需构建或启动后端。
-原型仅用于设计评审，不是正式浏览器版产品；不连接真实数据，不能据此认定正式客户端已实现相同布局。
+按用户约束，编译在 GitHub Actions 完成，不在本机运行 `cargo build`。CI 执行共享状态规则测试与 `cargo build --release -p cmdb-desktop --bin cmdb-desktop --target x86_64-pc-windows-msvc`，push 到 `feature/**`、`fix/**`、main、PR 和手动触发均可运行。旧 Go／Netcatty CI、发行与上游同步工作流已移除，不再调用被删除的源码。没有自动发布任务。
 
-## 本地验证
+## 设计与边界
 
-测试并构建内置服务：
+暗色层次、标签与并排工作区参考 [Tern](https://docs.stencil.so/tern/)；不引入 Tern 插件 SDK，不重画既有业务原型。原型继续保存在 [docs/prototypes/cmdb](docs/prototypes/cmdb/README.md)，仅是设计资料，不能作为原生窗口运行证据。
 
-```powershell
-go test ./...
-go build -o build/cmdb-server.exe .
-```
+四层职责及已实现／未实现范围见 [GPUI 架构文档](docs/GPUI-Architecture.md)，操作见 [使用说明](使用说明.md)。`cmdbd` 与 `cmdb-agent` 仍是未实施职责，不编译空服务、不监听端口，也不声明数据库兼容。当前程序不访问旧 `%APPDATA%\netcatty` 数据，关闭后标签状态不保存。
 
-准备一份干净的 Netcatty 集成源码：
+所有变更通过独立分支和 PR，不直接推送 main；版本保持 `VERSION`，没有发布授权时不打 tag、不生成新版本号。
 
-```powershell
-$upstream = Get-Content integrations/netcatty/upstream.json | ConvertFrom-Json
-git clone $upstream.repository build/netcatty
-git -C build/netcatty checkout $upstream.commit
-node scripts/prepare-netcatty.mjs --target build/netcatty
-cd build/netcatty
-npm.cmd install --ignore-scripts
-npm.cmd run build
-```
-
-装配器会检查上游提交和修改锚点。提交不一致或上游结构变化时会直接失败，防止生成未经验证的客户端。
-
-## 分支、PR 与发布
-
-- `main` 只接受 PR 合并。每个修复或新功能单独开分支并提交 PR，按类型打 `fix` 或 `feature` 标签；PR 必须通过 CI。
-- 每次推送到 `main` 和每个 PR 都会运行：版本格式校验、原生界面数据测试、Go 全量测试与服务端构建、UOS/Kylin 探针及 Python CLI、固定 Netcatty 上游装配、服务生命周期与 Bridge 测试、Netcatty lint 与完整前端构建。
-- 发布：在 PR 中把 `VERSION` 和 `netcatty/package.json` 改为发布时的 `1.0.YYYYMMDDHHmm`，合并后在 `main` 上打同名 tag 并推送；同一天可多次发布。
-- tag 必须指向已合并到 `main` 的提交，否则 Release 失败。Release 只构建 Windows x64：完整安装包 `Netcatty-Cmdb-<版本>-win-x64.exe`、离线补丁图形安装器 `Netcatty-Cmdb-patch-<版本>-win-x64.exe` 和 SHA-256 校验文件。宿主应用版本保持上游 Netcatty 版本，文件名使用 Cmdb 版本。
-- Release 说明按自上个 tag 以来合并的 PR 自动汇总，分为“修复”“新功能”“其他变更”（见 `.github/release.yml`）。
-- 宿主“软件更新”只检查上游 Netcatty 并提示，不下载或安装上游官方包，防止覆盖 Cmdb。Cmdb 升级用完整安装包或补丁安装器；补丁只替换 `app.asar` 和 `resources/cmdb`，安装前校验本机宿主 Netcatty 的上游提交与补丁一致。两者都不修改 `%APPDATA%\netcatty` 中的用户数据。
-- 上游同步：`upstream-sync.yml` 每天检查上游 Netcatty 最新正式版本，有新版本时更新 `upstream.json`（含 mosh/et 版本）、尝试装配并开 PR，PR 正文写明装配是否成功。不会自动合并或发布；装配失败时需要在该分支上人工适配。
-
-## 数据与功能边界
-
-- 数据库默认位于 Netcatty 用户数据目录下的 `assets.db`。
-- 删除资产采用注销归档，不物理删除历史记录。
-- 资产导出使用当前筛选条件，导出全部匹配记录。
-- 开发环境可通过 `NETCATTY_CMDB_SERVER_PATH` 和 `NETCATTY_CMDB_DB_PATH` 指定服务与数据库。
-- 插件网络权限仅允许访问 `http://127.0.0.1:18080`。
-
-## 许可证
-
-本仓库自有代码采用 [MIT License](LICENSE)。发布的 Netcatty 集成客户端包含上游 Netcatty，遵循其
-GPL-3.0-or-later 许可证；Netcatty 的版权与商标归其原作者所有。
+本仓库自有代码采用 [MIT License](LICENSE)，GPUI 遵循其上游 Apache-2.0 许可证。
