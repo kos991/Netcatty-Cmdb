@@ -1,0 +1,94 @@
+/* 独立设置页覆盖；共享弹窗与业务表单仍沿用原模块。 */
+#standalone-settings { flex: 1; min-width: 0; min-height: 0; font-size: 14px; container: standalone-settings / inline-size; }
+#standalone-settings[hidden] { display: none; }
+:root[data-preview-theme="dark"] #standalone-settings { --bg: #1b1b24; --surface: #20202a; --muted-surface: #292934; --border: #363640; --fg: #e2e2e8; --muted: #a1a1b1; --accent: #b9add4; --accent-soft: #2d293a; }
+#standalone-settings .cmdb-settings-dialog { display: flex; flex-direction: column; width: 100%; height: 100%; max-height: none; border: 0; border-radius: 0; }
+#standalone-settings .cmdb-settings-header { min-height: 54px; padding: 12px 24px; background: var(--bg); }
+#standalone-settings .cmdb-settings-header h2 { font-size: 20px; line-height: 28px; }
+#standalone-settings .cmdb-settings-layout { grid-template-columns: 220px minmax(0, 1fr); }
+#standalone-settings .cmdb-settings-nav { min-width: 0; padding: 16px 12px; background: var(--bg); }
+#standalone-settings #cmdb-settings-search-open { padding: 0 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); font-size: 14px; }
+#standalone-settings .cmdb-settings-search-input > input { font-size: 14px; border-radius: 4px; }
+#standalone-settings #cmdb-settings-search-results { position: relative; top: auto; margin-top: 8px; border-radius: 4px; box-shadow: none; }
+#standalone-settings #cmdb-settings-search-results strong { font-size: 14px; }
+#standalone-settings #cmdb-settings-search-results :is(small, p) { font-size: 13px; }
+#standalone-settings .cmdb-settings-tabs { display: flex; flex-direction: column; align-items: stretch; align-self: stretch; gap: 4px; margin: 8px 0 0; padding: 0; background: transparent; }
+#standalone-settings .cmdb-settings-tabs [role="tab"] { flex: none; justify-content: flex-start; height: 38px; gap: 9px; padding: 0 10px; border-radius: 4px; font-size: 14px; }
+#standalone-settings .cmdb-settings-tabs [role="tab"] > svg { width: 16px; height: 16px; flex-shrink: 0; }
+#standalone-settings .cmdb-settings-tabs [role="tab"][aria-selected="true"] { color: var(--fg); background: var(--accent-soft); box-shadow: none; }
+#standalone-settings .cmdb-settings-main { padding: 20px 28px; container: settings-configuration / inline-size; }
+#standalone-settings .cmdb-settings-heading { align-items: flex-start; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 24px; }
+#standalone-settings .cmdb-settings-heading > div { min-width: 0; flex-wrap: wrap; gap: 8px; }
+#standalone-settings .cmdb-settings-heading h2 { font-size: 18px; line-height: 26px; }
+#standalone-settings .cmdb-settings-heading > span { font-size: 13px; }
+#standalone-settings .cmdb-version-badge { flex-wrap: wrap; gap: 6px; margin-left: 0; }
+#standalone-settings .cmdb-version-tag { height: auto; min-height: 26px; border-radius: 4px; font-size: 13px; }
+#standalone-settings .cmdb-version-check { height: 28px; font-size: 13px; border-radius: 4px; }
+#standalone-settings .cmdb-version-note { white-space: normal; overflow-wrap: anywhere; font-size: 13px; }
+#standalone-settings .cmdb-settings-panel { padding: 4px; }
+#standalone-settings .cmdb-setting-section { min-width: 0; margin-bottom: 24px; }
+#standalone-settings .cmdb-setting-section > header { gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+#standalone-settings .cmdb-setting-section h3 { color: var(--muted); font-size: 14px; font-weight: 500; }
+#standalone-settings .cmdb-setting-card { border-radius: 5px; padding: 0 16px; }
+#standalone-settings .cmdb-setting-row { min-height: 72px; padding: 13px 0; gap: 12px; flex-wrap: wrap; }
+#standalone-settings .cmdb-setting-row > div:first-child { flex-basis: 180px; }
+#standalone-settings .cmdb-setting-row strong { font-size: 14px; line-height: 22px; }
+#standalone-settings .cmdb-setting-row p { font-size: 13px; line-height: 20px; white-space: normal; overflow-wrap: anywhere; }
+#standalone-settings .cmdb-setting-control { min-width: 0; max-width: 100%; }
+#standalone-settings .cmdb-setting-control input { width: 250px; height: 34px; font-size: 14px; border-radius: 4px; box-shadow: none; }
+#standalone-settings .cmdb-setting-control input[readonly] { font-size: 14px; }
+#standalone-settings .cmdb-setting-control button:not(.cmdb-native-switch),
+#standalone-settings .cmdb-setting-section > header button { height: 34px; max-width: 100%; font-size: 14px; border-radius: 4px; }
+#standalone-settings .cmdb-setting-value { font-size: 14px; }
+#standalone-settings .cmdb-control-stack { max-width: 100%; }
+#standalone-settings .cmdb-settings-footer { font-size: 13px; line-height: 20px; text-align: left; padding: 10px 16px; overflow-wrap: anywhere; }
+#standalone-settings button:disabled { opacity: .45; cursor: not-allowed; }
+@container settings-configuration (min-width: 860px) {
+  #standalone-settings .cmdb-settings-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; align-items: start; gap: 24px; }
+  #standalone-settings .cmdb-settings-panel[hidden] { display: none; }
+  #standalone-settings .cmdb-setting-section { margin-bottom: 0; }
+  #standalone-settings .cmdb-setting-section:only-child { grid-column: 1 / -1; }
+}
+@container standalone-settings (max-width: 760px) {
+  #standalone-settings .cmdb-settings-layout { grid-template-columns: 176px minmax(0, 1fr); }
+  #standalone-settings .cmdb-settings-main { padding: 16px; }
+  #standalone-settings .cmdb-settings-heading > div > svg { display: none; }
+  #standalone-settings .cmdb-version-badge { flex-basis: 100%; }
+}
+@container standalone-settings (max-width: 480px) {
+  #standalone-settings .cmdb-settings-header { min-height: 46px; padding: 8px 12px; }
+  #standalone-settings .cmdb-settings-layout { grid-template-columns: minmax(0, 1fr); overflow: auto; align-content: start; }
+  #standalone-settings .cmdb-settings-nav { overflow: visible; padding: 12px; border-right: 0; border-bottom: 1px solid var(--border); }
+  #standalone-settings .cmdb-settings-tabs { gap: 2px; }
+  #standalone-settings .cmdb-settings-tabs [role="tab"] { height: 34px; }
+  #standalone-settings .cmdb-settings-main { overflow: visible; padding: 16px 12px; }
+  #standalone-settings .cmdb-settings-heading { margin-bottom: 16px; }
+  #standalone-settings .cmdb-settings-panels, #standalone-settings .cmdb-settings-panel { overflow: visible; height: auto; }
+  #standalone-settings .cmdb-setting-control { width: 100%; }
+  #standalone-settings .cmdb-setting-control input { width: 100%; }
+  #standalone-settings .cmdb-control-stack { align-items: stretch; }
+  #standalone-settings .cmdb-control-stack > div { justify-content: flex-start; }
+}
+/* 顶层对话框仍是设置根节点的子元素；覆盖仅作用于独立入口。 */
+#standalone-settings :is(#cmdb-settings-catalog, .cmdb-operation-dialog) { border-radius: 5px; font-size: 14px; }
+#standalone-settings #cmdb-settings-catalog :is(.cmdb-catalog-fields, .cmdb-catalog-search, input, select, textarea, button),
+#standalone-settings .cmdb-operation-dialog :is(input, select, button, .cmdb-operation-format) { border-radius: 4px; }
+#standalone-settings #cmdb-settings-catalog :is(.cmdb-catalog-create button, #cmdb-catalog-entries .cmdb-catalog-select, .cmdb-catalog-list-name, .cmdb-catalog-field input, .cmdb-catalog-field select, .cmdb-catalog-field textarea, .dialog-footer button) { font-size: 14px; }
+#standalone-settings #cmdb-settings-catalog :is(.cmdb-catalog-context, .cmdb-catalog-list-detail, .cmdb-catalog-list-sort, .cmdb-catalog-editor-heading p, .cmdb-catalog-field p, .cmdb-catalog-notice, .cmdb-catalog-empty) { font-size: 13px; overflow-wrap: anywhere; }
+#standalone-settings .cmdb-operation-dialog :is(.cmdb-operation-note, .cmdb-operation-definitions dd, .cmdb-operation-format > span, .cmdb-operation-format > small, .cmdb-operation-footer-note) { font-size: 13px; }
+#standalone-settings .cmdb-operation-dialog .dialog-footer button { font-size: 14px; }
+#standalone-settings #cmdb-settings-catalog .dialog-footer { flex-wrap: wrap; }
+#standalone-settings #cmdb-settings-catalog .dialog-header > .icon { flex-shrink: 0; }
+@media (max-width: 640px) {
+  #standalone-settings #cmdb-settings-catalog .cmdb-catalog-layout { grid-template-rows: minmax(0, 42%) minmax(0, 1fr); }
+  #standalone-settings #cmdb-settings-catalog .cmdb-catalog-tools { flex-wrap: wrap; }
+  #standalone-settings #cmdb-settings-catalog .cmdb-catalog-search { flex-basis: 100%; }
+  #standalone-settings #cmdb-settings-catalog .cmdb-catalog-create { width: 100%; }
+  #standalone-settings #cmdb-settings-catalog .cmdb-catalog-notice { flex-basis: 100%; }
+  #standalone-settings #cmdb-settings-catalog :is(.dialog-header, .dialog-footer, .cmdb-catalog-editor) { padding: 12px; }
+  #standalone-settings #cmdb-settings-catalog .cmdb-catalog-fields { padding: 0 12px; }
+}
+@media (max-height: 520px) and (max-width: 640px) {
+  #standalone-settings #cmdb-settings-catalog .cmdb-catalog-layout { display: block; overflow: auto; }
+  #standalone-settings #cmdb-settings-catalog #cmdb-catalog-entries { max-height: 160px; }
+}

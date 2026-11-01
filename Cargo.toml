@@ -1,0 +1,17 @@
+[workspace]
+members = ["crates/cmdb-desktop", "crates/cmdb-engine"]
+resolver = "2"
+
+[workspace.package]
+version = "1.0.202610221542"
+edition = "2021"
+authors = ["Cmdb Team"]
+license = "MIT"
+
+[workspace.dependencies]
+# Zed v0.218.7, including its Windows GPUI implementation.
+gpui = { git = "https://github.com/zed-industries/zed.git", rev = "41bab92dac34777ae4256e5041f7b7236fd16cdd", default-features = false, features = ["windows-manifest"] }
+
+[profile.release]
+opt-level = 2
+lto = "thin"

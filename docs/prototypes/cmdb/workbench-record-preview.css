@@ -1,0 +1,63 @@
+/* Full records replace the list within its workspace; no dialog or overlay. */
+.surface.workbench-record-open > :not(#asset-sheet) { display: none !important; }
+#asset-sheet.workbench-record, #asset-sheet.workbench-record:not(.expanded) {
+  position: relative; inset: auto; margin: 0; width: 100%; max-width: none;
+  height: 100%; max-height: none; flex: 1; min-height: 0; border: 0; border-radius: 0;
+  box-shadow: none; background: var(--surface); container-type: normal;
+}
+#asset-sheet.workbench-record[open] { display: grid; grid-template-columns: 156px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+#asset-sheet.workbench-record[hidden] { display: none; }
+#asset-sheet.workbench-record > .dialog-header { grid-column: 1 / -1; min-height: 70px; gap: 14px; padding: 12px 20px; }
+#asset-sheet.workbench-record .workbench-record-back { width: auto; height: 34px; padding: 0 12px; font-size: 14px; flex: none; }
+#asset-sheet.workbench-record .sheet-title-row h2 { flex: 0 1 auto; font-size: 18px; line-height: 25px; }
+#asset-sheet.workbench-record .sheet-title-row .asset-status { font-size: 13px; }
+#asset-sheet.workbench-record #asset-sheet-subtitle { font-size: 13px; }
+#asset-sheet.workbench-record :is(#asset-header-expand, #asset-header-actions, #asset-detail-toolbar) { display: none; }
+#asset-sheet.workbench-record .sheet-header-actions { gap: 8px; }
+#asset-sheet.workbench-record .workbench-record-edit { width: auto; height: 34px; padding: 0 12px; font-size: 14px; }
+.workbench-record-more { position: relative; }
+.workbench-record-more > summary { height: 34px; font-size: 14px; padding: 0 12px; }
+#asset-sheet.workbench-record #asset-header-extra { display: grid; right: 0; left: auto; min-width: 170px; z-index: 50; }
+#asset-sheet.workbench-record #asset-header-extra button { width: 100%; height: 34px; justify-content: flex-start; padding: 0 10px; font-size: 14px; gap: 8px; }
+#asset-sheet.workbench-record #asset-detail-tabs { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; height: auto; min-height: 0; overflow: auto; gap: 4px; padding: 16px 10px; background: var(--bg); border: 0; border-right: 1px solid var(--border); }
+#asset-sheet.workbench-record #asset-detail-tabs[hidden] { display: none; }
+.workbench-record-nav a { display: block; padding: 9px 12px; font-size: 14px; color: var(--muted); text-decoration: none; border-radius: 5px; white-space: nowrap; }
+.workbench-record-nav a:hover, .workbench-record-nav a[aria-current] { color: var(--accent); background: var(--accent-soft); }
+#asset-sheet.workbench-record #asset-sheet-body { grid-column: 2; grid-row: 2; padding: 8px 24px 24px; background: var(--surface); position: relative; min-height: 0; overflow: auto; }
+.workbench-record-section { scroll-margin-top: 10px; }
+#asset-sheet.workbench-record .asset-section { padding: 15px 0; margin: 0; background: transparent; border: 0; border-radius: 0; border-bottom: 1px solid var(--border); }
+#asset-sheet.workbench-record .asset-section h3 { font-size: 15px; margin: 0; line-height: 22px; }
+#asset-sheet.workbench-record .detail-section-heading { margin-bottom: 8px; }
+#asset-sheet.workbench-record .asset-detail-values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+#asset-sheet.workbench-record .asset-detail-values > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); align-items: baseline; gap: 8px; padding: 6px 0; border: 0; }
+#asset-sheet.workbench-record .asset-detail-values > .full { grid-column: 1 / -1; }
+#asset-sheet.workbench-record .asset-detail-values :is(dt, dd) { font-size: 14px; line-height: 22px; margin: 0; overflow-wrap: anywhere; }
+#asset-sheet.workbench-record .asset-detail-values :is(.asset-address-value, .detail-link), #asset-sheet.workbench-record .prototype-history { font-size: 14px; }
+#asset-sheet.workbench-record .prototype-history { margin-top: 8px; line-height: 1.8; }
+#asset-sheet.workbench-record .dialog-note { font-size: 13px; line-height: 1.6; }
+#asset-sheet.workbench-record .preview-photos div { height: 90px; }
+#asset-sheet.workbench-record #asset-sheet-footer { grid-column: 1 / -1; grid-row: 3; }
+#asset-sheet.workbench-record #asset-sheet-footer[hidden] { display: none; }
+#asset-sheet.workbench-record[data-record-mode="edit"] { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+#asset-sheet.workbench-record > [data-form-tabs] { grid-column: 1 / -1; grid-row: 2; }
+#asset-sheet.workbench-record[data-record-mode="edit"] #asset-sheet-body { grid-column: 1 / -1; grid-row: 3; }
+#asset-sheet.workbench-record[data-record-mode="edit"] #asset-sheet-footer { grid-row: 4; }
+#asset-sheet.workbench-record .record-tab-label { display: inline; font-size: 14px; }
+#asset-sheet.workbench-record [data-form-tabs] [role="tab"] { width: auto; padding: 0 12px; gap: 6px; }
+#asset-sheet.workbench-record .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+#asset-sheet.workbench-record .field :is(label, input, select, textarea) { font-size: 14px; }
+#asset-create-dialog.asset-create-dialog { width: min(880px, calc(100vw - 32px)); max-width: calc(100vw - 32px); margin: auto; }
+@media (max-width: 760px) {
+  #asset-sheet.workbench-record[open] { grid-template-columns: 118px minmax(0, 1fr); }
+  #asset-sheet.workbench-record > .dialog-header { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  #asset-sheet.workbench-record .sheet-device-icon { display: none; }
+  #asset-sheet.workbench-record .sheet-identity { flex-basis: calc(100% - 110px); }
+  #asset-sheet.workbench-record .sheet-title-row h2 { font-size: 16px; }
+  #asset-sheet.workbench-record .sheet-header-actions { margin-left: auto; }
+  #asset-sheet.workbench-record #asset-detail-tabs { padding: 12px 5px; }
+  .workbench-record-nav a { padding: 8px; font-size: 13px; }
+  #asset-sheet.workbench-record #asset-sheet-body { padding: 4px 14px 20px; }
+  #asset-sheet.workbench-record .asset-detail-values { grid-template-columns: minmax(0, 1fr); }
+  #asset-sheet.workbench-record .asset-detail-values > div { grid-template-columns: 106px minmax(0, 1fr); }
+  #asset-sheet.workbench-record .fields { grid-template-columns: minmax(0, 1fr); }
+}

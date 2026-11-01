@@ -1,0 +1,61 @@
+name: Native Windows desktop
+
+on:
+  push:
+    branches: [main, 'feature/**', 'fix/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_TARGET_DIR: C:\cmdb-target
+
+jobs:
+  windows:
+    name: Windows x64 executable
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91.1
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - run: git config --global core.longpaths true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> C:\cmdb-target'
+      - name: Check source version
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if (!(Select-String -Path Cargo.toml -SimpleMatch "version = `"$version`"")) {
+            throw 'Cargo version must match VERSION'
+          }
+      - name: Test shared workspace rules
+        run: cargo test -p cmdb-engine
+      - name: Build native desktop
+        run: cargo build --release -p cmdb-desktop --bin cmdb-desktop --target x86_64-pc-windows-msvc
+      - name: Collect executable and checksum
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          Copy-Item C:\cmdb-target\x86_64-pc-windows-msvc\release\cmdb-desktop.exe artifact\cmdb-desktop.exe
+          Copy-Item Cargo.lock artifact\Cargo.lock
+          (Get-FileHash artifact\cmdb-desktop.exe -Algorithm SHA256).Hash.ToLower() + '  cmdb-desktop.exe' | Set-Content artifact\SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cmdb-desktop-windows-x64
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 14

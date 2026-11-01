@@ -1,0 +1,63 @@
+/* Workbench host only. Shared standalone and direct entries keep their layouts. */
+@import url('standalone-business-preview.css');
+@import url('workbench-record-preview.css');
+html, body { height: 100%; overflow: hidden; }
+.app { height: 100dvh; min-height: 0 !important; }
+.shell { padding-left: 0; }
+.surface { margin: 0 !important; min-height: 0; visibility: visible !important; }
+.assets-main { min-height: 0 !important; }
+.surface > .toolbar { position: relative; z-index: 40; min-height: 66px; padding: 12px 18px; gap: 12px; background: var(--surface); flex-wrap: wrap; }
+.workbench-module-title { font-size: 19px; font-weight: 600; line-height: 28px; margin: 0; white-space: nowrap; }
+.surface > .toolbar > .workbench-module-title { order: 0; }
+.surface > .toolbar > .toolbar-field { order: 1; font-size: 0; padding-right: 16px; border-right: 1px solid var(--border); }
+.surface > .toolbar > .toolbar-field select { font-size: 14px; min-width: 130px; background: var(--bg); }
+.surface > .toolbar > .search { order: 2; margin-left: 0; flex: 1 1 280px; max-width: 360px; height: 34px; background: var(--bg); }
+.surface > .toolbar > .toolbar-actions { order: 3; margin-left: 0; }
+.surface > .toolbar > .new-menu { order: 4; margin-left: auto; }
+.surface > .toolbar > .new-menu > .menu { left: auto; right: 0; }
+.surface > .toolbar .cabinet-network-navigation { display: none; }
+.surface > .toolbar > :is(.room, .pool-selector) { order: 1; }
+.surface > .toolbar > .toolbar-filter { order: 3; }
+.surface > .toolbar .menu { max-height: min(65dvh, 480px); overflow: auto; }
+.search-shortcut { margin-left: auto; font-size: 10px; line-height: 18px; color: var(--muted); white-space: nowrap; padding: 0 4px; border: 1px solid var(--border); border-radius: 3px; flex: none; }
+.search input { min-width: 0; font-size: 13px; }
+.asset-table-wrap { padding: 0 12px; }
+.asset-table-wrap .asset-table { width: 100%; min-width: 0; font-size: 14px; }
+.asset-table thead th { height: 38px; padding: 8px; background: var(--bg); font-size: 13px; font-weight: 500; color: var(--muted); white-space: normal; }
+.asset-table tbody td { height: 50px; padding: 3px 8px; }
+.asset-table tbody tr:hover { background: var(--accent-soft); }
+.asset-table .asset-primary { font-size: 14px; line-height: 20px; }
+.asset-table .asset-secondary { color: var(--muted); font-size: 12px; line-height: 17px; margin-top: 0; }
+.asset-table :is(.asset-address-value, .asset-access-address) { font-size: 13px; }
+.asset-table-wrap[data-view] .asset-table { min-width: 0; }
+.asset-table :is(.asset-status, .action-cell .asset-row-actions) { font-size: 13px; }
+.asset-table .action-cell { padding-right: 8px; }
+.asset-table .asset-netcatty-link { width: 18px; flex-basis: 18px; }
+.asset-table .asset-name-row .asset-primary { font-weight: 600; }
+.asset-pagination { min-height: 50px; padding: 8px 18px; font-size: 13px; background: var(--surface); }
+.asset-pagination :is(button, select) { font-size: 13px; }
+.asset-filters, #asset-global-results { padding-left: 18px; padding-right: 18px; }
+/* Keep status and operations reachable in narrow windows; each record uses two lines. */
+@media (max-width: 1000px) {
+  .asset-table, .asset-table tbody { display: block; }
+  .asset-table colgroup, .asset-table thead { display: none; }
+  .asset-table tbody tr { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) 74px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .asset-table tbody td { display: block; height: auto; min-height: 36px; border: 0; padding: 3px 8px; min-width: 0; }
+  .asset-table tbody td[data-column="name"] { grid-column: 1 / 3; grid-row: 1; padding-left: 18px; }
+  .asset-table tbody td[data-column="status"] { grid-column: 3; grid-row: 1; text-align: right; }
+  .asset-table tbody td.action-cell { grid-column: 4; grid-row: 1; position: static; background: transparent; }
+  .asset-table tbody td:not([data-column="name"]):not([data-column="status"]):not(.action-cell) { grid-column: span 1; }
+  .asset-table tbody td[data-column="access_url"] { grid-column: span 3 !important; }
+  .asset-table .asset-primary { white-space: normal; overflow-wrap: anywhere; }
+  .asset-table .asset-secondary { white-space: normal; overflow-wrap: anywhere; }
+  .asset-table .asset-address-value { white-space: normal; }
+}
+@media (max-width: 760px) {
+  .surface > .toolbar { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; grid-template-rows: 34px 34px; min-height: 102px; padding: 12px; gap: 10px; }
+  .surface > .toolbar > .workbench-module-title { grid-area: 1 / 1; font-size: 17px; }
+  .surface > .toolbar > :is(.toolbar-field, .room, .pool-selector) { grid-area: 1 / 2 / 2 / 4; width: auto; max-width: 220px; min-width: 0; border: 0; padding: 0; }
+  .surface > .toolbar > .new-menu { grid-area: 1 / 4 / 2 / 6; margin: 0; justify-self: end; }
+  .surface > .toolbar > .search { grid-area: 2 / 1 / 3 / 4; width: auto; min-width: 0; max-width: none; margin: 0; }
+  .surface > .toolbar > .toolbar-actions { grid-area: 2 / 4 / 3 / 6; margin: 0; justify-self: end; width: auto; }
+  .asset-table-wrap { padding: 0 8px; }
+}

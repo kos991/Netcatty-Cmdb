@@ -1,12 +1,15 @@
 (() => {
   'use strict';
   const pages = window.assetPrototypePages;
+  const shared = window.opener?.cmdbPrototype || (window.parent !== window ? window.parent.cmdbPrototype : null);
+  if (shared) for (const kind of ['terminal', 'infrastructure', 'systems']) pages[kind].rows = shared.assetsByKind[kind];
   const keys = ['terminal', 'infrastructure', 'systems'];
   for (const key of keys) {
     if (!pages?.[key]) throw new Error('缺少资产原型配置：' + key);
   }
   const byId = (id) => document.getElementById(id);
   const state = { view: 'terminal', page: 1, filters: {}, visibleFilters: new Set(), selected: new Set() };
+  const standalone = ['business-view', 'workbench-view'].includes(window.frameElement?.id);
   const text = (value) => value === null || value === undefined || value === '' ? '未配置' : String(value);
   const element = (tag, className, value) => {
     const node = document.createElement(tag);
@@ -28,19 +31,21 @@
     node.setAttribute('aria-hidden', 'true');
     return node;
   };
-  // 与原生列表一致：名称后显示网络类型色点，颜色取设置中的网络类型颜色。
+  // 与原生列表一致：每行选择框左侧显示网络类型细竖条，颜色取设置中的网络类型颜色。
   const networkColor = (name) => {
+    if (!name || ['未配置', '不适用', '未知'].includes(name)) return '#94A3B8';
     const entries = window.cmdbSettingsPreviewCatalogs?.network?.entries || [];
     const color = entries.find((entry) => entry.name === name)?.color;
     return /^#[0-9A-Fa-f]{6}$/.test(String(color || '')) ? color : '#94A3B8';
   };
-  const networkDot = (name) => {
+  const networkRail = (name) => {
     const label = text(name);
-    const dot = element('span', 'asset-type-dot');
-    dot.style.backgroundColor = networkColor(label);
-    dot.title = '网络类型：' + label;
-    dot.setAttribute('aria-label', '网络类型：' + label);
-    return dot;
+    const rail = element('span', 'asset-network-rail');
+    rail.style.setProperty('--asset-network-color', networkColor(label));
+    rail.title = '网络类型：' + label;
+    rail.setAttribute('role', 'img');
+    rail.setAttribute('aria-label', '网络类型：' + label);
+    return rail;
   };
   function showNetcattyHint(line, address) {
     document.querySelectorAll('.asset-netcatty-notice').forEach((notice) => notice.remove());
@@ -51,7 +56,9 @@
   const matches = (row, query) => Object.values(row).filter((value) => typeof value === 'string' || typeof value === 'number').join(' ').toLowerCase().includes(query);
   function netcattyAddress(address, prefix = '') {
     const line = element('span', 'asset-address-line');
-    const value = element('span', 'asset-address-value', prefix + text(address));
+    const value = shared && address
+      ? button(prefix + text(address), () => shared.openObject('ip', String(address).trim(), { source: 'assets' }), 'asset-address-value workbench-inline-link')
+      : element('span', 'asset-address-value', prefix + text(address));
     value.title = prefix + text(address);
     line.append(value);
     if (address) {
@@ -84,10 +91,15 @@
     return line;
   }
   const visibleFields = (group, values) => group.fields.filter((field) => !field.when || field.when(values));
+  const hiddenColumns = new Map(keys.map(kind => [kind, new Set()]));
+  const sorting = { key: '', direction: 1 };
+  const columnsForView = () => pages[state.view].columns.filter(column => !shared || !hiddenColumns.get(state.view).has(column.key));
 
   function currentRows() {
     const query = byId('asset-search').value.trim().toLowerCase();
-    return pages[state.view].rows.filter((row) => (byId('include-archived').checked || row.status !== '已注销') && (!query || matches(row, query)) && Object.entries(state.filters).every(([key, value]) => !value || String(row[key] ?? '') === value || value === '__unconfigured__' && (row[key] === '' || row[key] === undefined)));
+    const rows = pages[state.view].rows.filter((row) => (byId('include-archived').checked || row.status !== '已注销') && (!query || matches(row, query)) && Object.entries(state.filters).every(([key, value]) => !value || String(row[key] ?? '') === value || value === '__unconfigured__' && (row[key] === '' || row[key] === undefined)));
+    if (shared && sorting.key) rows.sort((a, b) => String(a[sorting.key] ?? '').localeCompare(String(b[sorting.key] ?? ''), 'zh-CN', { numeric: true }) * sorting.direction);
+    return rows;
   }
   function renderFilters() {
     const config = pages[state.view];
@@ -127,6 +139,8 @@
   function renderSelection() {
     byId('asset-selection').hidden = !state.selected.size;
     byId('asset-selected-count').textContent = '已选 ' + state.selected.size + ' 项 · ';
+    byId('asset-batch-preview').disabled = standalone && !state.selected.size;
+    byId('asset-selection-clear').disabled = standalone && !state.selected.size;
   }
   function renderCrossResults(query) {
     const root = byId('asset-global-results');
@@ -138,21 +152,32 @@
     root.append(element('span', '', '其他资产类别匹配 ' + others.length + ' 项：'));
     for (const { key, row } of others) {
       const result = button(pages[key].label + ' · ' + row.name, () => {
-        switchView(key, true);
-        openDetail(row);
+        if (switchView(key, true) !== false) openDetail(row);
       }, 'quiet global-result');
       result.title = row.name;
       root.append(result);
     }
   }
   function sizeColumns() {
-    const columns = pages[state.view].columns;
+    const columns = columnsForView();
     const total = columns.reduce((sum, column) => sum + column.width, 0);
     const wrap = document.querySelector('.asset-table-wrap');
     wrap.dataset.view = state.view;
-    const available = Math.max(wrap.clientWidth, state.view === 'terminal' ? total + 112 : 0) - 112;
+    if (window.workbenchRecord || shared) {
+      const weights = columns.map(column => column.width);
+      const sum = weights.reduce((value, width) => value + width, 0);
+      const padding = getComputedStyle(wrap);
+      const available = wrap.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight) - 76;
+      columns.forEach((column, index) => {
+        byId('asset-colgroup').children[index].style.width = (available * weights[index] / sum) + 'px';
+      });
+      byId('asset-colgroup').lastElementChild.style.width = '76px';
+      return;
+    }
+    const extraWidth = standalone ? 80 : 112;
+    const available = Math.max(wrap.clientWidth, state.view === 'terminal' ? total + extraWidth : 0) - extraWidth;
     columns.forEach((column, index) => {
-      byId('asset-colgroup').children[index + 1].style.width = (available * column.width / total) + 'px';
+      byId('asset-colgroup').children[index + (standalone ? 0 : 1)].style.width = (available * column.width / total) + 'px';
     });
   }
   function renderTable() {
@@ -168,26 +193,37 @@
     head.replaceChildren();
     colgroup.replaceChildren();
     body.replaceChildren();
-    const firstCol = document.createElement('col');
-    firstCol.style.width = '32px';
-    colgroup.append(firstCol);
-    const checkCell = element('th', 'checkbox-cell');
-    const all = document.createElement('input');
-    all.type = 'checkbox';
-    all.setAttribute('aria-label', '选择当前页资产');
-    all.checked = !!visible.length && visible.every((row) => state.selected.has(row.id));
-    all.indeterminate = !all.checked && visible.some((row) => state.selected.has(row.id));
-    all.addEventListener('change', () => {
-      visible.forEach((row) => all.checked ? state.selected.add(row.id) : state.selected.delete(row.id));
-      renderTable();
-    });
-    checkCell.append(all);
-    head.append(checkCell);
-    config.columns.forEach((column) => {
+    if (!standalone) {
+      const firstCol = document.createElement('col');
+      firstCol.style.width = '32px';
+      colgroup.append(firstCol);
+      const checkCell = element('th', 'checkbox-cell');
+      const all = document.createElement('input');
+      all.type = 'checkbox';
+      all.setAttribute('aria-label', '选择当前页资产');
+      all.checked = !!visible.length && visible.every((row) => state.selected.has(row.id));
+      all.indeterminate = !all.checked && visible.some((row) => state.selected.has(row.id));
+      all.addEventListener('change', () => {
+        visible.forEach((row) => all.checked ? state.selected.add(row.id) : state.selected.delete(row.id));
+        renderTable();
+      });
+      checkCell.append(all);
+      head.append(checkCell);
+    }
+    columnsForView().forEach((column) => {
       const col = document.createElement('col');
       colgroup.append(col);
       const th = element('th', column.headerTitle ? 'asset-identity-header' : '', column.label);
       th.title = column.headerTitle || column.label;
+      if (shared) {
+        th.tabIndex = 0;
+        th.setAttribute('aria-sort', sorting.key === column.key ? sorting.direction === 1 ? 'ascending' : 'descending' : 'none');
+        th.title += ' · 点击排序，右键选择显示列';
+        const sort = () => { sorting.direction = sorting.key === column.key ? -sorting.direction : 1; sorting.key = column.key; renderTable(); };
+        th.addEventListener('click', sort);
+        th.addEventListener('keydown', event => { if (event.key === 'Enter') sort(); });
+        th.addEventListener('contextmenu', event => { event.preventDefault(); window.workbenchAsset.columnsMenu(pages[state.view].columns, hiddenColumns.get(state.view), renderTable, event); });
+      }
       head.append(th);
     });
     const actionCol = document.createElement('col');
@@ -198,24 +234,32 @@
     for (const row of visible) {
       const tr = document.createElement('tr');
       tr.dataset.assetId = row.id;
-      const td = element('td', 'checkbox-cell');
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = state.selected.has(row.id);
-      checkbox.setAttribute('aria-label', '选择 ' + row.name);
-      checkbox.addEventListener('change', () => { checkbox.checked ? state.selected.add(row.id) : state.selected.delete(row.id); renderTable(); });
-      td.append(checkbox);
-      tr.append(td);
-      for (const column of config.columns) {
+      const network = state.view === 'terminal' ? row.network : state.view === 'infrastructure' ? row.net_type : row.network_type;
+      if (!standalone) {
+        const td = element('td', 'checkbox-cell');
+        td.append(networkRail(network));
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = state.selected.has(row.id);
+        checkbox.setAttribute('aria-label', '选择 ' + row.name);
+        checkbox.addEventListener('change', () => { checkbox.checked ? state.selected.add(row.id) : state.selected.delete(row.id); renderTable(); });
+        td.append(checkbox);
+        tr.append(td);
+      }
+      for (const column of columnsForView()) {
         const cell = document.createElement('td');
+        if (window.workbenchRecord || shared) cell.dataset.column = column.key;
+        if (standalone && column === config.columns[0]) {
+          cell.classList.add('asset-network-cell');
+          cell.append(networkRail(network));
+        }
         let value = text(row[column.key]);
         if (column.key === 'ip' && row.physical_ip) value = '业务 ' + value;
         if (column.kind === 'asset') {
           const nameRow = element('div', 'asset-name-row');
           const link = button(value, () => openDetail(row), 'asset-primary');
           link.title = value;
-          const network = state.view === 'terminal' ? row.network : state.view === 'infrastructure' ? row.net_type : row.network_type;
-          nameRow.append(link, networkDot(network));
+          nameRow.append(link);
           cell.append(nameRow);
         } else if (column.kind === 'status') {
           const tone = /注销/.test(value) ? 'archived' : /故障|维修|维护|离线|停用/.test(value) ? 'warning' : /闲置|在库|待上线/.test(value) ? 'idle' : '';
@@ -243,6 +287,18 @@
           if (column.key === 'os' || logo) stack.append(icon);
           stack.append(lines);
           cell.append(stack);
+        } else if (shared && column.key === 'person' && row.person_id) {
+          const personBtn = button(value, () => shared.openObject('person', row.person_id, { source: 'assets' }), 'asset-primary workbench-inline-link');
+          personBtn.title = '查看人员详情：' + value;
+          cell.append(personBtn);
+        } else if (shared && column.key === 'location' && row.cabinetId) {
+          const rackBtn = button(value, () => shared.openObject('rack', row.cabinetId, { source: 'assets', deviceId: row.id }), 'asset-primary workbench-inline-link');
+          rackBtn.title = '在机柜模块定位：' + value;
+          cell.append(rackBtn);
+        } else if (shared && column.key === 'server_name' && row.server_id) {
+          const hostBtn = button(value, () => shared.openObject('infrastructure', row.server_id, { source: 'assets' }), 'asset-primary workbench-inline-link');
+          hostBtn.title = '查看承载服务器：' + value;
+          cell.append(hostBtn);
         } else {
           const primary = element('span', 'asset-primary' + (/ip$/i.test(column.key) ? ' asset-ip' : ''), value);
           primary.title = value;
@@ -259,9 +315,14 @@
         if (column.secondary && row[column.secondary]) {
           const addressPrefix = column.secondary === 'physical_ip' ? '终端 ' : column.secondary === 'biz_ip' ? '业务 ' : '';
           const secondaryText = addressPrefix + String(row[column.secondary]);
-          const secondary = ['physical_ip', 'biz_ip'].includes(column.secondary)
-            ? netcattyAddress(row[column.secondary], addressPrefix)
-            : element('span', 'asset-secondary', secondaryText);
+          let secondary;
+          if (['physical_ip', 'biz_ip'].includes(column.secondary)) {
+            secondary = netcattyAddress(row[column.secondary], addressPrefix);
+          } else if (shared && column.secondary === 'department' && row.person_id) {
+            secondary = button(secondaryText, () => shared.openObject('person', row.person_id, { source: 'assets' }), 'asset-secondary workbench-inline-sublink');
+          } else {
+            secondary = element('span', 'asset-secondary', secondaryText);
+          }
           secondary.classList.add('asset-secondary');
           secondary.title = secondaryText;
           const lines = cell.querySelector('.asset-terminal-lines');
@@ -288,6 +349,11 @@
     renderCrossResults(byId('asset-search').value.trim().toLowerCase());
   }
   function switchView(key, keepQuery = false) {
+    if (!leaveTerminalEditor()) {
+      byId('asset-view').value = state.view;
+      history.replaceState(null, '', '#' + state.view);
+      return false;
+    }
     state.view = keys.includes(key) ? key : 'terminal';
     state.page = 1;
     state.filters = {};
@@ -301,6 +367,7 @@
     byId('include-archived').checked = false;
     if (!keepQuery) byId('asset-search').value = '';
     document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
+    if (window.workbenchRecord) window.workbenchRecord.sheet.close();
     document.querySelectorAll('details').forEach((detail) => detail.open = false);
     history.replaceState(null, '', '#' + state.view);
     renderFilters();
@@ -327,13 +394,20 @@
     root.append(section);
   }
   const detailHelpers = { element, button, svg, text, addHistory, netcattyAddress, netcattyBrowserUrl };
+  function leaveTerminalEditor() {
+    const sheet = byId('asset-sheet');
+    if (window.workbenchRecord) return window.workbenchRecord.canLeave();
+    return !(standalone && sheet.open && sheet.dataset.dock === 'bottom' && sheet._requestFormClose) || sheet._requestFormClose();
+  }
   function openDetail(row) {
+    if (shared) return window.workbenchAsset.open(state.view, row, 'detail');
+    if (!leaveTerminalEditor()) return;
     const config = pages[state.view];
     window.assetPrototypeDetail.show({
       view: state.view, config, row, helpers: detailHelpers,
       onEdit: () => openEditor(row),
       onOperation: (id) => {
-        byId('asset-sheet').close();
+        if (!window.workbenchRecord) byId('asset-sheet').close();
         openOperation(row, config.operations.find((operation) => operation.id === id));
       },
     });
@@ -356,6 +430,8 @@
     }
   }
   function openEditor(row = null) {
+    if (shared) return window.workbenchAsset.open(state.view, row, row ? 'edit' : 'create');
+    if (!leaveTerminalEditor()) return;
     const config = pages[state.view];
     if (!row) {
       window.assetPrototypeCreate.show({ view: state.view, config });
@@ -368,10 +444,12 @@
     save.disabled = true;
     save.title = '离线原型未接入保存，不会修改资产';
     byId('asset-sheet-footer').replaceChildren(element('span', 'asset-form-offline', '离线原型 · 不会保存'), button('取消', form.requestClose), save);
-    if (!byId('asset-sheet').open) byId('asset-sheet').showModal();
+    window.assetPrototypeDetail.openPanel();
   }
   function openOperation(row, operation) {
+    if (shared) { byId('asset-actions').close(); return window.workbenchAsset.open(state.view, row, operation.id); }
     byId('asset-actions').close();
+    if (operation.id !== 'edit' && !leaveTerminalEditor()) return;
     if (operation.id === 'edit') { openEditor(row); return; }
     const root = byId('asset-operation-body');
     root.replaceChildren();
@@ -391,6 +469,12 @@
     const operations = pages[state.view].operations;
     const groups = [
       [{ label: '查看详情', run: () => { dialog.close(); openDetail(row); } }, ...operations.filter((operation) => operation.id === 'edit').map((operation) => ({ label: '编辑资产', run: () => openOperation(row, operation) }))],
+      ...(standalone ? [[{ label: state.selected.has(row.id) ? '取消选择此资产' : '选择此资产', run: () => {
+        dialog.close();
+        if (state.selected.has(row.id)) state.selected.delete(row.id);
+        else state.selected.add(row.id);
+        renderTable();
+      } }]] : []),
       operations.filter((operation) => !['edit', 'archive'].includes(operation.id)).map((operation) => ({ label: operation.label, run: () => openOperation(row, operation) })),
       operations.filter((operation) => operation.id === 'archive').map((operation) => ({ label: operation.label, run: () => openOperation(row, operation), danger: true })),
     ].filter((group) => group.length);
@@ -414,6 +498,18 @@
     root.querySelector('button')?.focus();
   }
 
+  if (standalone) {
+    const selectPage = button('选择当前页', () => {
+      const rows = currentRows();
+      const pageSize = Number(byId('asset-page-size').value);
+      const visible = rows.slice((state.page - 1) * pageSize, state.page * pageSize);
+      const allSelected = visible.every((row) => state.selected.has(row.id));
+      visible.forEach((row) => allSelected ? state.selected.delete(row.id) : state.selected.add(row.id));
+      renderTable();
+    }, 'quiet');
+    selectPage.id = 'asset-select-page';
+    byId('asset-selection').prepend(selectPage);
+  }
   byId('asset-view').addEventListener('change', () => switchView(byId('asset-view').value, true));
   byId('asset-search').addEventListener('input', () => { state.page = 1; renderTable(); });
   byId('asset-filter-reset').addEventListener('click', () => { state.filters = {}; state.page = 1; byId('asset-search').value = ''; renderFilters(); renderTable(); });
@@ -427,15 +523,24 @@
     byId('asset-filter-bar').hidden = !byId('asset-filter-bar').hidden;
     byId('filter-toggle').setAttribute('aria-expanded', String(!byId('asset-filter-bar').hidden));
   });
-  document.querySelectorAll('[data-create]').forEach((node) => node.addEventListener('click', () => { switchView(node.dataset.create); openEditor(); }));
+  document.querySelectorAll('[data-create]').forEach((node) => node.addEventListener('click', () => { if (switchView(node.dataset.create) !== false) openEditor(); }));
   document.querySelectorAll('[data-close]').forEach((node) => node.addEventListener('click', () => byId(node.dataset.close).close()));
   // 行操作菜单为非模态浮层：点击外部或按 Esc 关闭。
   document.addEventListener('pointerdown', (event) => {
     const menu = byId('asset-actions');
     if (menu.open && !menu.contains(event.target) && !event.target.closest('.asset-row-actions')) menu.close();
   });
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && byId('asset-actions').open) byId('asset-actions').close(); });
-  // 设置原型保存网络类型颜色后，列表色点按新颜色重绘。
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (byId('asset-actions').open) { byId('asset-actions').close(); return; }
+    const sheet = byId('asset-sheet');
+    if (sheet.open && sheet.dataset.dock === 'bottom' && !document.querySelector('dialog:modal')) {
+      event.preventDefault();
+      if (sheet._requestFormClose) sheet._requestFormClose();
+      else sheet.close();
+    }
+  });
+  // 设置原型保存网络类型颜色后，列表网络竖线按新颜色重绘。
   window.addEventListener('cmdb-prototype-network-types-changed', () => renderTable());
   document.querySelectorAll('details').forEach((detail) => detail.addEventListener('toggle', () => {
     if (detail.open) document.querySelectorAll('details[open]').forEach((other) => { if (other !== detail) other.open = false; });
@@ -451,6 +556,14 @@
       lastWidth = tableWrap.clientWidth;
       sizeColumns();
     }).observe(tableWrap);
+  }
+  if (shared) {
+    window.assetWorkbenchAPI = { state, renderTable, renderFilters, currentRows, switchView, helpers: detailHelpers };
+    window.workbenchAdapter = { refresh: renderTable, searchInput: byId('asset-search'), filterButton: byId('filter-toggle'), filters: byId('asset-filter-bar'), views: keys.map(kind => ({ id: kind, label: pages[kind].label })), selectView: kind => switchView(kind), get activeView() { return state.view; }, menus: [
+      ...keys.map(kind => ({ label: '新增' + pages[kind].label, run: () => window.workbenchAsset.open(kind, null, 'create') })),
+      { label: '按当前条件导出 CSV', run: () => window.workbenchAsset.exportRows(currentRows()) },
+    ], openObject: (type, id) => window.workbenchAsset.open(type, shared.asset(type + ':' + id), 'detail') };
+    shared.subscribe(() => { renderFilters(); renderTable(); });
   }
   switchView(location.hash.slice(1));
   const linkedAssetId = new URLSearchParams(location.search).get('asset');

@@ -27,5 +27,6 @@
     if (active === key) link.setAttribute('aria-current', 'page');
     navigation.append(link);
   }
-  document.getElementById(active === 'rack' ? 'rack-toolbar' : 'pool-toolbar').prepend(navigation);
+  const toolbar = document.getElementById(active === 'rack' ? 'rack-toolbar' : 'pool-toolbar');
+  toolbar.append(navigation);
 })();

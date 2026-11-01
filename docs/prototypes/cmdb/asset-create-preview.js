@@ -34,6 +34,8 @@
   const collectionDrafts = new WeakMap();
 
   function createField(field, values, id, onStructuralChange) {
+    const linked = window.workbenchAsset?.createField(field, values, id, onStructuralChange);
+    if (linked) return linked;
     const hardware = window.assetHardwareControlsPreview.create(field, values, id);
     if (hardware) return hardware;
     const wrapper = element('div', 'field' + (fullField(field) ? ' full' : ''));
@@ -273,7 +275,7 @@
   }
 
   function renderForm({ root, nav, view, config, values, prefix = 'asset-field', mode = 'edit' }) {
-    const owner = root.closest('dialog');
+    const owner = root.closest('dialog, .workbench-record');
     owner._disposeForm?.();
     owner.querySelectorAll('[data-form-tabs]').forEach((node) => node.remove());
     root.replaceChildren();
@@ -413,6 +415,7 @@
     root.addEventListener('change', markDirty);
     const requestClose = () => {
       if (dirty && !window.confirm('当前有未保存的离线草稿，确定放弃并关闭？')) return false;
+      owner._disposeForm?.();
       owner.close();
       return true;
     };

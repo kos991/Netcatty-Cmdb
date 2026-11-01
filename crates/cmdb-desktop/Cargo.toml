@@ -1,0 +1,10 @@
+[package]
+name = "cmdb-desktop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+gpui = { workspace = true }
+cmdb-engine = { path = "../cmdb-engine" }

@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN" data-preview-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>资产全景 · 独立产品设计预览</title>
+<link rel="stylesheet" href="cmdb-preview.css">
+<link rel="stylesheet" href="record-shell-preview.css">
+<link rel="stylesheet" href="cmdb-settings-preview.css">
+<link rel="stylesheet" href="cmdb-settings-catalog-preview.css">
+<link rel="stylesheet" href="cmdb-settings-operations-preview.css">
+<link rel="stylesheet" href="standalone-settings-preview.css">
+<style>
+html,body{height:100%;overflow:hidden}.desktop{height:100dvh;--business-top:48px}
+.titlebar{position:fixed;inset:0 0 auto;height:48px;z-index:4;display:flex;align-items:center;gap:10px;padding:0 16px;background:transparent;pointer-events:none}
+.corner-logo{position:fixed;left:0;top:0;z-index:6;width:52px;height:48px;display:grid;place-items:center;color:var(--fg);cursor:default}
+.corner-logo svg{width:22px;height:22px;fill:currentColor;stroke:none;transform-origin:center;animation:corner-logo-spin 3s linear infinite}
+@keyframes corner-logo-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.corner-logo svg{animation:none;transform:none}}
+.workspace{position:fixed;inset:48px 0 0;display:flex;pointer-events:none}
+.activitybar{width:52px;flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 6px;background:var(--bg);border-right:1px solid var(--border)}
+.activitybar button{position:relative;width:40px;height:40px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
+.activitybar svg{width:19px;height:19px}
+.activitybar .bottom{margin-top:auto}
+.activitybar button:hover{background:var(--muted-surface);color:var(--fg)}
+.activitybar button.active{background:var(--accent-soft);color:var(--accent)}
+/* 纯图标轨的悬停文字提示：非原生 title 的视觉弹出层 */
+.rail-tip{position:absolute;left:calc(100% + 10px);top:50%;translate:0 -50%;opacity:0;pointer-events:none;white-space:nowrap;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);font-size:12px;line-height:1.35;box-shadow:0 8px 20px #0004;transition:opacity .12s,translate .12s;z-index:12}
+.activitybar button:hover .rail-tip,.activitybar button:focus-visible .rail-tip{opacity:1}
+.content{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:transparent;pointer-events:none}
+iframe{border:0;min-height:0;width:100%;flex:1;background:var(--surface)}iframe[hidden]{display:none}
+#standalone-settings{position:relative;z-index:1;pointer-events:auto;background:var(--surface)}
+#page-title{margin:0;font-size:14px;font-weight:600;line-height:20px;color:var(--fg);white-space:nowrap}.desktop .titlebar{padding-left:64px}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.activitybar{position:relative;z-index:5;pointer-events:auto}
+#business-view{position:fixed;inset:0;width:100%;height:100%;pointer-events:auto}
+#shell-theme{position:fixed;right:142px;top:9px;width:30px;height:30px;pointer-events:auto}
+.window-controls{position:fixed;right:0;top:0;height:48px;display:flex;align-items:center}
+.window-controls button{width:44px;height:36px;padding:0;border:0;background:transparent;color:var(--muted);font-size:18px;pointer-events:auto}
+.window-controls button:disabled{opacity:.65}
+.desktop.settings-active .titlebar{background:var(--bg);border-bottom:1px solid var(--border)}
+#standalone-settings{margin-top:0}
+#standalone-settings .cmdb-settings-header{display:none}
+#standalone-settings .cmdb-settings-footer{display:none}
+#settings-close{margin-left:8px;pointer-events:auto}
+@media(max-width:760px){.titlebar{padding-left:12px}.window-controls button{width:32px}#shell-theme{right:102px}}
+</style>
+<style id="standalone-search-style">
+.search-shortcut{flex:none;margin-left:auto;padding:1px 5px;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-family:inherit;font-size:11px;line-height:18px;white-space:nowrap;pointer-events:none}
+:is(.search,.cmdb-settings-search-input,.cmdb-catalog-search)>svg{flex:none;width:16px;height:16px}
+:is(.search,.cmdb-settings-search-input,.cmdb-catalog-search)>input{flex:1;min-width:0}
+#standalone-settings .cmdb-settings-search-input>input{padding-right:75px}
+#standalone-settings .cmdb-settings-search-input>.search-shortcut{position:absolute;right:29px;top:7px;padding:0 3px;font-size:10px}
+#standalone-settings .cmdb-settings-search-input>input::-webkit-search-cancel-button{display:none}
+</style>
+</head>
+<body>
+<script src="vendor/netcatty-icons.js"></script>
+<script src="cmdb-settings-data-preview.js"></script>
+<script src="cmdb-settings-catalog-preview.js"></script>
+<script src="cmdb-settings-operations-preview.js"></script>
+<script src="cmdb-settings-preview.js"></script>
+<div class="desktop">
+  <div class="corner-logo" role="img" aria-label="资产全景标志">
+    <svg viewBox="0 0 700 700" aria-hidden="true" focusable="false">
+      <!-- Four source-image silhouettes, threshold traced; no background or watermark. -->
+      <g class="corner-logo__entry">
+        <path d="M461,42 420,30 384,24 363,23 362,22 316,22 315,23 293,24 248,32 203,46 177,57 160,66 135,82 110,102 92,120 80,135 70,150 64,162 58,178 55,191 54,216 60,246 66,262 77,284 91,306 107,326 132,352 156,372 184,390 180,366 180,336 181,335 183,313 188,294 197,268 211,238 230,207 248,183 275,152 298,130 323,109 362,82 374,75 412,57 438,48 462,43Z"/>
+        <path d="M309,178 309,179 321,176 338,175 339,174 378,175 405,180 440,192 456,200 475,212 486,221 504,239 528,245 556,255 580,266 615,286 650,312 670,331 684,348 687,350 688,296 687,295 685,271 675,228 663,196 655,179 645,162 626,136 599,109 572,91 546,81 524,77 484,78 457,83 440,89 437,89 409,100 372,121 340,146Z"/>
+        <path d="M26,256 22,268 16,296 14,321 13,322 13,337 12,338 12,365 13,366 14,390 22,434 35,475 51,508 63,527 77,545 102,569 117,579 131,586 160,595 179,598 196,598 197,599 237,596 268,589 309,574 333,562 353,550 373,535 379,529 344,529 325,526 310,522 293,516 272,506 247,490 225,470 213,456 199,436 163,418 137,401 112,381 88,358 66,332 48,306 33,277Z"/>
+        <path d="M670,358 655,337 635,318 618,306 577,285 544,274 527,271 537,299 541,326 541,354 537,380 530,404 518,431 505,453 481,484 448,517 419,541 377,570 339,592 302,609 265,622 234,630 209,634 194,635 231,653 257,662 280,668 324,675 382,676 383,675 395,675 396,674 404,674 432,670 470,660 504,647 542,627 572,606 610,571 624,555 638,536 652,513 662,493 675,458 682,424 681,389 675,368Z"/>
+      </g>
+    </svg>
+  </div>
+  <header class="titlebar"><h1 id="page-title">Device Assets</h1><button id="settings-close" class="icon quiet" type="button" aria-label="关闭设置" hidden><svg aria-hidden="true"><use href="#close"/></svg></button><button id="shell-theme" type="button" class="icon quiet" aria-label="切换为浅色" title="切换为浅色"><svg aria-hidden="true"><use href="#monitor"/></svg></button><div class="window-controls" aria-label="窗口控件（浏览器原型不可用）"><button disabled aria-label="最小化（桌面客户端可用）">−</button><button disabled aria-label="最大化（桌面客户端可用）">□</button><button disabled aria-label="关闭窗口（桌面客户端可用）">×</button></div></header>
+  <div class="workspace">
+    <nav class="activitybar" aria-label="快捷导航">
+      <button type="button" data-page="assets" class="active" aria-label="设备资产" aria-current="page"><svg aria-hidden="true"><use href="#monitor"/></svg><span class="rail-tip">设备资产</span></button>
+      <button type="button" data-page="organization" aria-label="组织架构"><svg aria-hidden="true"><use href="#people"/></svg><span class="rail-tip">组织架构</span></button>
+      <button type="button" data-page="racks" aria-label="机柜"><svg aria-hidden="true"><use href="#server"/></svg><span class="rail-tip">机柜</span></button>
+      <button type="button" data-page="network" aria-label="网络"><svg aria-hidden="true"><use href="#network"/></svg><span class="rail-tip">网络</span></button>
+      <button type="button" data-page="tickets" aria-label="工单与统计"><svg aria-hidden="true"><use href="#chart"/></svg><span class="rail-tip">工单与统计</span></button>
+      <button type="button" data-page="settings" class="bottom" aria-label="设置"><svg aria-hidden="true"><use href="#settings"/></svg><span class="rail-tip">设置</span></button>
+    </nav>
+    <div class="content"><iframe id="business-view" data-business-ready="false" style="visibility:hidden" title="业务原型页面" src="device-assets-preview.html#terminal"></iframe><div id="standalone-settings" hidden></div></div>
+  </div>
+</div>
+<script>
+(() => {
+  const frame = document.getElementById('business-view');
+  const settings = document.getElementById('standalone-settings');
+  const desktop = document.querySelector('.desktop');
+  const paths = {assets:'device-assets-preview.html',organization:'organization-preview.html',racks:'rack-layout-preview.html',network:'network-preview.html',tickets:'work-order-preview.html'};
+  const titles = {assets:'Device Assets',organization:'Organization',racks:'Racks',network:'Network',tickets:'Work Orders & Statistics',settings:'设置'};
+  // Restore each business page's native selection when revisiting it.
+  const assetScopes = ['terminal', 'infrastructure', 'systems'];
+  const lastScope = {assets:'terminal'};
+  let currentPage = 'assets';
+  let businessPage = 'assets';
+  const titleNode = document.getElementById('page-title');
+  const settingsClose = document.getElementById('settings-close');
+  function syncTitleSpace() {
+    frame.contentDocument?.documentElement?.style.setProperty('--title-space', `${Math.ceil(titleNode.getBoundingClientRect().width) + 24}px`);
+  }
+  new ResizeObserver(syncTitleSpace).observe(titleNode);
+  function notifyBusinessVisible() {
+    if (frame.hidden || frame.dataset.businessReady !== 'true') return;
+    const target = frame.contentWindow;
+    target.dispatchEvent(new target.Event('cmdb-prototype-visible'));
+  }
+  function active(page) {
+    currentPage = page;
+    document.querySelectorAll('[data-page]').forEach(button => {
+      const selected = button.dataset.page === page;
+      button.classList.toggle('active', selected);
+      if (selected) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    titleNode.textContent = titles[page];
+    syncTitleSpace();
+    desktop.classList.toggle('settings-active', page === 'settings');
+    const wasHidden = frame.hidden;
+    frame.hidden = page === 'settings';
+    settings.hidden = page !== 'settings';
+    settingsClose.hidden = page !== 'settings';
+    if (wasHidden && !frame.hidden) notifyBusinessVisible();
+  }
+  document.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => {
+    const page = button.dataset.page;
+    active(page);
+    if (page === 'settings') return;
+    if (page !== businessPage) {
+      frame.dataset.businessReady = 'false';
+      frame.style.visibility = 'hidden';
+      frame.src = page === 'assets' ? paths.assets + '#' + lastScope.assets : paths[page];
+    }
+  }));
+  settingsClose.addEventListener('click', () => active(businessPage));
+  function applyFrameTheme() {
+    const root = frame.contentDocument?.documentElement;
+    if (root) {
+      root.dataset.previewTheme = document.documentElement.dataset.previewTheme;
+      root.style.colorScheme = root.dataset.previewTheme;
+    }
+  }
+  function syncNetworkCatalog() {
+    const target = frame.contentWindow;
+    if (!target?.cmdbSettingsPreviewCatalogs) return;
+    target.cmdbSettingsPreviewCatalogs.network.entries = window.cmdbSettingsPreviewCatalogs.network.entries.map(entry => ({...entry}));
+    target.dispatchEvent(new target.Event('cmdb-prototype-network-types-changed'));
+  }
+  window.addEventListener('cmdb-prototype-network-types-changed', syncNetworkCatalog);
+  document.getElementById('shell-theme').addEventListener('click', event => {
+    const dark = document.documentElement.dataset.previewTheme !== 'dark';
+    document.documentElement.dataset.previewTheme = dark ? 'dark' : 'light';
+    const label = dark ? '切换为浅色' : '切换为深色';
+    event.currentTarget.setAttribute('aria-label', label);
+    event.currentTarget.title = label;
+    event.currentTarget.querySelector('use').setAttribute('href', dark ? '#monitor' : '#system');
+    applyFrameTheme();
+  });
+  const searchSelector = '.toolbar > .search input, #cmdb-settings-search-input, #cmdb-catalog-search';
+  function visible(input) {
+    return input && !input.disabled && !input.readOnly && input.checkVisibility() && !input.closest('[hidden]');
+  }
+  function decorateSearch(doc) {
+    doc.querySelectorAll(searchSelector).forEach(input => {
+      const label = input.parentElement;
+      if (label.querySelector('.search-shortcut')) return;
+      input.setAttribute('aria-keyshortcuts', 'Control+f');
+      const hint = doc.createElement('kbd');
+      hint.className = 'search-shortcut';
+      hint.textContent = 'Ctrl+F';
+      hint.setAttribute('aria-hidden', 'true');
+      label.append(hint);
+    });
+  }
+  function focusSearch(event) {
+    if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.key.toLowerCase() !== 'f') return;
+    const doc = currentPage === 'settings' ? document : frame.contentDocument;
+    if (!doc) return;
+    const modal = doc.querySelector('dialog[open]');
+    let input = [...(modal || doc).querySelectorAll(searchSelector)].find(visible);
+    if (!input && !modal && currentPage === 'settings') {
+      const opener = doc.getElementById('cmdb-settings-search-open');
+      if (visible(opener)) opener.click();
+      input = doc.getElementById('cmdb-settings-search-input');
+    }
+    if (!visible(input)) return;
+    event.preventDefault();
+    input.focus();
+    input.select();
+  }
+  document.addEventListener('keydown', focusSearch);
+  document.addEventListener('DOMContentLoaded', () => decorateSearch(document));
+  let toolbarObserver;
+  frame.addEventListener('load', () => {
+    toolbarObserver?.disconnect();
+    const doc = frame.contentDocument;
+    if (!doc) return;
+    frame.dataset.businessReady = 'false';
+    frame.style.visibility = 'hidden';
+    const root = doc.documentElement;
+    const stylesheet = doc.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = 'standalone-business-preview.css';
+    stylesheet.addEventListener('load', () => {
+      if (frame.contentDocument !== doc) return;
+      frame.dataset.businessReady = 'true';
+      frame.style.removeProperty('visibility');
+      // Stroke sweep starts only now, after the injected stylesheet is usable.
+      notifyBusinessVisible();
+    }, { once: true });
+    doc.head.append(stylesheet);
+    doc.head.append(document.getElementById('standalone-search-style').cloneNode(true));
+    decorateSearch(doc);
+    doc.addEventListener('keydown', focusSearch);
+    // 纯图标轨后，iframeshell 只需为活动轨预留宽度。
+    root.style.setProperty('--navigation-width', '52px');
+    syncTitleSpace();
+    // Keep nodes in their original document: document queries, delegated events,
+    // menu state and relative links continue to use the business page unchanged.
+    const toolbar = doc.querySelector('.surface > .toolbar');
+    if (toolbar) {
+      const app = doc.querySelector('.app');
+      // Move the complete original toolbar; its search and menus stay together.
+      app.prepend(toolbar);
+      toolbarObserver = new ResizeObserver(() => {
+        if (!root.isConnected) return;
+        const height = Math.ceil(toolbar.getBoundingClientRect().bottom);
+        if (!height) return;
+        desktop.style.setProperty('--business-top', `${height}px`);
+        root.style.setProperty('--business-top', `${height}px`);
+      });
+      toolbarObserver.observe(toolbar);
+    }
+    applyFrameTheme();
+    syncNetworkCatalog();
+    const name = new URL(frame.contentWindow.location.href).pathname.split('/').pop();
+    businessPage = Object.keys(paths).find(page => paths[page] === name) || 'assets';
+    if (businessPage === 'assets') {
+      const view = frame.contentWindow.location.hash.slice(1) || 'terminal';
+      if (assetScopes.includes(view)) lastScope.assets = view;
+    }
+    // Remember the original asset selector without creating a second control.
+    const assetView = doc.getElementById('asset-view');
+    if (assetView) {
+      const syncAssetScope = () => {
+        lastScope.assets = assetView.value;
+      };
+      assetView.addEventListener('change', syncAssetScope);
+      frame.contentWindow.addEventListener('hashchange', syncAssetScope);
+      doc.addEventListener('click', () => queueMicrotask(syncAssetScope));
+    }
+    if (currentPage !== 'settings') active(businessPage);
+  });
+  active('assets');
+})();
+</script>
+</body>
+</html>

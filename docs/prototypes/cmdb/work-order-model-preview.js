@@ -1,17 +1,20 @@
 (() => {
   'use strict';
+  const shared = window.parent !== window ? window.parent.cmdbPrototype : null;
   const stages = ['新建', '处理中', '已解决', '已关闭'];
   const categories = ['故障处理', '日常维护', '变更操作', '资产调配'];
   const operations = ['排障', '优化', '响应', '值守'];
   const priorities = ['P1（紧急）', 'P2（较高）', 'P3（普通）', 'P4（较低）'];
   const results = ['处理成功', '临时规避', '未发现异常', '未解决', '已升级处理', '需二次维护'];
   const canonical = (status) => status === '已分配' ? '新建' : status;
-  const assets = Object.entries(window.assetPrototypePages).flatMap(([view, page]) => page.rows
-    .filter((row) => row.status !== '已注销').map((row) => ({
-      key: view + ':' + row.id, view, row, label: page.label,
-      href: 'device-assets-preview.html?asset=' + encodeURIComponent(row.id) + '#' + view,
-    })));
-  const assetByKey = new Map(assets.map((asset) => [asset.key, asset]));
+  const assets = [];
+  const assetByKey = new Map();
+  function syncAssets() {
+    const rows = shared ? shared.assets().map((row) => ({ view: row.kind, row, label: { terminal: '终端资产', infrastructure: '基础设施', systems: '系统资产' }[row.kind] })) : Object.entries(window.assetPrototypePages).flatMap(([view, page]) => page.rows.filter((row) => row.status !== '已注销').map((row) => ({ view, row, label: page.label })));
+    assets.splice(0, assets.length, ...rows.map(({ view, row, label }) => ({ key: view + ':' + row.id, view, row, label, href: 'device-assets-preview.html?asset=' + encodeURIComponent(row.id) + '#' + view })));
+    assetByKey.clear(); assets.forEach((asset) => assetByKey.set(asset.key, asset));
+  }
+  syncAssets();
   const clock = () => {
     const date = new Date();
     const pad = (value) => String(value).padStart(2, '0');
@@ -25,10 +28,11 @@
   };
   const sampleAsset = (view, index) => assets.filter((asset) => asset.view === view)[index].key;
   function seed() {
+    if (shared?.orders.length) return shared.orders;
     const statuses = ['处理中', '新建', '新建', '已解决', '已关闭', '处理中', '新建', '已解决', '处理中', '已关闭', '已分配', '已解决', '新建', '已关闭', '处理中', '已取消'];
     const subjects = ['示例核心交换机端口间歇中断', '示例云桌面无法连接', '示例打印机补充耗材', '示例业务门户访问缓慢', '示例主机房例行巡检', '示例虚拟化宿主机维护', '示例备用终端资产调配', '示例交换机配置核对', '示例系统发布窗口值守', '示例存储容量核查', '示例历史分配工单', '示例待结单数据库服务器排障', '示例笔记本系统升级', '示例缺少起止时间的历史结单', '示例跨区域灾备同步链路与业务应用协同维护（长主题展示）', '示例已取消的维护窗口'];
     const keys = [sampleAsset('infrastructure', 0), sampleAsset('terminal', 0), sampleAsset('terminal', 4), sampleAsset('systems', 1), sampleAsset('infrastructure', 0), sampleAsset('infrastructure', 3), sampleAsset('terminal', 5), sampleAsset('infrastructure', 1), sampleAsset('systems', 0), sampleAsset('infrastructure', 6), sampleAsset('terminal', 1), sampleAsset('infrastructure', 5), sampleAsset('terminal', 3), sampleAsset('infrastructure', 4), sampleAsset('systems', 2), sampleAsset('infrastructure', 2)];
-    return statuses.map((status, index) => {
+    const seeded = statuses.map((status, index) => {
       const stage = stages.indexOf(canonical(status));
       const time = (hour) => '2026-10-09T' + String(hour).padStart(2, '0') + ':' + String(index * 3 % 60).padStart(2, '0') + ':00';
       const historyMissing = index === 13;
@@ -56,10 +60,11 @@
       }
       return order;
     });
+    return shared ? shared.register('orders', seeded) : seeded;
   }
   function match(order, filters, includeStatus = true) {
     const includes = (text, query) => !query || String(text || '').toLowerCase().includes(query.trim().toLowerCase());
-    const assetNames = order.assets.map((key) => assetByKey.get(key)).map((asset) => asset.row.name + ' ' + asset.row.code).join(' ');
+    const assetNames = order.assets.map((key) => assetByKey.get(key)).filter(Boolean).map((asset) => asset.row.name + ' ' + asset.row.code).join(' ');
     return includes(order.order_no + ' ' + order.subject + ' ' + order.description + ' ' + assetNames, filters.keyword)
       && (!filters.category || order.biz_type === filters.category)
       && (!filters.operation || order.operation_type === filters.operation)
@@ -77,13 +82,15 @@
     if (target !== '已取消' && stages[stages.indexOf(from) + 1] !== target) throw Error('只能进入下一阶段，不能跨阶段。');
     const note = String(payload.note || '').trim();
     if (['已解决', '已关闭', '已取消'].includes(target) && !note) throw Error(target === '已取消' ? '请填写取消原因。' : '请填写处理结果。');
+    if (shared && ['已解决', '已关闭'].includes(target) && !results.includes(payload.result_type)) throw Error('请选择有效处理结果类型。');
     const time = clock();
     order.status = target;
     if (target === '处理中') order.started_at = time;
     if (target === '已解决') { order.resolved_at = time; order.result = note; order.result_type = payload.result_type; }
     if (target === '已关闭') { order.closed_at = time; order.result = note; order.result_type = payload.result_type; }
     order.events.push({ time, title: { '处理中': '开始处理', '已解决': '标记已解决', '已关闭': '验收结单', '已取消': '取消工单' }[target], text: note || '原型演示：维护人员受理，开始处理。', actor: order.maintainer || '原型演示者' });
+    if (shared) shared.record({ title: order.events.at(-1).title, text: order.order_no + '：' + order.events.at(-1).text, objectType: 'order', objectId: order.id });
     return from;
   }
-  window.workOrderPreviewModel = { stages, categories, operations, priorities, results, assets, assetByKey, canonical, clock, minutes, seed, match, transition };
+  window.workOrderPreviewModel = { stages, categories, operations, priorities, results, assets, assetByKey, canonical, clock, minutes, seed, match, transition, syncAssets };
 })();

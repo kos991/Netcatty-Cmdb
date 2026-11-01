@@ -1,0 +1,46 @@
+[
+  {
+    "label": "start",
+    "ms": 38.900000005960464,
+    "count": 159,
+    "min": 1.1199951171875,
+    "max": 1.1200027465820312,
+    "selected": null,
+    "dotWidth": 5,
+    "dotOpacity": "0.976476",
+    "active": 159
+  },
+  {
+    "label": "middle",
+    "ms": 969.9000000059605,
+    "count": 159,
+    "min": 6.830902099609375,
+    "max": 6.8309326171875,
+    "selected": null,
+    "dotWidth": 5,
+    "dotOpacity": "0.562855",
+    "active": 159
+  },
+  {
+    "label": "complete",
+    "ms": 2221.199999988079,
+    "count": 159,
+    "min": 14,
+    "max": 14,
+    "selected": null,
+    "dotWidth": 5,
+    "dotOpacity": "0.46642",
+    "active": 0
+  },
+  {
+    "label": "idle",
+    "ms": 4121.4000000059605,
+    "count": 159,
+    "min": 14,
+    "max": 14,
+    "selected": null,
+    "dotWidth": 5,
+    "dotOpacity": "0.523685",
+    "active": 0
+  }
+]

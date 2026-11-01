@@ -1,0 +1,29 @@
+[
+  {
+    "elapsed": 12.900000005960464,
+    "width": 14,
+    "opacity": "1",
+    "markerAnimation": "none",
+    "dotAnimation": "none",
+    "dotOpacity": "1",
+    "active": 0
+  },
+  {
+    "elapsed": 1029.300000011921,
+    "width": 14,
+    "opacity": "1",
+    "markerAnimation": "none",
+    "dotAnimation": "none",
+    "dotOpacity": "1",
+    "active": 0
+  },
+  {
+    "elapsed": 2330,
+    "width": 14,
+    "opacity": "1",
+    "markerAnimation": "none",
+    "dotAnimation": "none",
+    "dotOpacity": "1",
+    "active": 0
+  }
+]
