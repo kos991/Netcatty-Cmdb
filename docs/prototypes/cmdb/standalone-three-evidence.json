@@ -1,0 +1,272 @@
+{
+  "reference": {
+    "url": "https://fluxdown.com/zh/",
+    "styles": [
+      "@layer components {\n  .seg-replay { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: var(--fg-subtle); transition: color 0.15s, background-color 0.15s; }\n  .seg-replay:hover { color: var(--fg); background: var(--bg-inset); }\n  .seg-track { position: relative; }\n  .seg-sparks { position: absolute; left: -8px; top: -22px; width: calc(100% + 16px); height: calc(100% + 32px); pointer-events: none; }\n  .seg-bar { position: relative; height: 56px; overflow: hidden; border-radius: 8px; background: repeating-linear-gradient(-45deg,var(--line) 0 1px,transparent 1px 6px),var(--bg-sunken); box-shadow: 0 0 0 1px var(--line-strong) inset; }\n  .seg-layer, .seg-marks { position: absolute; inset: 0px; }\n  .seg-fill { position: absolute; top: 0px; bottom: 0px; background: linear-gradient(180deg,color-mix(in oklch,var(--accent) 88%,white),var(--accent)); box-shadow: -1px 0 color-mix(in oklch,var(--bg) 70%,transparent) inset; }\n  .seg-head { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: transparent; }\n  .seg-head.is-active { background: var(--cyan); box-shadow: 0 0 10px 1px var(--cyan); }\n  .seg-head.is-active.is-slow { background: var(--warn); box-shadow: 0 0 10px 1px var(--warn); }\n  .seg-mark { position: absolute; top: 0px; bottom: 0px; width: 1px; background: var(--fg); opacity: 0; animation: seg-mark 1.4s var(--ease-out); }\n  @keyframes seg-mark { \n  0% { opacity: 0.9; box-shadow: 0 0 0 3px color-mix(in oklch,var(--fg) 25%,transparent); }\n  100% { opacity: 0; }\n}\n  .seg-worker { display: flex; flex-direction: column; gap: 6px; padding: 8px 9px; background: var(--bg-elev); transition: background-color 0.3s; }\n  .seg-meter { position: relative; height: 3px; overflow: hidden; border-radius: 9px; background: var(--bg-inset); }\n  .seg-meter i { position: absolute; inset: 0px; transform-origin: left center; transform: scaleX(var(--level, 0)); background: var(--accent); transition: transform 0.2s linear; }\n  .seg-worker[data-state=\"slow\"] .seg-meter i { background: var(--warn); }\n  .seg-worker[data-state=\"idle\"] .mono { opacity: 0.5; }\n  .seg-key { display: inline-block; width: 12px; height: 8px; border-radius: 2px; }\n  .seg-key-done { background: var(--accent); }\n  .seg-key-head { width: 2px; height: 12px; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }\n  .seg-key-split { width: 1px; height: 12px; background: var(--fg); }\n}"
+    ],
+    "samples": [
+      {
+        "time": 309241.1999999881,
+        "state": "active",
+        "level": "0.8318138372209962",
+        "transform": "matrix(0.831814, 0, 0, 1, 0, 0)"
+      },
+      {
+        "time": 309744.6999999881,
+        "state": "active",
+        "level": "0.8318138372209962",
+        "transform": "matrix(0.831814, 0, 0, 1, 0, 0)"
+      },
+      {
+        "time": 310250.40000000596,
+        "state": "active",
+        "level": "0.8318138372209962",
+        "transform": "matrix(0.831814, 0, 0, 1, 0, 0)"
+      },
+      {
+        "time": 310752.90000000596,
+        "state": "active",
+        "level": "0.8318138372209962",
+        "transform": "matrix(0.831814, 0, 0, 1, 0, 0)"
+      }
+    ],
+    "initialObservedTransition": [
+      {
+        "state": "slow",
+        "scaleX": 0.146093
+      },
+      {
+        "state": "idle",
+        "scaleX": 0
+      }
+    ],
+    "note": "Live replay observed C09 change; public CSS confirms left-origin scaleX and 0.2s linear transition."
+  },
+  "navigation": [
+    {
+      "key": "assets",
+      "shell": {
+        "title": "设备资产",
+        "active": "business-view",
+        "frameActive": "asset-search"
+      },
+      "details": {
+        "focused": "asset-search",
+        "hint": "Ctrl+F",
+        "nav": 0
+      }
+    },
+    {
+      "key": "organization",
+      "shell": {
+        "title": "组织架构",
+        "active": "business-view",
+        "frameActive": "people-search"
+      },
+      "details": {
+        "focused": "people-search",
+        "hint": "Ctrl+F",
+        "nav": 0
+      }
+    },
+    {
+      "key": "racks",
+      "shell": {
+        "title": "机柜",
+        "active": "business-view",
+        "frameActive": "搜索机柜与设备"
+      },
+      "details": {
+        "focused": "搜索机柜与设备",
+        "hint": "Ctrl+F",
+        "nav": 0
+      }
+    },
+    {
+      "key": "network",
+      "shell": {
+        "title": "网络",
+        "active": "business-view",
+        "frameActive": "pool-search"
+      },
+      "details": {
+        "focused": "pool-search",
+        "hint": "Ctrl+F",
+        "nav": 0
+      }
+    },
+    {
+      "key": "tickets",
+      "shell": {
+        "title": "工单与统计",
+        "active": "business-view",
+        "frameActive": "work-search"
+      },
+      "details": {
+        "focused": "work-search",
+        "hint": "Ctrl+F",
+        "nav": 0
+      }
+    },
+    {
+      "key": "settings",
+      "shell": {
+        "title": "设置",
+        "active": "cmdb-settings-search-input",
+        "frameActive": null
+      },
+      "details": {
+        "focused": "cmdb-settings-search-input",
+        "hint": "Ctrl+F",
+        "nav": 0
+      }
+    }
+  ],
+  "viewports": [
+    {
+      "width": 720,
+      "key": "assets",
+      "title": "设备资产",
+      "active": "assets",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 720,
+      "key": "organization",
+      "title": "组织架构",
+      "active": "organization",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 720,
+      "key": "racks",
+      "title": "机柜",
+      "active": "racks",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 720,
+      "key": "network",
+      "title": "网络",
+      "active": "network",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 720,
+      "key": "tickets",
+      "title": "工单与统计",
+      "active": "tickets",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 720,
+      "key": "settings",
+      "title": "设置",
+      "active": "settings",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": false
+    },
+    {
+      "width": 1568,
+      "key": "assets",
+      "title": "设备资产",
+      "active": "assets",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 1568,
+      "key": "organization",
+      "title": "组织架构",
+      "active": "organization",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 1568,
+      "key": "racks",
+      "title": "机柜",
+      "active": "racks",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 1568,
+      "key": "network",
+      "title": "网络",
+      "active": "network",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 1568,
+      "key": "tickets",
+      "title": "工单与统计",
+      "active": "tickets",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": true
+    },
+    {
+      "width": 1568,
+      "key": "settings",
+      "title": "设置",
+      "active": "settings",
+      "overflow": false,
+      "preventedShell": true,
+      "preventedFrame": false
+    }
+  ],
+  "animation": [
+    {
+      "time": 12258.09999999404,
+      "transform": "matrix(0.529479, 0, 0, 1, 0, 0)",
+      "color": "rgb(101, 180, 255)",
+      "count": 256
+    },
+    {
+      "time": 12912.899999976158,
+      "transform": "matrix(0.531639, 0, 0, 1, 0, 0)",
+      "color": "rgb(101, 180, 255)",
+      "count": 256
+    },
+    {
+      "time": 13567.199999988079,
+      "transform": "matrix(0.544136, 0, 0, 1, 0, 0)",
+      "color": "rgb(101, 180, 255)",
+      "count": 256
+    },
+    {
+      "reduced": true,
+      "animation": "none",
+      "transform": "matrix(1, 0, 0, 1, 0, 0)"
+    }
+  ],
+  "retained": {
+    "editor": "编辑地址池 · 办公内网\n×\n办公内网\n192.168.10.0/24\n业务专网\n10.20.30.0/24\n外网出口\n203.0.113.0/28\n地址池资料\n\n左侧可搜索并切换任意地址池，右侧编辑当前所选；原型不保存业务数据。\n\n地址池名称\n网络类型\n内网\n专网\n外网\nCIDR\n网关\nVLAN\nVXLAN VNI\n用途\n地址分段\n⚡按备注生成＋ 新增分段",
+    "abnormal": "192.168.10.200\n异常\n\n办公内网 · 192.168.10.0/24\n\n归属信息\n地址池\n办公内网\n分段\n未配置\n楼层\n未配置\n网络类型\n内网\n当前使用\n占用对象\n未关联\n位置\n未关联\n\n示例数据，仅用于离线预览。\n\n定位地址",
+    "pager": "共 11 条 · 第 2 / 2 页\n10 条 / 页\n20 条 / 页\n上一页\n下一页",
+    "filter": "true"
+  },
+  "consoleErrors": [],
+  "limits": [
+    "Only offline prototype; no production or version changes",
+    "No builds, lint or automated test suites",
+    "Settings lives in shell; hidden iframe shortcut not exercised while settings active"
+  ]
+}

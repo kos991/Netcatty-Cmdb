@@ -10,6 +10,9 @@
   const toggle = (id, label) => button('<span></span>', `id="${id}" class="cmdb-native-switch" role="switch" aria-label="${label}（预览）" aria-checked="false"`);
 
   function initialize() {
+    const standaloneRoot = document.getElementById('standalone-settings');
+    const standalone = Boolean(standaloneRoot);
+    const containerTag = standalone ? 'section' : 'dialog';
     const catalogs = window.cmdbSettingsPreviewCatalogs;
     const $ = (id) => document.getElementById(id);
     const projectLabel = '当前项目';
@@ -28,14 +31,14 @@
     const templateSection = section('cmdb-settings-templates', '导入模板',
       [['terminal', '终端资产'], ['infrastructure', '基础设施'], ['ip', 'IP 地址']].map(([key, name]) => row('cmdb-row-template-' + key, name, '下载模板后，在对应业务页导入；导出沿用查询条件', button(icon('download') + '下载模板', 'disabled title="离线原型不下载业务文件"'), '导入模板 ' + name)).join(''));
     const projectSection = section('cmdb-settings-project', '项目设置',
-      row('cmdb-row-project-name', '项目名称', '资产、组织、地址池和工单归属同一当前项目', '<input id="cmdb-project-name" aria-label="项目名称" placeholder="由宿主当前项目提供">') +
-      row('cmdb-row-project-code', '项目编码', '用于项目数据隔离和导入导出识别，不作为资产编码', '<input id="cmdb-project-code" aria-label="项目编码" placeholder="由宿主当前项目提供">'),
+      row('cmdb-row-project-name', '项目名称', '资产、组织、地址池和工单归属同一当前项目', `<input id="cmdb-project-name" aria-label="项目名称" placeholder="${standalone ? '未读取当前项目名称' : '由宿主当前项目提供'}">`) +
+      row('cmdb-row-project-code', '项目编码', '用于项目数据隔离和导入导出识别，不作为资产编码', `<input id="cmdb-project-code" aria-label="项目编码" placeholder="${standalone ? '未读取当前项目编码' : '由宿主当前项目提供'}">`),
       button('保存设置', 'disabled title="离线原型不保存项目资料"'));
     const attachmentSection = section('cmdb-settings-attachments', '附件存储',
       row('cmdb-row-attachment-path', '附件管理路径', '按项目独立保存；目录、可写状态及容量由客户端读取', '<div class="cmdb-control-stack"><input readonly aria-label="附件管理路径" placeholder="未读取当前项目附件目录"><div>' + button('选择目录', 'data-settings-preview="attachment"') + button('恢复默认', 'class="quiet" data-settings-preview="attachment-default"') + '</div></div>', '附件 存储 路径 迁移 目录') +
-      row('cmdb-row-attachment-sync', '附件同步', '本地保留明文附件；宿主已解锁且 S3 可用时加密补传', '<span class="cmdb-setting-value">跟随项目</span>', '附件 S3 加密'));
+      row('cmdb-row-attachment-sync', '附件同步', standalone ? '本地保留明文附件；已解锁且 S3 可用时加密补传，原型不执行' : '本地保留明文附件；宿主已解锁且 S3 可用时加密补传', '<span class="cmdb-setting-value">跟随项目</span>', '附件 S3 加密'));
     const cloudSection = section('cmdb-settings-sync', '云同步',
-      row('cmdb-row-sync', '同步 Cmdb 数据', '资产、组织及联系电话、IP、工单和履历统一随 Netcatty 云同步', toggle('cmdb-sync-enabled', '同步 Cmdb 数据'), '云同步 资产 组织 联系电话 人员 IP 工单 履历'));
+      row('cmdb-row-sync', '同步 Cmdb 数据', standalone ? '资产、组织及联系电话、IP、工单和履历统一同步；原型不连接同步服务' : '资产、组织及联系电话、IP、工单和履历统一随 Netcatty 云同步', toggle('cmdb-sync-enabled', '同步 Cmdb 数据'), '云同步 资产 组织 联系电话 人员 IP 工单 履历'));
     const maintenanceSection = section('cmdb-settings-maintenance', '数据维护',
       row('cmdb-row-legacy', '旧台账迁入', '将旧终端和基础设施资料迁入当前项目，已有记录跳过', button('查看迁入预览', 'data-settings-preview="legacy"'), '旧台账 数据维护 历史 迁入'));
     const groups = [['app-window', '应用'], ['database', 'Cmdb'], ['palette', '外观'], ['square-terminal', '终端'], ['keyboard', '快捷键'], ['file-type', 'SFTP 文件关联'], ['sparkles', 'AI'], ['cloud', '云同步'], ['hard-drive', '系统']];
@@ -46,9 +49,9 @@
       { id: 'project', label: '项目存储', icon: 'folder', content: projectSection + attachmentSection },
       { id: 'sync', label: '同步维护', icon: 'cloud', content: cloudSection + maintenanceSection },
     ];
-    const host = document.createElement('div');
+    const host = standaloneRoot || document.createElement('div');
     host.innerHTML = `
-      <dialog id="cmdb-settings" class="cmdb-settings-dialog" aria-labelledby="cmdb-settings-title">
+      <${containerTag} id="cmdb-settings" class="cmdb-settings-dialog" aria-labelledby="cmdb-settings-title">
         <header class="cmdb-settings-header"><h2 id="cmdb-settings-title">设置</h2>${close('cmdb-settings')}</header>
         <div class="cmdb-settings-layout">
           <aside class="cmdb-settings-nav" aria-label="宿主设置">
@@ -57,7 +60,7 @@
               <div class="cmdb-settings-search-input" hidden>${icon('search')}<input id="cmdb-settings-search-input" type="search" placeholder="搜索 Cmdb 设置" aria-label="搜索 Cmdb 设置" role="combobox" aria-controls="cmdb-settings-search-results" aria-expanded="true" aria-autocomplete="list" autocomplete="off">${button(icon('close'), 'id="cmdb-settings-search-close" class="icon quiet" aria-label="收起设置搜索"')}</div>
               <div id="cmdb-settings-search-results" role="listbox" hidden></div>
             </div>
-            ${groups.map(([glyph, name]) => `<span class="cmdb-host-setting${name === 'Cmdb' ? ' cmdb-host-setting--active' : ''}"${name === 'Cmdb' ? ' aria-current="page"' : ''}>${icon(glyph)}${name}</span>`).join('')}
+            ${standalone ? '' : groups.map(([glyph, name]) => `<span class="cmdb-host-setting${name === 'Cmdb' ? ' cmdb-host-setting--active' : ''}"${name === 'Cmdb' ? ' aria-current="page"' : ''}>${icon(glyph)}${name}</span>`).join('')}
           </aside>
           <main class="cmdb-settings-main"><header class="cmdb-settings-heading"><div>${icon('database')}<h2>Cmdb</h2><span class="cmdb-version-badge" data-version-kind="unknown"><span class="cmdb-version-tag" title="正式客户端读取内置服务的真实发布 tag（如 v1.3.1）；未打 tag 的构建显示“开发构建”。原型不读取版本。">${icon('tag')}<span>版本未读取（原型）</span></span>${button(icon('refresh') + '<span>检查更新</span>', 'id="cmdb-version-check" class="cmdb-version-check"')}<span id="cmdb-version-note" class="cmdb-version-note" role="status"></span></span></div><span>Netcatty 当前项目</span></header>
             <nav class="cmdb-settings-tabs" role="tablist" aria-label="Cmdb 配置分区">${panels.map((panel, index) => button(icon(panel.icon) + panel.label, `role="tab" id="cmdb-settings-tab-${panel.id}" data-settings-tab="${panel.id}" aria-controls="cmdb-settings-panel-${panel.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}"`)).join('')}</nav>
@@ -65,13 +68,25 @@
           </main>
         </div>
         <footer class="cmdb-settings-footer">离线设计原型 · 目录为结构样例，不读取项目数据或执行保存 · 仅展示 Cmdb 设置</footer>
-      </dialog>`;
-    document.body.append(host);
+      </${containerTag}>`;
+    if (standalone) {
+      const nav = host.querySelector('.cmdb-settings-nav');
+      nav.setAttribute('aria-label', '设置分类');
+      const tabs = host.querySelector('.cmdb-settings-tabs');
+      tabs.setAttribute('aria-orientation', 'vertical');
+      nav.append(tabs);
+      host.querySelector('.cmdb-settings-heading h2').textContent = '资产目录';
+      host.querySelector('.cmdb-settings-heading > span').textContent = '当前项目';
+      host.querySelector('.cmdb-settings-header [data-settings-close]').remove();
+      host.querySelector('.cmdb-settings-footer').textContent = '离线原型 · 网络类型仅保存到当前页面内存，其余配置不写入项目';
+    } else {
+      document.body.append(host);
+    }
     const helpers = { host, catalogs, icon, escape, button, close, projectLabel };
     const catalogController = window.cmdbSettingsCatalogPreview.mount(helpers);
     const operations = window.cmdbSettingsOperationsPreview.mount(helpers);
     // 原型不联网：检查更新只提示正式客户端行为，不伪造“已是最新”或新版本号。
-    $('cmdb-version-check').addEventListener('click', () => { $('cmdb-version-note').textContent = '原型不联网；正式客户端通过 Netcatty 更新通道检查'; });
+    $('cmdb-version-check').addEventListener('click', () => { $('cmdb-version-note').textContent = standalone ? '原型不联网，未执行更新检查' : '原型不联网；正式客户端通过 Netcatty 更新通道检查'; });
 
     function showPanel(id, focus = false) {
       for (const panel of panels) {
@@ -81,29 +96,32 @@
         tab.tabIndex = selected ? 0 : -1;
         $('cmdb-settings-panel-' + panel.id).hidden = !selected;
       }
+      if (standalone) host.querySelector('.cmdb-settings-heading h2').textContent = panels.find((panel) => panel.id === id).label;
       if (focus) $('cmdb-settings-tab-' + id).focus();
     }
     host.querySelectorAll('[data-settings-tab]').forEach((tab, index) => {
       tab.addEventListener('click', () => showPanel(tab.dataset.settingsTab));
       tab.addEventListener('keydown', (event) => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        if (!(standalone ? ['ArrowUp', 'ArrowDown', 'Home', 'End'] : ['ArrowLeft', 'ArrowRight', 'Home', 'End']).includes(event.key)) return;
         event.preventDefault();
         const next = event.key === 'Home' ? 0 : event.key === 'End' ? panels.length - 1
-          : (index + (event.key === 'ArrowRight' ? 1 : -1) + panels.length) % panels.length;
+          : (index + (['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1) + panels.length) % panels.length;
         showPanel(panels[next].id, true);
       });
     });
 
-    const windowActions = document.querySelector('.window-actions');
-    const settingsButton = document.createElement('button');
-    settingsButton.type = 'button';
-    settingsButton.className = 'cmdb-host-settings-button';
-    settingsButton.setAttribute('aria-label', '设置');
-    settingsButton.title = '设置 · Cmdb';
-    settingsButton.innerHTML = icon('settings');
-    settingsButton.addEventListener('click', () => $('cmdb-settings').showModal());
-    windowActions.removeAttribute('aria-hidden');
-    windowActions.querySelector('svg').replaceWith(settingsButton);
+    if (!standalone) {
+      const windowActions = document.querySelector('.window-actions');
+      const settingsButton = document.createElement('button');
+      settingsButton.type = 'button';
+      settingsButton.className = 'cmdb-host-settings-button';
+      settingsButton.setAttribute('aria-label', '设置');
+      settingsButton.title = '设置 · Cmdb';
+      settingsButton.innerHTML = icon('settings');
+      settingsButton.addEventListener('click', () => $('cmdb-settings').showModal());
+      windowActions.removeAttribute('aria-hidden');
+      windowActions.querySelector('svg').replaceWith(settingsButton);
+    }
     host.querySelectorAll('[data-settings-close]').forEach((control) => control.addEventListener('click', () => $(control.dataset.settingsClose).close()));
     host.querySelectorAll('form').forEach((form) => form.addEventListener('submit', (event) => event.preventDefault()));
     host.querySelectorAll('[data-settings-catalog]').forEach((control) => control.addEventListener('click', () => catalogController.open(control.dataset.settingsCatalog)));
@@ -188,7 +206,7 @@
       if (!$('cmdb-settings-search').contains(event.target)) collapseSearch();
     });
     $('cmdb-settings').addEventListener('close', () => collapseSearch());
-    if (openOnLoad) $('cmdb-settings').showModal();
+    if (openOnLoad && !standalone) $('cmdb-settings').showModal();
   }
   document.addEventListener('DOMContentLoaded', initialize, { once: true });
 })();

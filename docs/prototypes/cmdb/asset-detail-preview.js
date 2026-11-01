@@ -18,27 +18,45 @@
     return 'cpu';
   }
   let panelWidth = 420;
+  let panelHeight = 280;
+  const bottomDock = (sheet) => sheet.dataset.dock === 'bottom';
+  function openPanel() {
+    const sheet = byId('asset-sheet');
+    if (!sheet.open) (window.workbenchRecord || bottomDock(sheet)) ? sheet.show() : sheet.showModal();
+  }
   function prepareResizeHandle(sheet) {
-    if (sheet.querySelector('.asset-panel-resizer')) return;
+    if (sheet._syncResizeHandle) { sheet._syncResizeHandle(); return; }
     const handle = document.createElement('div');
     handle.className = 'asset-panel-resizer';
     handle.tabIndex = 0;
     handle.setAttribute('role', 'separator');
-    handle.setAttribute('aria-orientation', 'vertical');
-    handle.setAttribute('aria-label', '调整资产详情面板宽度');
+    handle.setAttribute('aria-orientation', bottomDock(sheet) ? 'horizontal' : 'vertical');
+    handle.setAttribute('aria-label', bottomDock(sheet) ? '调整终端详情面板高度' : '调整资产详情面板宽度');
     handle.setAttribute('aria-controls', 'asset-sheet');
-    handle.title = '拖动调整宽度；方向键微调，双击恢复默认宽度';
+    handle.title = bottomDock(sheet) ? '拖动调整高度；上下键微调，双击恢复默认高度' : '拖动调整宽度；左右键微调，双击恢复默认宽度';
     sheet.prepend(handle);
     const maxWidth = () => Math.min(720, Math.max(360, window.innerWidth - 460));
-    const setWidth = (value) => {
-      panelWidth = Math.max(360, Math.min(maxWidth(), value));
-      document.body.style.setProperty('--asset-detail-width', panelWidth + 'px');
-      handle.setAttribute('aria-valuemin', '360');
-      handle.setAttribute('aria-valuemax', String(maxWidth()));
-      handle.setAttribute('aria-valuenow', String(Math.round(panelWidth)));
-      handle.setAttribute('aria-valuetext', Math.round(panelWidth) + ' 像素');
+    const heightBounds = () => {
+      const top = document.querySelector('.app > .toolbar')?.getBoundingClientRect().bottom || 56;
+      const max = Math.max(180, window.innerHeight - top - 160);
+      return { min: Math.min(220, max), max };
     };
-    const canResize = () => window.innerWidth >= 980 && !sheet.classList.contains('expanded');
+    const setSize = (value) => {
+      const bottom = bottomDock(sheet);
+      const { min, max } = bottom ? heightBounds() : { min: 360, max: maxWidth() };
+      const size = Math.max(min, Math.min(max, value));
+      if (bottom) panelHeight = size;
+      else panelWidth = size;
+      document.body.style.setProperty(bottom ? '--terminal-detail-height' : '--asset-detail-width', size + 'px');
+      handle.setAttribute('aria-orientation', bottom ? 'horizontal' : 'vertical');
+      handle.setAttribute('aria-label', bottom ? '调整终端详情面板高度' : '调整资产详情面板宽度');
+      handle.title = bottom ? '拖动调整高度；上下键微调，双击恢复默认高度' : '拖动调整宽度；左右键微调，双击恢复默认宽度';
+      handle.setAttribute('aria-valuemin', String(min));
+      handle.setAttribute('aria-valuemax', String(max));
+      handle.setAttribute('aria-valuenow', String(Math.round(size)));
+      handle.setAttribute('aria-valuetext', Math.round(size) + ' 像素');
+    };
+    const canResize = () => (bottomDock(sheet) || window.innerWidth >= 980) && !sheet.classList.contains('expanded');
     let drag = null;
     const finish = () => {
       if (!drag) return;
@@ -50,32 +68,41 @@
     handle.addEventListener('pointerdown', (event) => {
       if (event.button !== 0 || !canResize()) return;
       event.preventDefault();
-      drag = { x: event.clientX, width: sheet.getBoundingClientRect().width, pointerId: event.pointerId };
+      drag = { coordinate: bottomDock(sheet) ? event.clientY : event.clientX, size: bottomDock(sheet) ? sheet.getBoundingClientRect().height : sheet.getBoundingClientRect().width, pointerId: event.pointerId };
       handle.setPointerCapture(event.pointerId);
       sheet.classList.add('resizing');
     });
     handle.addEventListener('pointermove', (event) => {
-      if (drag && event.pointerId === drag.pointerId) setWidth(drag.width + drag.x - event.clientX);
+      if (drag && event.pointerId === drag.pointerId) setSize(drag.size + drag.coordinate - (bottomDock(sheet) ? event.clientY : event.clientX));
     });
     for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(eventName, finish);
-    handle.addEventListener('dblclick', () => { if (canResize()) setWidth(420); });
+    handle.addEventListener('dblclick', () => { if (canResize()) setSize(bottomDock(sheet) ? 280 : 420); });
     handle.addEventListener('keydown', (event) => {
-      if (!canResize() || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const bottom = bottomDock(sheet);
+      const keys = bottom ? ['ArrowUp', 'ArrowDown', 'Home', 'End'] : ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+      if (!canResize() || !keys.includes(event.key)) return;
       event.preventDefault();
-      const next = event.key === 'Home' ? 360 : event.key === 'End' ? maxWidth() : panelWidth + (event.key === 'ArrowLeft' ? 20 : -20);
-      setWidth(next);
+      const { min, max } = bottom ? heightBounds() : { min: 360, max: maxWidth() };
+      const next = event.key === 'Home' ? min : event.key === 'End' ? max : (bottom ? panelHeight : panelWidth) + (event.key === keys[0] ? 20 : -20);
+      setSize(next);
     });
     sheet.addEventListener('close', finish);
-    window.addEventListener('resize', () => { finish(); setWidth(panelWidth); });
-    setWidth(panelWidth);
+    sheet._syncResizeHandle = () => { finish(); setSize(bottomDock(sheet) ? panelHeight : panelWidth); };
+    window.addEventListener('resize', sheet._syncResizeHandle);
+    sheet._syncResizeHandle();
   }
   function prepareHeader({ view, row, title, editing, helpers, onEdit, onOperation, operations = [] }) {
     const { button, svg } = helpers;
     const sheet = byId('asset-sheet');
     sheet.classList.add('record-shell');
     sheet.dataset.recordMode = editing ? 'edit' : 'detail';
-    prepareResizeHandle(sheet);
-    if (!editing) sheet.classList.remove('expanded');
+    const dock = window.frameElement?.id === 'business-view' && view === 'terminal' ? 'bottom' : 'right';
+    if (sheet.dataset.dock !== dock) sheet.classList.remove('expanded');
+    sheet.dataset.dock = dock;
+    sheet.dataset.assetId = row.id || '';
+    sheet.setAttribute('aria-label', dock === 'bottom' ? '终端资产底部详情' : '资产侧栏');
+    if (!window.workbenchRecord) prepareResizeHandle(sheet);
+    if (!editing && (!bottomDock(sheet) || !sheet.open)) sheet.classList.remove('expanded');
     const header = sheet.querySelector('header');
     header.classList.add('record-header');
     let toolbar = byId('asset-detail-toolbar');
@@ -111,7 +138,7 @@
     edit.onclick = onEdit || null;
     const updateExpand = () => {
       const expanded = sheet.classList.contains('expanded');
-      const label = expanded ? '还原面板宽度' : '放大为全宽';
+      const label = bottomDock(sheet) ? (expanded ? '还原面板高度' : '展开至业务区') : (expanded ? '还原面板宽度' : '放大为全宽');
       expand.setAttribute('aria-label', label);
       expand.setAttribute('aria-pressed', String(expanded));
       expand.removeAttribute('aria-expanded');
@@ -178,16 +205,24 @@
         else sheet.close();
       }, true);
     }
-    // 编辑与业务操作放第二条栏；标题栏只留放大/还原、左右分栏和关闭。
+    // 编辑与业务操作放第二条栏；底部终端将其并入第一行，第二行只留详情页签。
     toolbar.append(edit, extra);
-    // 标题栏右侧固定三个窗口控件，不恢复对角展开和右栏分栏的重复入口。
-    header.querySelector('.sheet-header-actions').append(actionsBar, close);
+    const headerActions = header.querySelector('.sheet-header-actions');
+    if (bottomDock(sheet)) {
+      toolbar.hidden = true;
+      actionsBar.replaceChildren(edit, extra, expand, split);
+      headerActions.append(actionsBar, close);
+    } else {
+      if (window.workbenchRecord) window.workbenchRecord.prepareHeader({ editing, edit, extra, toolbar, headerActions });
+      else headerActions.append(actionsBar, close);
+    }
     byId('asset-detail-tabs').hidden = editing;
     byId('asset-sheet-footer').hidden = !editing;
   }
   function show({ view, config, row, helpers, onEdit, onOperation }) {
     const { element, button, svg, text, addHistory } = helpers;
     const root = byId('asset-sheet-body');
+    let sectionRoot = root;
     root.removeAttribute('role');
     root.removeAttribute('aria-labelledby');
     delete root.dataset.detailPanel;
@@ -220,7 +255,7 @@
         }
         card.append(values);
       }
-      root.append(card);
+      sectionRoot.append(card);
       return card;
     };
     const fieldValue = (field) => {
@@ -362,8 +397,23 @@
       root.setAttribute('role', 'tabpanel');
       root.setAttribute('aria-labelledby', 'detail-tab-' + key);
       root.tabIndex = 0;
+      renderSection(key);
+      const activeTab = tabs.find((tab) => tab.key === key);
+      root.querySelectorAll('.asset-section').forEach((card) => {
+        card.classList.add('record-section');
+        const heading = card.querySelector('h3');
+        if (heading?.textContent.trim() === activeTab.label) {
+          heading.classList.add('record-redundant-title');
+          card.dataset.redundantTitle = 'true';
+        }
+      });
+      byId('detail-tab-' + key)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      root.scrollTop = 0;
+    };
+    const renderSection = (key, target = root) => {
+      sectionRoot = target;
       switch (key) {
-        case 'hardware': fields('硬件信息', 'cpu', ['sn', 'display_sn', 'vendor', 'model', 'cpu_info', 'vcpu', 'memory_mb', 'disk_info']); break;
+        case 'hardware': fields('硬件信息', 'cpu', ['sn', ...(window.workbenchRecord ? ['box_sn'] : []), 'display_sn', 'vendor', 'model', 'cpu_info', 'vcpu', 'memory_mb', 'disk_info']); break;
         case 'operations': operations(); break;
         case 'network':
           fields('网络配置', 'network', systems
@@ -388,21 +438,16 @@
             : ['os', 'os_type', 'os_version', 'provider', 'remark']);
           break;
         case 'photos': photos(); break;
-        case 'records': addHistory(root, row); break;
+        case 'records': addHistory(sectionRoot, row); break;
         case 'relations': credentials(); break;
       }
-      const activeTab = tabs.find((tab) => tab.key === key);
-      root.querySelectorAll('.asset-section').forEach((card) => {
-        card.classList.add('record-section');
-        const heading = card.querySelector('h3');
-        if (heading?.textContent.trim() === activeTab.label) {
-          heading.classList.add('record-redundant-title');
-          card.dataset.redundantTitle = 'true';
-        }
-      });
-      byId('detail-tab-' + key)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      root.scrollTop = 0;
     };
+    if (window.workbenchRecord) {
+      window.workbenchRecord.renderSections({ tabs, root, nav: tabBar, render: renderSection });
+      byId('asset-sheet-footer').replaceChildren();
+      openPanel();
+      return;
+    }
     tabBar.replaceChildren();
     tabBar.hidden = false;
     tabBar.setAttribute('role', 'tablist');
@@ -429,7 +474,7 @@
     }
     renderTab(active);
     byId('asset-sheet-footer').replaceChildren();
-    if (!byId('asset-sheet').open) byId('asset-sheet').showModal();
+    openPanel();
   }
   function prepareEditor({ view, row, title, helpers }) {
     prepareHeader({ view, row, title, editing: true, helpers });
@@ -439,5 +484,5 @@
     body.removeAttribute('tabindex');
     delete body.dataset.detailPanel;
   }
-  window.assetPrototypeDetail = { show, prepareEditor, groupIcon };
+  window.assetPrototypeDetail = { show, prepareEditor, groupIcon, openPanel };
 })();

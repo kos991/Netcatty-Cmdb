@@ -1,0 +1,50 @@
+[
+  {
+    "label": "start",
+    "ms": 67.39999997615814,
+    "count": 159,
+    "min": 1.1199951171875,
+    "max": 1.1200027465820312,
+    "selected": "192.168.10.11",
+    "dotWidth": 5,
+    "dotOpacity": "1",
+    "active": 159,
+    "selectedWidth": 1.1199951171875
+  },
+  {
+    "label": "middle",
+    "ms": 979.7999999821186,
+    "count": 159,
+    "min": 6.466888427734375,
+    "max": 6.4669189453125,
+    "selected": "192.168.10.11",
+    "dotWidth": 5,
+    "dotOpacity": "1",
+    "active": 159,
+    "selectedWidth": 6.4669189453125
+  },
+  {
+    "label": "complete",
+    "ms": 2231.399999976158,
+    "count": 159,
+    "min": 14,
+    "max": 14,
+    "selected": "192.168.10.11",
+    "dotWidth": 5,
+    "dotOpacity": "1",
+    "active": 0,
+    "selectedWidth": 14
+  },
+  {
+    "label": "idle",
+    "ms": 4131.799999982119,
+    "count": 159,
+    "min": 14,
+    "max": 14,
+    "selected": "192.168.10.11",
+    "dotWidth": 5,
+    "dotOpacity": "1",
+    "active": 0,
+    "selectedWidth": 14
+  }
+]

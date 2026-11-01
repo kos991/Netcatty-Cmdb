@@ -1,31 +1,26 @@
 (() => {
   'use strict';
+  const shared = window.parent !== window ? window.parent.cmdbPrototype : null;
+  let refresh = () => {};
 
   // 仅使用本地虚构示例数据；表单草稿不修改组织目录。
-  const types = { organization: '组织', department: '部门', group: '分组' };
-  const personFields = { organization: 'org_id', department: 'department_id', group: 'group_id' };
-  const nodes = [
+  const types = { organization: '组织', department: '部门' };
+  const personFields = { organization: 'org_id', department: 'department_id' };
+  let nodes = [
     { id: 1, name: '星桥示例科技', node_type: 'organization', parent_id: 0, sort_order: 10 },
     { id: 11, name: '信息技术部', node_type: 'department', parent_id: 1, sort_order: 10 },
-    { id: 111, name: '终端支持组', node_type: 'group', parent_id: 11, sort_order: 10 },
-    { id: 112, name: '平台运维组', node_type: 'group', parent_id: 11, sort_order: 20 },
     { id: 12, name: '产品研发部', node_type: 'department', parent_id: 1, sort_order: 20 },
-    { id: 121, name: '业务应用组', node_type: 'group', parent_id: 12, sort_order: 10 },
-    { id: 122, name: '质量保障组', node_type: 'group', parent_id: 12, sort_order: 20 },
     { id: 13, name: '综合管理部', node_type: 'department', parent_id: 1, sort_order: 30 },
-    { id: 131, name: '行政服务组', node_type: 'group', parent_id: 13, sort_order: 10 },
     { id: 2, name: '远山示例研究中心', node_type: 'organization', parent_id: 0, sort_order: 20 },
     { id: 21, name: '数据服务部', node_type: 'department', parent_id: 2, sort_order: 10 },
-    { id: 211, name: '数据治理组', node_type: 'group', parent_id: 21, sort_order: 10 },
-    { id: 212, name: '分析研究组', node_type: 'group', parent_id: 21, sort_order: 20 },
     { id: 22, name: '运营协作部', node_type: 'department', parent_id: 2, sort_order: 20 },
-    { id: 221, name: '项目支持组', node_type: 'group', parent_id: 22, sort_order: 10 },
   ];
+  if (shared) nodes = shared.register('nodes', nodes);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const childrenOf = (id) => nodes.filter((node) => node.parent_id === id).sort((a, b) => a.sort_order - b.sort_order);
   const treeOf = (id = 0) => childrenOf(id).map((node) => ({ ...node, children: treeOf(node.id) }));
-  const tree = treeOf();
-  const people = [
+  let tree = treeOf();
+  let people = [
     [1, '林星禾', 1, 11, 111, '终端支持工程师', '在职'],
     [2, '陈予安', 1, 11, 112, '平台运维工程师', '在职'],
     [3, '周沐言', 1, 11, 111, '服务支持专员', '调休'],
@@ -53,6 +48,7 @@
     phone: `010-0000-${String(1000 + id)}`,
     remark: '虚构原型记录；电话为演示占位，不代表真实人员或联系方式。',
   }));
+  if (shared) people = shared.register('people', people);
   const assets = [
     { person_id: 1, name: '示例办公笔记本 A', type: '笔记本', code: 'DEMO-TERM-001', status: '在用' },
     { person_id: 1, name: '示例显示器 A', type: '显示器', code: 'DEMO-TERM-002', status: '在用' },
@@ -80,10 +76,11 @@
       return children.length ? [{ ...node, children }] : [];
     });
   };
-  const state = { selectedId: 0, page: 1, pageSize: 10, collapsed: new Set(), maintenanceCollapsed: new Set(), detailId: 0, draft: null };
+  let syncPeopleFilters = () => {};
+  const state = { selectedId: 0, page: 1, pageSize: 10, collapsed: new Set(), maintenanceCollapsed: new Set(), detailId: 0, draft: null, statusFilter: '' };
   const basePeople = () => {
     const term = $('people-search').value.trim().toLowerCase();
-    const status = $('people-status').value;
+    const status = state.statusFilter || $('people-status')?.value || '';
     return people.filter((person) => (!status || person.status === status) && (!term || [person.name, person.person_code].some((value) => value.toLowerCase().includes(term))));
   };
 
@@ -106,6 +103,7 @@
     $('organization-empty').hidden = visible.length > 0;
     $('all-people').setAttribute('aria-pressed', String(state.selectedId === 0));
     $('all-people-count').textContent = records.length;
+    syncPeopleFilters();
   }
 
   function renderPeople() {
@@ -115,7 +113,16 @@
     state.page = Math.min(state.page, pageCount);
     const first = (state.page - 1) * state.pageSize;
     const cell = (value) => `<td title="${escape(value || '未分配')}">${escape(value || '未分配')}</td>`;
-    $('people-table-body').innerHTML = records.slice(first, first + state.pageSize).map((person) => `<tr data-person-id="${person.id}"><td title="${escape(person.name)}（虚构示例）"><button type="button" class="person-name-button" data-person-detail="${person.id}" title="查看${escape(person.name)}的示例资料">${escape(person.name)}</button><small class="person-example">示例人员</small></td>${cell(person.person_code)}${cell(person.org_name)}${cell(person.department)}${cell(person.group_name)}${cell(person.title)}<td title="${escape(person.phone)}（虚构示例电话）">${escape(person.phone)}</td><td title="${person.status}"><span class="person-status${person.status === '离职' ? ' inactive' : person.status === '调休' ? ' leave' : ''}">${person.status}</span></td><td><button type="button" class="person-edit-button quiet" data-person-edit="${person.id}" aria-label="编辑${escape(person.name)}（原型表单）" title="编辑人员（原型表单）">${icon('edit')}编辑</button></td></tr>`).join('');
+    $('people-table-body').innerHTML = records.slice(first, first + state.pageSize).map((person) => `<tr data-person-id="${person.id}"><td title="${escape(person.name)}（虚构示例）"><button type="button" class="person-name-button" data-person-detail="${person.id}" title="查看${escape(person.name)}的示例资料">${escape(person.name)}</button><small class="person-example">示例人员</small></td>${cell(person.person_code)}${cell(person.org_name)}${cell(person.department)}<td title="${escape(person.phone)}（虚构示例电话）">${escape(person.phone)}</td><td title="${person.status}"><span class="person-status${person.status === '离职' ? ' inactive' : person.status === '调休' ? ' leave' : ''}">${person.status}</span></td><td><button type="button" class="person-edit-button quiet" data-person-edit="${person.id}" aria-label="编辑${escape(person.name)}（原型表单）" title="编辑人员（原型表单）">${icon('edit')}编辑</button></td></tr>`).join('');
+    $('people-table-body').querySelectorAll('tr[data-person-id]').forEach((row) => {
+      const personId = Number(row.dataset.personId);
+      const owned = shared ? shared.assetsForPerson(personId) : assets.filter((asset) => asset.person_id === personId);
+      const count = document.createElement('button');
+      count.type = 'button'; count.className = 'person-assets-button workbench-inline-sublink';
+      count.textContent = '名下资产 ' + owned.length + ' 项';
+      count.addEventListener('click', () => { const person = people.find(item => item.id === personId); if (person) { openPersonDetail(person); renderPersonTab('assets'); } });
+      row.querySelector('.person-example')?.replaceWith(count);
+    });
     $('people-empty').hidden = records.length > 0;
     $('people-scope').textContent = selected ? `${selected.name} · ${types[selected.node_type]}` : '全部人员';
     $('people-scope-path').textContent = selected ? `${pathOf(selected.id).map((node) => node.name).join(' / ')} · 示例人员` : '虚构示例人员 · 可点击姓名查看详情';
@@ -134,7 +141,7 @@
   }
 
   function updatePersonPath() {
-    const names = ['person-organization', 'person-department', 'person-group'].map((id) => byId.get(Number($(id).value))?.name).filter(Boolean);
+    const names = ['person-organization', 'person-department'].map((id) => byId.get(Number($(id)?.value))?.name).filter(Boolean);
     $('person-affiliation-preview').textContent = `归属预览：${names.join(' / ') || '未分配'}`;
   }
 
@@ -180,16 +187,13 @@
     $('person-form').reset();
     $('person-form').dataset.recordId = person ? String(person.id) : '';
     $('person-editor-title').textContent = person ? `编辑人员 · ${person.name}` : '新增人员';
-    $('person-save').textContent = person ? '保存（离线不可用）' : '创建（离线不可用）';
-    const fields = { 'person-name': 'name', 'person-code': 'person_code', 'person-title': 'title', 'person-phone': 'phone', 'person-status': 'status', 'person-remark': 'remark' };
-    Object.entries(fields).forEach(([id, field]) => { $(id).value = person?.[field] || ''; });
+    $('person-save').textContent = shared ? (person ? '保存人员' : '创建人员') : person ? '保存（离线不可用）' : '创建（离线不可用）';
+    const fields = { 'person-name': 'name', 'person-code': 'person_code', 'person-phone': 'phone', 'person-status': 'status', 'person-remark': 'remark' };
+    Object.entries(fields).forEach(([id, field]) => { if ($(id)) $(id).value = person?.[field] || ''; });
     options($('person-organization'), childrenOf(0), person?.org_id);
     options($('person-department'), childrenOf(Number($('person-organization').value)), person?.department_id);
-    // Only department children may be selected as groups; organization=0 has no departments.
     if (!$('person-organization').value || $('person-organization').value === '0') options($('person-department'), [], 0);
-    options($('person-group'), Number($('person-department').value) ? childrenOf(Number($('person-department').value)) : [], person?.group_id);
     $('person-department').disabled = $('person-organization').value === '0';
-    $('person-group').disabled = $('person-department').value === '0';
     updatePersonPath();
     editorBaseline = personFormSnapshot();
     selectPersonEditorTab('profile');
@@ -216,19 +220,30 @@
   $('person-organization').addEventListener('change', () => {
     const id = Number($('person-organization').value);
     options($('person-department'), id ? childrenOf(id) : [], 0);
-    options($('person-group'), [], 0);
     $('person-department').disabled = !id;
-    $('person-group').disabled = true;
     updatePersonPath();
   });
-  $('person-department').addEventListener('change', () => {
-    const id = Number($('person-department').value);
-    options($('person-group'), id ? childrenOf(id) : [], 0);
-    $('person-group').disabled = !id;
-    updatePersonPath();
+  $('person-department').addEventListener('change', updatePersonPath);
+  $('person-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!shared || !$('person-form').reportValidity()) return;
+    const id = Number($('person-form').dataset.recordId);
+    const name = $('person-name').value.trim();
+    const person_code = $('person-code').value.trim();
+    if (!name || people.some((person) => person.id !== id && person_code && person.person_code === person_code)) { window.alert('姓名不能为空，工号不能重复。'); return; }
+    const org_id = Number($('person-organization').value), department_id = Number($('person-department').value);
+    if (department_id && byId.get(department_id)?.parent_id !== org_id) { window.alert('部门必须属于所选组织。'); return; }
+    const values = { name, person_code, org_id, department_id, org_name: byId.get(org_id)?.name || '', department: byId.get(department_id)?.name || '', phone: $('person-phone').value.trim(), status: $('person-status').value, remark: $('person-remark').value.trim() };
+    let person = people.find((record) => record.id === id);
+    if (person) Object.assign(person, values);
+    else { person = { ...values, id: Math.max(0, ...people.map((record) => record.id)) + 1 }; people.push(person); }
+    shared.assetsForPerson(person.id).forEach((asset) => { asset.person = person.name; asset.department = person.department; asset.organization = person.org_name; asset.org = person.org_name; });
+    editorBaseline = personFormSnapshot();
+    $('person-editor').close();
+    shared.record({ title: id ? '编辑人员' : '创建人员', text: person.name, objectType: 'person', objectId: person.id });
+    if (returnToPersonDetail) openPersonDetail(person);
+    returnToPersonDetail = false;
   });
-  $('person-group').addEventListener('change', updatePersonPath);
-  $('person-form').addEventListener('submit', (event) => event.preventDefault());
 
   let transferTarget = '';
   function renderPersonTab(key) {
@@ -243,20 +258,36 @@
     const panel = $('person-detail-body');
     panel.setAttribute('aria-labelledby', `person-tab-${key}`);
     const definition = (fields) => `<dl class="person-detail-values record-fields">${fields.map(([label, value, full]) => `<div${full ? ' class="full"' : ''}><dt>${label}</dt><dd>${escape(value || '未分配')}</dd></div>`).join('')}</dl>`;
-    const owned = assets.filter((asset) => asset.person_id === person.id);
+    const owned = shared ? shared.assetsForPerson(person.id) : assets.filter((asset) => asset.person_id === person.id);
     const titles = { profile: '人员资料', organization: '组织归属', assets: '名下资产', transfer: '资产交接' };
     let content = '';
     if (key === 'profile') {
-      content = `${definition([['姓名', person.name], ['工号', person.person_code], ['岗位', person.title, true], ['电话', person.phone], ['状态', person.status], ['组织', person.org_name, true], ['部门', person.department], ['分组', person.group_name]])}<section class="person-detail-note"><h4>备注</h4><p>${escape(person.remark)}</p></section>`;
+      content = `${definition([['姓名', person.name], ['工号', person.person_code], ['电话', person.phone], ['状态', person.status], ['组织', person.org_name], ['部门', person.department]])}<section class="person-detail-note"><h4>备注</h4><p>${escape(person.remark)}</p></section>`;
     } else if (key === 'organization') {
-      const path = pathOf(person.group_id || person.department_id || person.org_id).map((node) => node.name).join(' / ');
-      content = `${definition([['组织', person.org_name, true], ['部门', person.department], ['分组', person.group_name]])}<section class="person-detail-note"><h4>归属路径</h4><p>${escape(path || '未分配')}</p></section>`;
+      const path = pathOf(person.department_id || person.org_id).map((node) => node.name).join(' / ');
+      content = `${definition([['组织', person.org_name], ['部门', person.department]])}<section class="person-detail-note"><h4>归属路径</h4><p>${escape(path || '未分配')}</p></section>`;
     } else if (key === 'assets') {
       content = `<p class="dialog-note">${owned.length} 项 · 虚构示例资产</p>${owned.length ? owned.map((asset) => `<article class="example-asset"><a href="device-assets-preview.html#terminal" title="打开终端资产示例列表，不代表此虚构资产的真实业务详情">${icon('monitor')} ${escape(asset.name)}</a><p>${escape(asset.code)} · ${escape(asset.type)} · ${escape(asset.status)}</p></article>`).join('') : '<p class="dialog-note">该示例人员没有名下示例资产。</p>'}<p class="dialog-note">资产链接仅打开设备资产终端原型；示例编码不对应真实业务记录。</p>`;
     } else {
       content = `<p class="dialog-note">当前名下 ${owned.length} 项示例资产。仅预览交接表单，不写入业务数据。</p><div class="asset-transfer-preview field"><label for="person-transfer-target">接收人（原型表单）</label><select id="person-transfer-target"><option value="">选择接收人</option>${people.filter((record) => record.id !== person.id).map((record) => `<option value="${record.id}"${String(record.id) === transferTarget ? ' selected' : ''}>${escape(record.name)} · ${escape(record.department || record.org_name || '未分配')}（示例）</option>`).join('')}</select><button type="button" disabled>交接资产（原型禁用）</button></div>`;
     }
     panel.innerHTML = `<section class="record-section"><h3 class="person-detail-section-title${key === 'profile' ? ' record-redundant-title' : ''}">${titles[key]}</h3>${content}</section>`;
+    if (shared && key === 'assets') {
+      panel.innerHTML = `<section class="record-section"><h3>名下资产 · ${owned.length}</h3>${owned.map((asset) => `<article class="example-asset"><button type="button" class="quiet" data-asset-key="${escape(asset.kind + ':' + asset.id)}">${escape(asset.name)}</button><p>${escape(asset.code)} · ${escape(asset.type)} · ${escape(asset.status)}</p></article>`).join('') || '<p class="dialog-note">该人员没有名下资产。</p>'}</section>`;
+      panel.querySelectorAll('[data-asset-key]').forEach((button) => button.addEventListener('click', () => shared.openAsset(button.dataset.assetKey)));
+    }
+    if (shared && key === 'transfer') {
+      panel.querySelector('.dialog-note').textContent = `交接当前名下 ${owned.length} 项资产；保存后同步人员、资产及履历。`;
+      const button = panel.querySelector('.asset-transfer-preview button');
+      button.disabled = !owned.length;
+      button.textContent = '确认交接';
+      button.addEventListener('click', () => {
+        const target = Number($('person-transfer-target').value);
+        if (!target) { window.alert('请选择接收人。'); return; }
+        try { shared.transferAssets(owned.map((asset) => asset.kind + ':' + asset.id), target, '人员详情资产交接'); }
+        catch (error) { window.alert(error.message); }
+      });
+    }
     panel.scrollTop = 0;
   }
   function setPersonExpanded(expanded) {
@@ -331,7 +362,7 @@
     $('organization-node-name').value = draft.name;
     $('organization-node-type').value = draft.node_type;
     $('organization-node-type').disabled = Boolean(draft.id);
-    const parentType = { department: 'organization', group: 'department' }[draft.node_type];
+    const parentType = { department: 'organization' }[draft.node_type];
     if (parentType) {
       options($('organization-node-parent'), nodes.filter((node) => node.node_type === parentType).map((node) => ({ ...node, label: pathOf(node.id).map((entry) => entry.name).join(' / ') })), draft.parent_id, `请选择上级${types[parentType]}`);
     } else {
@@ -339,8 +370,8 @@
     }
     $('organization-node-parent').disabled = !parentType;
     $('organization-node-sort').value = draft.sort_order;
-    $('organization-node-count').value = `${draft.id ? countFor(draft, people) : 0} 人（示例）`;
-    const childType = { organization: 'department', department: 'group' }[draft.node_type];
+    $('organization-node-count').value = `${draft.id ? countFor(draft, people) : 0} 人`;
+    const childType = { organization: 'department' }[draft.node_type];
     $('organization-add-child').textContent = childType ? `新增${types[childType]}` : '无下级节点';
     $('organization-add-child').disabled = !draft.id || !childType;
     renderNodePath();
@@ -370,9 +401,30 @@
   $('organization-node-name').addEventListener('input', () => { state.draft.name = $('organization-node-name').value; renderNodePath(); });
   $('organization-node-parent').addEventListener('change', () => { state.draft.parent_id = Number($('organization-node-parent').value); renderNodePath(); });
   $('organization-node-sort').addEventListener('input', () => { state.draft.sort_order = $('organization-node-sort').value; });
+  if (shared) $('organization-node-save').disabled = false;
+  $('organization-node-save').addEventListener('click', () => {
+    if (!state.draft) return;
+    const draft = state.draft, name = $('organization-node-name').value.trim();
+    if (!name) { window.alert('节点名称不能为空。'); return; }
+    const node_type = draft.node_type, created = !draft.id;
+    const parent_id = node_type === 'department' ? Number($('organization-node-parent').value) : 0;
+    if (node_type === 'department' ? !parent_id : parent_id) { window.alert(node_type === 'department' ? '请选择上级组织。' : '组织只能为顶级节点。'); return; }
+    if (created) draft.id = Math.max(0, ...nodes.map((node) => node.id)) + 1;
+    const target = created ? ({ id: draft.id, name, node_type, parent_id, sort_order: Number($('organization-node-sort').value) || 0 }) : (Object.assign(nodes.find((node) => node.id === draft.id), { name, parent_id, sort_order: Number($('organization-node-sort').value) || 0 }));
+    if (created) nodes.push(target);
+    byId.clear(); nodes.forEach((node) => byId.set(node.id, node)); tree = treeOf();
+    people.forEach((person) => {
+      if (node_type === 'organization' && person.org_id === draft.id) person.org_name = name;
+      if (node_type === 'department' && person.department_id === draft.id) person.department = name;
+    });
+    people.forEach((person) => shared.assetsForPerson(person.id).forEach((asset) => { asset.person = person.name; asset.department = person.department; asset.organization = person.org_name; asset.org = person.org_name; }));
+    shared.record({ title: created ? '新增' + types[node_type] : '维护' + types[node_type], text: name, objectType: 'node', objectId: draft.id });
+    state.draft = { ...target };
+    renderMainTree(); renderPeople(); renderNodeEditor(); refresh();
+  });
   $('organization-add-root').addEventListener('click', () => beginNode('organization'));
   $('organization-add-child').addEventListener('click', () => {
-    const childType = { organization: 'department', department: 'group' }[state.draft.node_type];
+    const childType = { organization: 'department' }[state.draft.node_type];
     if (state.draft.id && childType) beginNode(childType, state.draft.id);
   });
   $('maintenance-search').addEventListener('input', renderMaintenanceTree);
@@ -406,16 +458,16 @@
   bindTree('maintenance-tree', true);
 
   $('people-search').addEventListener('input', refreshPeople);
-  $('people-status').addEventListener('change', refreshPeople);
-  $('people-filter-toggle').addEventListener('click', () => {
+  $('people-status')?.addEventListener('change', refreshPeople);
+  $('people-filter-toggle')?.addEventListener('click', () => {
     $('people-status-filter').hidden = !$('people-status-filter').hidden;
     $('people-filter-toggle').setAttribute('aria-expanded', String(!$('people-status-filter').hidden));
   });
   $('organization-search').addEventListener('input', renderMainTree);
   $('all-people').addEventListener('click', () => { state.selectedId = 0; refreshPeople(); });
-  $('people-reset').addEventListener('click', () => {
+  $('people-reset')?.addEventListener('click', () => {
     $('people-search').value = '';
-    $('people-status').value = '';
+    if ($('people-status')) $('people-status').value = '';
     $('organization-search').value = '';
     state.selectedId = 0;
     state.collapsed.clear();
@@ -452,6 +504,40 @@
     if (event.key === 'Escape') document.querySelectorAll('details[open]').forEach((menu) => { menu.open = false; });
   });
 
+  if (shared) {
+    $('person-save').disabled = false;
+    $('person-save').type = 'submit';
+    $('person-save').title = '保存到本次工作台内存';
+    $('organization-node-save').textContent = '保存节点';
+    $('organization-node-note').textContent = '组织为顶级，部门属于组织；保存后同步目录、人员归属展示与事件时间线。删除节点未启用，需先确认无挂在节点下的人员。';
+    $('people-filters').hidden = false;
+    $('people-filter-node').addEventListener('change', () => { state.selectedId = Number($('people-filter-node').value) || 0; state.page = 1; renderMainTree(); renderPeople(); });
+    $('people-filter-status').addEventListener('change', () => { state.statusFilter = $('people-filter-status').value; state.page = 1; renderPeople(); });
+    syncPeopleFilters = () => {
+      const select = $('people-filter-node'), previous = String(state.selectedId);
+      select.innerHTML = '<option value="0">全部人员</option>';
+      const walk = (branches, depth = 0) => branches.forEach((node) => { const option = document.createElement('option'); option.value = String(node.id); option.textContent = '—'.repeat(depth) + ' ' + node.name; select.append(option); walk(node.children, depth + 1); });
+      walk(tree);
+      select.value = [...select.options].some((option) => option.value === previous) ? previous : '0';
+      $('people-filter-status').value = state.statusFilter;
+    };
+    refresh = () => {
+      byId.clear(); nodes.forEach((node) => byId.set(node.id, node)); tree = treeOf();
+      people.forEach((person) => { person.org_name = byId.get(person.org_id)?.name || ''; person.department = byId.get(person.department_id)?.name || ''; });
+      renderMainTree(); renderPeople();
+      if ($('person-detail').open) {
+        const person = people.find((record) => record.id === state.detailId);
+        if (person) { $('person-detail-title').textContent = person.name; renderPersonTab(document.querySelector('[data-person-tab][aria-selected="true"]')?.dataset.personTab || 'profile'); }
+      }
+    };
+    window.workbenchAdapter = {
+      openObject(type, id) { if (type !== 'person') return false; const person = people.find((record) => String(record.id) === String(id)); if (!person) return false; openPersonDetail(person); return true; },
+      refresh, searchInput: $('people-search'), filterButton: null, filters: $('people-filters'),
+      menus: [{ label: '新增人员', run: () => openPersonEditor() }, { label: '维护组织架构', run: openMaintenance }],
+    };
+    const unsubscribe = shared.subscribe(refresh);
+    window.addEventListener('unload', unsubscribe);
+  }
   renderMainTree();
   renderPeople();
 })();

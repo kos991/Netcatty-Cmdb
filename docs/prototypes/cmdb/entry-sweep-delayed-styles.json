@@ -1,0 +1,25 @@
+{
+  "delayed": true,
+  "delayMs": 1100,
+  "before": {
+    "ready": "false",
+    "visibility": "hidden",
+    "width": 1.1199951171875,
+    "active": 0
+  },
+  "after": {
+    "ready": "true",
+    "visibility": "visible",
+    "width": 1.1199951171875
+  },
+  "done": {
+    "ms": 2223.0999999940395,
+    "count": 159,
+    "min": 14,
+    "max": 14,
+    "selected": null,
+    "dotWidth": 5,
+    "dotOpacity": "0.938521",
+    "active": 0
+  }
+}

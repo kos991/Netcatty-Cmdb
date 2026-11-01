@@ -63,7 +63,7 @@
     const hasColor = () => catalog().fields.some((field) => field.type === 'color');
     const saveButton = $('cmdb-catalog-save');
     const notice = host.querySelector('#cmdb-settings-catalog .cmdb-catalog-notice');
-    // 网络类型目录在原型内存中保存，演示左侧色标与资产列表色点随保存更新；刷新恢复示例，其他目录仍禁用保存。
+    // 网络类型目录在原型内存中保存，演示左侧色标与资产列表网络竖线随保存更新；刷新恢复示例，其他目录仍禁用保存。
     saveButton.addEventListener('click', () => {
       if (!hasColor() || !draft) return;
       const color = String(draft.color || '').trim().toUpperCase();

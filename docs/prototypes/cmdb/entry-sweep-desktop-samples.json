@@ -1,0 +1,2480 @@
+{
+  "out": [
+    {
+      "label": "start",
+      "ms": 37.19999998807907,
+      "count": 159,
+      "min": 1.1199951171875,
+      "max": 1.1200027465820312,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.960616",
+      "active": 159
+    },
+    {
+      "label": "middle",
+      "ms": 980.3999999761581,
+      "count": 159,
+      "min": 6.83355712890625,
+      "max": 6.8336181640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.612182",
+      "active": 159
+    },
+    {
+      "label": "complete",
+      "ms": 2231.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.453825",
+      "active": 0
+    },
+    {
+      "label": "idle",
+      "ms": 4133.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.565227",
+      "active": 0
+    }
+  ],
+  "all": [
+    {
+      "ms": 0.7999999821186066,
+      "count": 159,
+      "min": 1.1199951171875,
+      "max": 1.1200027465820312,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.976476",
+      "active": 0
+    },
+    {
+      "ms": 13,
+      "count": 159,
+      "min": 1.1199951171875,
+      "max": 1.1200027465820312,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.969096",
+      "active": 159
+    },
+    {
+      "ms": 37.19999998807907,
+      "count": 159,
+      "min": 1.1199951171875,
+      "max": 1.1200027465820312,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.960616",
+      "active": 159
+    },
+    {
+      "ms": 47.5,
+      "count": 159,
+      "min": 1.1199951171875,
+      "max": 1.1200027465820312,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.951133",
+      "active": 159
+    },
+    {
+      "ms": 63.19999998807907,
+      "count": 159,
+      "min": 1.121673583984375,
+      "max": 1.1217041015625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.940603",
+      "active": 159
+    },
+    {
+      "ms": 156.2999999821186,
+      "count": 159,
+      "min": 1.18231201171875,
+      "max": 1.182373046875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.872396",
+      "active": 159
+    },
+    {
+      "ms": 168.19999998807907,
+      "count": 159,
+      "min": 1.20513916015625,
+      "max": 1.2052001953125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.855973",
+      "active": 159
+    },
+    {
+      "ms": 296.2999999821186,
+      "count": 159,
+      "min": 1.5213623046875,
+      "max": 1.521392822265625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.70499",
+      "active": 159
+    },
+    {
+      "ms": 313.09999999403954,
+      "count": 159,
+      "min": 1.578857421875,
+      "max": 1.578887939453125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.685117",
+      "active": 159
+    },
+    {
+      "ms": 329.69999998807907,
+      "count": 159,
+      "min": 1.63922119140625,
+      "max": 1.6392822265625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.665858",
+      "active": 159
+    },
+    {
+      "ms": 345.7999999821186,
+      "count": 159,
+      "min": 1.703857421875,
+      "max": 1.703887939453125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.646868",
+      "active": 159
+    },
+    {
+      "ms": 363.09999999403954,
+      "count": 159,
+      "min": 1.7724609375,
+      "max": 1.772491455078125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.628379",
+      "active": 159
+    },
+    {
+      "ms": 379.59999999403954,
+      "count": 159,
+      "min": 1.844573974609375,
+      "max": 1.8446044921875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.610603",
+      "active": 159
+    },
+    {
+      "ms": 396.59999999403954,
+      "count": 159,
+      "min": 1.9215087890625,
+      "max": 1.92156982421875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.593322",
+      "active": 159
+    },
+    {
+      "ms": 413.2999999821186,
+      "count": 159,
+      "min": 2.002044677734375,
+      "max": 2.0020751953125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.576934",
+      "active": 159
+    },
+    {
+      "ms": 429.89999997615814,
+      "count": 159,
+      "min": 2.0865325927734375,
+      "max": 2.0865478515625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.561406",
+      "active": 159
+    },
+    {
+      "ms": 446.39999997615814,
+      "count": 159,
+      "min": 2.173919677734375,
+      "max": 2.1739501953125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.546969",
+      "active": 159
+    },
+    {
+      "ms": 463.19999998807907,
+      "count": 159,
+      "min": 2.2674560546875,
+      "max": 2.2674560546875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.533162",
+      "active": 159
+    },
+    {
+      "ms": 479.7999999821186,
+      "count": 159,
+      "min": 2.36328125,
+      "max": 2.3632965087890625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.520603",
+      "active": 159
+    },
+    {
+      "ms": 496.7999999821186,
+      "count": 159,
+      "min": 2.463623046875,
+      "max": 2.46368408203125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.508999",
+      "active": 159
+    },
+    {
+      "ms": 513.5,
+      "count": 159,
+      "min": 2.567962646484375,
+      "max": 2.5679931640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.498446",
+      "active": 159
+    },
+    {
+      "ms": 530,
+      "count": 159,
+      "min": 2.675537109375,
+      "max": 2.675567626953125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.489007",
+      "active": 159
+    },
+    {
+      "ms": 546.5,
+      "count": 159,
+      "min": 2.78765869140625,
+      "max": 2.7877197265625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.480571",
+      "active": 159
+    },
+    {
+      "ms": 563.3999999761581,
+      "count": 159,
+      "min": 2.9029541015625,
+      "max": 2.9029541015625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.473236",
+      "active": 159
+    },
+    {
+      "ms": 580.0999999940395,
+      "count": 159,
+      "min": 3.02197265625,
+      "max": 3.02203369140625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.466938",
+      "active": 159
+    },
+    {
+      "ms": 596.5,
+      "count": 159,
+      "min": 3.14556884765625,
+      "max": 3.1456298828125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.461636",
+      "active": 159
+    },
+    {
+      "ms": 613.2999999821186,
+      "count": 159,
+      "min": 3.273681640625,
+      "max": 3.273681640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.457331",
+      "active": 159
+    },
+    {
+      "ms": 630.0999999940395,
+      "count": 159,
+      "min": 3.4046630859375,
+      "max": 3.40472412109375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.454055",
+      "active": 159
+    },
+    {
+      "ms": 646.5,
+      "count": 159,
+      "min": 3.539306640625,
+      "max": 3.53936767578125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.451757",
+      "active": 159
+    },
+    {
+      "ms": 663.3999999761581,
+      "count": 159,
+      "min": 3.677490234375,
+      "max": 3.67755126953125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.450414",
+      "active": 159
+    },
+    {
+      "ms": 680,
+      "count": 159,
+      "min": 3.8175048828125,
+      "max": 3.8175125122070312,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.450001",
+      "active": 159
+    },
+    {
+      "ms": 696.6999999880791,
+      "count": 159,
+      "min": 3.9625244140625,
+      "max": 3.962554931640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.450491",
+      "active": 159
+    },
+    {
+      "ms": 713.1999999880791,
+      "count": 159,
+      "min": 4.1118011474609375,
+      "max": 4.11181640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.451924",
+      "active": 159
+    },
+    {
+      "ms": 730.1999999880791,
+      "count": 159,
+      "min": 4.262451171875,
+      "max": 4.262481689453125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.454292",
+      "active": 159
+    },
+    {
+      "ms": 746.6999999880791,
+      "count": 159,
+      "min": 4.4180908203125,
+      "max": 4.418098449707031,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.457674",
+      "active": 159
+    },
+    {
+      "ms": 763.5999999940395,
+      "count": 159,
+      "min": 4.57769775390625,
+      "max": 4.5777587890625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.462099",
+      "active": 159
+    },
+    {
+      "ms": 780,
+      "count": 159,
+      "min": 4.7353515625,
+      "max": 4.73541259765625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.467394",
+      "active": 159
+    },
+    {
+      "ms": 796.6999999880791,
+      "count": 159,
+      "min": 4.898681640625,
+      "max": 4.89874267578125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.473814",
+      "active": 159
+    },
+    {
+      "ms": 813.3999999761581,
+      "count": 159,
+      "min": 5.064666748046875,
+      "max": 5.064697265625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.481286",
+      "active": 159
+    },
+    {
+      "ms": 830.3999999761581,
+      "count": 159,
+      "min": 5.2320556640625,
+      "max": 5.23211669921875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.489763",
+      "active": 159
+    },
+    {
+      "ms": 847.3999999761581,
+      "count": 159,
+      "min": 5.4100341796875,
+      "max": 5.410064697265625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.499775",
+      "active": 159
+    },
+    {
+      "ms": 863.7999999821186,
+      "count": 159,
+      "min": 5.57891845703125,
+      "max": 5.5789794921875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.510199",
+      "active": 159
+    },
+    {
+      "ms": 880.0999999940395,
+      "count": 159,
+      "min": 5.74969482421875,
+      "max": 5.749755859375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.521623",
+      "active": 159
+    },
+    {
+      "ms": 897.2999999821186,
+      "count": 159,
+      "min": 5.9296875,
+      "max": 5.92974853515625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.534584",
+      "active": 159
+    },
+    {
+      "ms": 913.6999999880791,
+      "count": 159,
+      "min": 6.1060791015625,
+      "max": 6.10614013671875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.548158",
+      "active": 159
+    },
+    {
+      "ms": 930.3999999761581,
+      "count": 159,
+      "min": 6.2861328125,
+      "max": 6.28619384765625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.562855",
+      "active": 159
+    },
+    {
+      "ms": 947.0999999940395,
+      "count": 159,
+      "min": 6.4664306640625,
+      "max": 6.466461181640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.578372",
+      "active": 159
+    },
+    {
+      "ms": 963.5,
+      "count": 159,
+      "min": 6.64892578125,
+      "max": 6.64898681640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.594834",
+      "active": 159
+    },
+    {
+      "ms": 980.3999999761581,
+      "count": 159,
+      "min": 6.83355712890625,
+      "max": 6.8336181640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.612182",
+      "active": 159
+    },
+    {
+      "ms": 996.5,
+      "count": 159,
+      "min": 7.016716003417969,
+      "max": 7.0167236328125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.630016",
+      "active": 159
+    },
+    {
+      "ms": 1013.6999999880791,
+      "count": 159,
+      "min": 7.200439453125,
+      "max": 7.200447082519531,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.648442",
+      "active": 159
+    },
+    {
+      "ms": 1030.199999988079,
+      "count": 159,
+      "min": 7.3856201171875,
+      "max": 7.38568115234375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.667469",
+      "active": 159
+    },
+    {
+      "ms": 1055.5999999940395,
+      "count": 159,
+      "min": 7.571044921875,
+      "max": 7.5710601806640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.686872",
+      "active": 159
+    },
+    {
+      "ms": 1063.7999999821186,
+      "count": 159,
+      "min": 7.75531005859375,
+      "max": 7.75537109375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.706408",
+      "active": 159
+    },
+    {
+      "ms": 1080.5999999940395,
+      "count": 159,
+      "min": 7.941619873046875,
+      "max": 7.941650390625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.726304",
+      "active": 159
+    },
+    {
+      "ms": 1097.3999999761581,
+      "count": 159,
+      "min": 8.12750244140625,
+      "max": 8.1275634765625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.746191",
+      "active": 159
+    },
+    {
+      "ms": 1115,
+      "count": 159,
+      "min": 8.3094482421875,
+      "max": 8.309478759765625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.765584",
+      "active": 159
+    },
+    {
+      "ms": 1141.199999988079,
+      "count": 159,
+      "min": 8.4906005859375,
+      "max": 8.49066162109375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.784717",
+      "active": 159
+    },
+    {
+      "ms": 1152.3999999761581,
+      "count": 159,
+      "min": 8.67413330078125,
+      "max": 8.6741943359375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.803806",
+      "active": 159
+    },
+    {
+      "ms": 1163.699999988079,
+      "count": 159,
+      "min": 8.8553466796875,
+      "max": 8.85540771484375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.822275",
+      "active": 159
+    },
+    {
+      "ms": 1180.199999988079,
+      "count": 159,
+      "min": 9.0341796875,
+      "max": 9.0341796875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.840027",
+      "active": 159
+    },
+    {
+      "ms": 1198.5,
+      "count": 159,
+      "min": 9.21142578125,
+      "max": 9.211456298828125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.85708",
+      "active": 159
+    },
+    {
+      "ms": 1213.699999988079,
+      "count": 159,
+      "min": 9.3880615234375,
+      "max": 9.38812255859375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.873448",
+      "active": 159
+    },
+    {
+      "ms": 1230.3999999761581,
+      "count": 159,
+      "min": 9.5638427734375,
+      "max": 9.56390380859375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.889045",
+      "active": 159
+    },
+    {
+      "ms": 1247.3999999761581,
+      "count": 159,
+      "min": 9.73760986328125,
+      "max": 9.7376708984375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.903708",
+      "active": 159
+    },
+    {
+      "ms": 1264.2999999821186,
+      "count": 159,
+      "min": 9.9071044921875,
+      "max": 9.9071044921875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.917231",
+      "active": 159
+    },
+    {
+      "ms": 1280.5,
+      "count": 159,
+      "min": 10.0751953125,
+      "max": 10.07525634765625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.929832",
+      "active": 159
+    },
+    {
+      "ms": 1297.5999999940395,
+      "count": 159,
+      "min": 10.2408447265625,
+      "max": 10.24090576171875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.941399",
+      "active": 159
+    },
+    {
+      "ms": 1314.0999999940395,
+      "count": 159,
+      "min": 10.402923583984375,
+      "max": 10.4029541015625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.951854",
+      "active": 159
+    },
+    {
+      "ms": 1331.199999988079,
+      "count": 159,
+      "min": 10.5631103515625,
+      "max": 10.56317138671875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.961314",
+      "active": 159
+    },
+    {
+      "ms": 1347.7999999821186,
+      "count": 159,
+      "min": 10.721435546875,
+      "max": 10.721450805664062,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.969759",
+      "active": 159
+    },
+    {
+      "ms": 1364.3999999761581,
+      "count": 159,
+      "min": 10.875732421875,
+      "max": 10.87579345703125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.977091",
+      "active": 159
+    },
+    {
+      "ms": 1382.199999988079,
+      "count": 159,
+      "min": 11.025146484375,
+      "max": 11.025177001953125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.983305",
+      "active": 159
+    },
+    {
+      "ms": 1397.5999999940395,
+      "count": 159,
+      "min": 11.1749267578125,
+      "max": 11.1749267578125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.988621",
+      "active": 159
+    },
+    {
+      "ms": 1414.0999999940395,
+      "count": 159,
+      "min": 11.320419311523438,
+      "max": 11.3204345703125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.992871",
+      "active": 159
+    },
+    {
+      "ms": 1431,
+      "count": 159,
+      "min": 11.460784912109375,
+      "max": 11.4608154296875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.996077",
+      "active": 159
+    },
+    {
+      "ms": 1447.7999999821186,
+      "count": 159,
+      "min": 11.59771728515625,
+      "max": 11.5977783203125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.998318",
+      "active": 159
+    },
+    {
+      "ms": 1464.199999988079,
+      "count": 159,
+      "min": 11.731903076171875,
+      "max": 11.73193359375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.999622",
+      "active": 159
+    },
+    {
+      "ms": 1480.699999988079,
+      "count": 159,
+      "min": 11.860931396484375,
+      "max": 11.8609619140625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.999997",
+      "active": 159
+    },
+    {
+      "ms": 1497.5,
+      "count": 159,
+      "min": 11.98858642578125,
+      "max": 11.9886474609375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.999463",
+      "active": 159
+    },
+    {
+      "ms": 1514.7999999821186,
+      "count": 159,
+      "min": 12.1116943359375,
+      "max": 12.11175537109375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.997995",
+      "active": 159
+    },
+    {
+      "ms": 1531.3999999761581,
+      "count": 159,
+      "min": 12.2310791015625,
+      "max": 12.2310791015625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.99557",
+      "active": 159
+    },
+    {
+      "ms": 1547.7999999821186,
+      "count": 159,
+      "min": 12.34588623046875,
+      "max": 12.345947265625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.992186",
+      "active": 159
+    },
+    {
+      "ms": 1564.199999988079,
+      "count": 159,
+      "min": 12.45751953125,
+      "max": 12.45758056640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.987783",
+      "active": 159
+    },
+    {
+      "ms": 1581.0999999940395,
+      "count": 159,
+      "min": 12.5665283203125,
+      "max": 12.56658935546875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.982287",
+      "active": 159
+    },
+    {
+      "ms": 1599.199999988079,
+      "count": 159,
+      "min": 12.66790771484375,
+      "max": 12.66796875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.975977",
+      "active": 159
+    },
+    {
+      "ms": 1614.3999999761581,
+      "count": 159,
+      "min": 12.76953125,
+      "max": 12.76959228515625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.96833",
+      "active": 159
+    },
+    {
+      "ms": 1631.5,
+      "count": 159,
+      "min": 12.865463256835938,
+      "max": 12.865478515625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.959748",
+      "active": 159
+    },
+    {
+      "ms": 1647.8999999761581,
+      "count": 159,
+      "min": 12.956787109375,
+      "max": 12.95684814453125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.950164",
+      "active": 159
+    },
+    {
+      "ms": 1664.3999999761581,
+      "count": 159,
+      "min": 13.04425048828125,
+      "max": 13.0443115234375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.939533",
+      "active": 159
+    },
+    {
+      "ms": 1681.199999988079,
+      "count": 159,
+      "min": 13.12823486328125,
+      "max": 13.1282958984375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.927791",
+      "active": 159
+    },
+    {
+      "ms": 1697.699999988079,
+      "count": 159,
+      "min": 13.207763671875,
+      "max": 13.207794189453125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.915099",
+      "active": 159
+    },
+    {
+      "ms": 1714.699999988079,
+      "count": 159,
+      "min": 13.28338623046875,
+      "max": 13.283447265625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.901416",
+      "active": 159
+    },
+    {
+      "ms": 1731.0999999940395,
+      "count": 159,
+      "min": 13.35589599609375,
+      "max": 13.35595703125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.8866",
+      "active": 159
+    },
+    {
+      "ms": 1747.5999999940395,
+      "count": 159,
+      "min": 13.423583984375,
+      "max": 13.42364501953125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.871051",
+      "active": 159
+    },
+    {
+      "ms": 1764.5999999940395,
+      "count": 159,
+      "min": 13.48779296875,
+      "max": 13.48785400390625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.85456",
+      "active": 159
+    },
+    {
+      "ms": 1781.5,
+      "count": 159,
+      "min": 13.548454284667969,
+      "max": 13.5484619140625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.837184",
+      "active": 159
+    },
+    {
+      "ms": 1797.7999999821186,
+      "count": 159,
+      "min": 13.604736328125,
+      "max": 13.60479736328125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.819218",
+      "active": 159
+    },
+    {
+      "ms": 1814.5999999940395,
+      "count": 159,
+      "min": 13.65753173828125,
+      "max": 13.6575927734375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.800544",
+      "active": 159
+    },
+    {
+      "ms": 1831.2999999821186,
+      "count": 159,
+      "min": 13.705810546875,
+      "max": 13.70587158203125,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.781609",
+      "active": 159
+    },
+    {
+      "ms": 1847.8999999761581,
+      "count": 159,
+      "min": 13.750335693359375,
+      "max": 13.7503662109375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.762308",
+      "active": 159
+    },
+    {
+      "ms": 1864.8999999761581,
+      "count": 159,
+      "min": 13.79132080078125,
+      "max": 13.7913818359375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.742646",
+      "active": 159
+    },
+    {
+      "ms": 1881.3999999761581,
+      "count": 159,
+      "min": 13.8284912109375,
+      "max": 13.828521728515625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.722866",
+      "active": 159
+    },
+    {
+      "ms": 1897.7999999821186,
+      "count": 159,
+      "min": 13.86175537109375,
+      "max": 13.86181640625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.703219",
+      "active": 159
+    },
+    {
+      "ms": 1914.7999999821186,
+      "count": 159,
+      "min": 13.8914794921875,
+      "max": 13.89154052734375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.683598",
+      "active": 159
+    },
+    {
+      "ms": 1931.5999999940395,
+      "count": 159,
+      "min": 13.9176025390625,
+      "max": 13.9176025390625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.664249",
+      "active": 159
+    },
+    {
+      "ms": 1948.199999988079,
+      "count": 159,
+      "min": 13.940155029296875,
+      "max": 13.940185546875,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.645185",
+      "active": 159
+    },
+    {
+      "ms": 1964.7999999821186,
+      "count": 159,
+      "min": 13.95892333984375,
+      "max": 13.958984375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.626746",
+      "active": 159
+    },
+    {
+      "ms": 1982.199999988079,
+      "count": 159,
+      "min": 13.9739990234375,
+      "max": 13.9739990234375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.609135",
+      "active": 159
+    },
+    {
+      "ms": 1998,
+      "count": 159,
+      "min": 13.985702514648438,
+      "max": 13.9857177734375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.592017",
+      "active": 159
+    },
+    {
+      "ms": 2014.699999988079,
+      "count": 159,
+      "min": 13.993865966796875,
+      "max": 13.993896484375,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.575789",
+      "active": 159
+    },
+    {
+      "ms": 2031.2999999821186,
+      "count": 159,
+      "min": 13.9986572265625,
+      "max": 13.9986572265625,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.560235",
+      "active": 159
+    },
+    {
+      "ms": 2049.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.545702",
+      "active": 0
+    },
+    {
+      "ms": 2064.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.53222",
+      "active": 0
+    },
+    {
+      "ms": 2081.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.519662",
+      "active": 0
+    },
+    {
+      "ms": 2097.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.508205",
+      "active": 0
+    },
+    {
+      "ms": 2115.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.497669",
+      "active": 0
+    },
+    {
+      "ms": 2132,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.488206",
+      "active": 0
+    },
+    {
+      "ms": 2148.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.479912",
+      "active": 0
+    },
+    {
+      "ms": 2165.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.472624",
+      "active": 0
+    },
+    {
+      "ms": 2182.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.466385",
+      "active": 0
+    },
+    {
+      "ms": 2198.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.461238",
+      "active": 0
+    },
+    {
+      "ms": 2214.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.457018",
+      "active": 0
+    },
+    {
+      "ms": 2231.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.453825",
+      "active": 0
+    },
+    {
+      "ms": 2247.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.45164",
+      "active": 0
+    },
+    {
+      "ms": 2264,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.450359",
+      "active": 0
+    },
+    {
+      "ms": 2280.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.450006",
+      "active": 0
+    },
+    {
+      "ms": 2297.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.450574",
+      "active": 0
+    },
+    {
+      "ms": 2314.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.452075",
+      "active": 0
+    },
+    {
+      "ms": 2330.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.454518",
+      "active": 0
+    },
+    {
+      "ms": 2358.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.457931",
+      "active": 0
+    },
+    {
+      "ms": 2363.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.462364",
+      "active": 0
+    },
+    {
+      "ms": 2380.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.467856",
+      "active": 0
+    },
+    {
+      "ms": 2397.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.474358",
+      "active": 0
+    },
+    {
+      "ms": 2413.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.48196",
+      "active": 0
+    },
+    {
+      "ms": 2431.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.49058",
+      "active": 0
+    },
+    {
+      "ms": 2447.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.50008",
+      "active": 0
+    },
+    {
+      "ms": 2464.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.511006",
+      "active": 0
+    },
+    {
+      "ms": 2481.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.522724",
+      "active": 0
+    },
+    {
+      "ms": 2498.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.535459",
+      "active": 0
+    },
+    {
+      "ms": 2514.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.549353",
+      "active": 0
+    },
+    {
+      "ms": 2531.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.564038",
+      "active": 0
+    },
+    {
+      "ms": 2548,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.57972",
+      "active": 0
+    },
+    {
+      "ms": 2564.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.596149",
+      "active": 0
+    },
+    {
+      "ms": 2581,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.613344",
+      "active": 0
+    },
+    {
+      "ms": 2597.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.631439",
+      "active": 0
+    },
+    {
+      "ms": 2615.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.65002",
+      "active": 0
+    },
+    {
+      "ms": 2631,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.668852",
+      "active": 0
+    },
+    {
+      "ms": 2648,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.688395",
+      "active": 0
+    },
+    {
+      "ms": 2664.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.708063",
+      "active": 0
+    },
+    {
+      "ms": 2681.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.727845",
+      "active": 0
+    },
+    {
+      "ms": 2697.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.747489",
+      "active": 0
+    },
+    {
+      "ms": 2714.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.767103",
+      "active": 0
+    },
+    {
+      "ms": 2731.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.786439",
+      "active": 0
+    },
+    {
+      "ms": 2747.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.805263",
+      "active": 0
+    },
+    {
+      "ms": 2763.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.823688",
+      "active": 0
+    },
+    {
+      "ms": 2780.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.841598",
+      "active": 0
+    },
+    {
+      "ms": 2797.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.858684",
+      "active": 0
+    },
+    {
+      "ms": 2814.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.874972",
+      "active": 0
+    },
+    {
+      "ms": 2831,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.890303",
+      "active": 0
+    },
+    {
+      "ms": 2848.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.904802",
+      "active": 0
+    },
+    {
+      "ms": 2864.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.918327",
+      "active": 0
+    },
+    {
+      "ms": 2881,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.930842",
+      "active": 0
+    },
+    {
+      "ms": 2897.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.942255",
+      "active": 0
+    },
+    {
+      "ms": 2914.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.952688",
+      "active": 0
+    },
+    {
+      "ms": 2930.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.962059",
+      "active": 0
+    },
+    {
+      "ms": 2948,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.970368",
+      "active": 0
+    },
+    {
+      "ms": 2965.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.977658",
+      "active": 0
+    },
+    {
+      "ms": 2981.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.983819",
+      "active": 0
+    },
+    {
+      "ms": 2998.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.989014",
+      "active": 0
+    },
+    {
+      "ms": 3015.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.993092",
+      "active": 0
+    },
+    {
+      "ms": 3031.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.996271",
+      "active": 0
+    },
+    {
+      "ms": 3048.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.998464",
+      "active": 0
+    },
+    {
+      "ms": 3064.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.999675",
+      "active": 0
+    },
+    {
+      "ms": 3081.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.999988",
+      "active": 0
+    },
+    {
+      "ms": 3098.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.999389",
+      "active": 0
+    },
+    {
+      "ms": 3115.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.997829",
+      "active": 0
+    },
+    {
+      "ms": 3131.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.99534",
+      "active": 0
+    },
+    {
+      "ms": 3147.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.99188",
+      "active": 0
+    },
+    {
+      "ms": 3165,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.987398",
+      "active": 0
+    },
+    {
+      "ms": 3181.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.981928",
+      "active": 0
+    },
+    {
+      "ms": 3198.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.975389",
+      "active": 0
+    },
+    {
+      "ms": 3214.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.967846",
+      "active": 0
+    },
+    {
+      "ms": 3231.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.9592",
+      "active": 0
+    },
+    {
+      "ms": 3247.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.949492",
+      "active": 0
+    },
+    {
+      "ms": 3264.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.938656",
+      "active": 0
+    },
+    {
+      "ms": 3281.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.926981",
+      "active": 0
+    },
+    {
+      "ms": 3298.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.914062",
+      "active": 0
+    },
+    {
+      "ms": 3315,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.900218",
+      "active": 0
+    },
+    {
+      "ms": 3331.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.885505",
+      "active": 0
+    },
+    {
+      "ms": 3347.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.869797",
+      "active": 0
+    },
+    {
+      "ms": 3364.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.853243",
+      "active": 0
+    },
+    {
+      "ms": 3381.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.835915",
+      "active": 0
+    },
+    {
+      "ms": 3398.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.817903",
+      "active": 0
+    },
+    {
+      "ms": 3414.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.799529",
+      "active": 0
+    },
+    {
+      "ms": 3431,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.78034",
+      "active": 0
+    },
+    {
+      "ms": 3447.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.760902",
+      "active": 0
+    },
+    {
+      "ms": 3465.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.741227",
+      "active": 0
+    },
+    {
+      "ms": 3481.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.721444",
+      "active": 0
+    },
+    {
+      "ms": 3498.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.701803",
+      "active": 0
+    },
+    {
+      "ms": 3515.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.681847",
+      "active": 0
+    },
+    {
+      "ms": 3532,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.662758",
+      "active": 0
+    },
+    {
+      "ms": 3548.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.643953",
+      "active": 0
+    },
+    {
+      "ms": 3565.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.625444",
+      "active": 0
+    },
+    {
+      "ms": 3581.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.607671",
+      "active": 0
+    },
+    {
+      "ms": 3598.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.590617",
+      "active": 0
+    },
+    {
+      "ms": 3615.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.574363",
+      "active": 0
+    },
+    {
+      "ms": 3632.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.558623",
+      "active": 0
+    },
+    {
+      "ms": 3648.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.544695",
+      "active": 0
+    },
+    {
+      "ms": 3665.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.531128",
+      "active": 0
+    },
+    {
+      "ms": 3682.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.518728",
+      "active": 0
+    },
+    {
+      "ms": 3699,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.507286",
+      "active": 0
+    },
+    {
+      "ms": 3715.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.496957",
+      "active": 0
+    },
+    {
+      "ms": 3731.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.487677",
+      "active": 0
+    },
+    {
+      "ms": 3748.2999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.4794",
+      "active": 0
+    },
+    {
+      "ms": 3765,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.472141",
+      "active": 0
+    },
+    {
+      "ms": 3782,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.465977",
+      "active": 0
+    },
+    {
+      "ms": 3798.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.460847",
+      "active": 0
+    },
+    {
+      "ms": 3815.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.456756",
+      "active": 0
+    },
+    {
+      "ms": 3831.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.453618",
+      "active": 0
+    },
+    {
+      "ms": 3849,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.451476",
+      "active": 0
+    },
+    {
+      "ms": 3865.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.450285",
+      "active": 0
+    },
+    {
+      "ms": 3882.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.450021",
+      "active": 0
+    },
+    {
+      "ms": 3899.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.45067",
+      "active": 0
+    },
+    {
+      "ms": 3916,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.452257",
+      "active": 0
+    },
+    {
+      "ms": 3932.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.454786",
+      "active": 0
+    },
+    {
+      "ms": 3949.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.458336",
+      "active": 0
+    },
+    {
+      "ms": 3966,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.462812",
+      "active": 0
+    },
+    {
+      "ms": 3982.399999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.468361",
+      "active": 0
+    },
+    {
+      "ms": 3999.7999999821186,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.475036",
+      "active": 0
+    },
+    {
+      "ms": 4015.699999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.482544",
+      "active": 0
+    },
+    {
+      "ms": 4032.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.491241",
+      "active": 0
+    },
+    {
+      "ms": 4049.5,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.501123",
+      "active": 0
+    },
+    {
+      "ms": 4066.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.511887",
+      "active": 0
+    },
+    {
+      "ms": 4082.899999976158,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.523685",
+      "active": 0
+    },
+    {
+      "ms": 4099,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.536498",
+      "active": 0
+    },
+    {
+      "ms": 4115.799999982119,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.550556",
+      "active": 0
+    },
+    {
+      "ms": 4133.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.565227",
+      "active": 0
+    },
+    {
+      "ms": 4148.5999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.580977",
+      "active": 0
+    },
+    {
+      "ms": 4165.199999988079,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.597469",
+      "active": 0
+    },
+    {
+      "ms": 4182.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.614933",
+      "active": 0
+    },
+    {
+      "ms": 4199.0999999940395,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.632976",
+      "active": 0
+    },
+    {
+      "ms": 4215.799999982119,
+      "count": 159,
+      "min": 14,
+      "max": 14,
+      "selected": null,
+      "dotWidth": 5,
+      "dotOpacity": "0.651601",
+      "active": 0
+    }
+  ]
+}

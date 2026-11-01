@@ -4,6 +4,11 @@
 a:focus-visible, .people-table-wrap:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .people-transfer .menu { left: auto; right: 0; }
 .people-pagination select { height: 31px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 0 8px; }
+/* 工作台二级查询面板：真实筛选控件的回写容器，独立原型不显示。 */
+#people-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+#people-filters[hidden] { display: none; }
+#people-filters label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+#people-filters select { height: 31px; min-width: 120px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 0 8px; }
 .organization-layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); flex: 1; min-height: 0; }
 .organization-sidebar, .people-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .organization-sidebar { border-right: 1px solid var(--border); }
@@ -32,17 +37,19 @@ a:focus-visible, .people-table-wrap:focus-visible, textarea:focus-visible { outl
 .people-list-heading h2 { font-size: 13px; margin: 0; }
 .people-list-heading p { margin: 5px 0 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .people-table-wrap { flex: 1; min-height: 0; overflow: auto; }
-.people-table { width: 100%; min-width: 1022px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.people-table { width: 100%; min-width: 780px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .people-table th, .people-table td { padding: 10px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--surface); }
 .people-table th { padding-top: 11px; padding-bottom: 11px; color: var(--muted); font-weight: 500; background: var(--bg); position: sticky; top: 0; z-index: 2; }
 .people-table tr:hover td { background: var(--bg); }
 .people-table th:first-child, .people-table td:first-child { position: sticky; left: 0; z-index: 1; border-right: 1px solid var(--border); }
-.people-table th:nth-last-child(2), .people-table td:nth-last-child(2) { position: sticky; right: 76px; z-index: 1; }
+.people-table th:nth-last-child(2), .people-table td:nth-last-child(2) { position: sticky; right: 84px; z-index: 1; }
 .people-table th:last-child, .people-table td:last-child { position: sticky; right: 0; z-index: 1; border-left: 1px solid var(--border); }
 .people-table th:first-child, .people-table th:nth-last-child(2), .people-table th:last-child { z-index: 3; }
 .person-name-button { display: block; height: auto; max-width: 100%; padding: 0; border: 0; color: var(--accent); background: transparent; overflow: hidden; text-overflow: ellipsis; }
 .person-name-button:hover { background: transparent; text-decoration: underline; }
 .person-example { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
+.person-assets-button { display: block; height: auto; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 10.5px; margin-top: 3px; }
+.person-assets-button:hover { background: transparent; text-decoration: underline; }
 .person-edit-button { height: 27px; padding: 0 7px; font-size: 11px; }
 .person-edit-button svg { width: 12px; height: 12px; }
 .person-status { display: inline-block; font-size: 11px; padding: 3px 6px; border-radius: 5px; color: var(--success); background: #edf7f2; }

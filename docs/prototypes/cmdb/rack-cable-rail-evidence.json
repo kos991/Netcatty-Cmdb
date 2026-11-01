@@ -1,0 +1,422 @@
+{
+  "url": "http://127.0.0.1:8765/rack-layout-preview.html",
+  "desktop": {
+    "viewport": [
+      1568,
+      718
+    ],
+    "documentWidth": 1568,
+    "rail": {
+      "x": 0,
+      "y": 36,
+      "w": 54,
+      "h": 682,
+      "right": 54,
+      "bottom": 718
+    },
+    "legend": {
+      "x": 8,
+      "y": 320,
+      "w": 38,
+      "h": 224,
+      "right": 46,
+      "bottom": 544
+    },
+    "businessOverlap": false,
+    "rackOverlap": false,
+    "padding": "8px 14px 10px",
+    "stage": {
+      "x": 55,
+      "y": 91,
+      "w": 1134,
+      "h": 545,
+      "right": 1189,
+      "bottom": 636
+    },
+    "panels": [
+      {
+        "title": "A01 机柜",
+        "x": 122.453125,
+        "y": 99,
+        "w": 286,
+        "h": 527,
+        "right": 408.453125,
+        "bottom": 626
+      },
+      {
+        "title": "A02 机柜",
+        "x": 479,
+        "y": 99,
+        "w": 286,
+        "h": 527,
+        "right": 765,
+        "bottom": 626
+      },
+      {
+        "title": "A03 机柜",
+        "x": 835.546875,
+        "y": 99,
+        "w": 286,
+        "h": 527,
+        "right": 1121.546875,
+        "bottom": 626
+      }
+    ],
+    "wires": [
+      {
+        "cls": "rack-wire-group fiber",
+        "path": "M 339.453125 134 C 369.0828125 134, 380.3703125 413.5, 410 413.5"
+      },
+      {
+        "cls": "rack-wire-group fiber",
+        "path": "M 339.453125 117 C 371.163125 117, 371.163125 245.5, 339.453125 245.5"
+      },
+      {
+        "cls": "rack-wire-group fiber",
+        "path": "M 339.453125 228.5 L 347.453125 228.5 Q 355.453125 228.5 355.453125 220.5 L 355.453125 74 Q 355.453125 66 363.453125 66 L 742.546875 66 Q 750.546875 66 750.546875 74 L 750.546875 213.5 Q 750.546875 221.5 758.546875 221.5 L 766.546875 221.5"
+      },
+      {
+        "cls": "rack-wire-group copper",
+        "path": "M 696 413.5 C 725.6296875 413.5, 736.9171875 341.5, 766.546875 341.5"
+      },
+      {
+        "cls": "rack-wire-group copper",
+        "path": "M 339.453125 262.5 C 396.273125 262.5, 396.273125 509.5, 339.453125 509.5"
+      }
+    ],
+    "sidebar": {
+      "x": 1189,
+      "y": 91,
+      "w": 368,
+      "h": 545,
+      "right": 1557,
+      "bottom": 636
+    }
+  },
+  "narrow": [
+    {
+      "viewport": [
+        1024,
+        718
+      ],
+      "documentWidth": 1024,
+      "rail": {
+        "x": 0,
+        "y": 36,
+        "w": 54,
+        "h": 682,
+        "right": 54,
+        "bottom": 718
+      },
+      "legend": {
+        "x": 8,
+        "y": 320,
+        "w": 38,
+        "h": 224,
+        "right": 46,
+        "bottom": 544
+      },
+      "businessOverlap": false,
+      "rackOverlap": false,
+      "padding": "8px 14px 10px",
+      "stage": {
+        "x": 55,
+        "y": 91,
+        "w": 958,
+        "h": 281,
+        "right": 1013,
+        "bottom": 372
+      },
+      "panels": [
+        {
+          "title": "A01 机柜",
+          "x": 105,
+          "y": 99,
+          "w": 254,
+          "h": 263,
+          "right": 359,
+          "bottom": 362
+        },
+        {
+          "title": "A02 机柜",
+          "x": 407,
+          "y": 99,
+          "w": 254,
+          "h": 263,
+          "right": 661,
+          "bottom": 362
+        },
+        {
+          "title": "A03 机柜",
+          "x": 709,
+          "y": 99,
+          "w": 254,
+          "h": 263,
+          "right": 963,
+          "bottom": 362
+        }
+      ],
+      "wires": [
+        {
+          "cls": "rack-wire-group fiber",
+          "path": "M 290 134 C 310.16 134, 317.84 251, 338 251"
+        },
+        {
+          "cls": "rack-wire-group fiber",
+          "path": "M 290 117 C 321.71 117, 321.71 245.5, 290 245.5"
+        },
+        {
+          "cls": "rack-wire-group copper",
+          "path": "M 290 251 C 332 251, 332 251, 290 251"
+        },
+        {
+          "cls": "rack-wire-group fiber",
+          "path": "M 290 228.5 L 298 228.5 Q 306 228.5 306 220.5 L 306 74 Q 306 66 314 66 L 616 66 Q 624 66 624 74 L 624 213.5 Q 624 221.5 632 221.5 L 640 221.5"
+        },
+        {
+          "cls": "rack-wire-group copper",
+          "path": "M 592 251 C 612.16 251, 619.84 251, 640 251"
+        }
+      ],
+      "sidebar": {
+        "x": 55,
+        "y": 372,
+        "w": 958,
+        "h": 264,
+        "right": 1013,
+        "bottom": 636
+      }
+    },
+    {
+      "viewport": [
+        720,
+        718
+      ],
+      "documentWidth": 720,
+      "rail": {
+        "x": 0,
+        "y": 36,
+        "w": 44,
+        "h": 2963,
+        "right": 44,
+        "bottom": 2999
+      },
+      "legend": {
+        "x": 3,
+        "y": 320,
+        "w": 38,
+        "h": 224,
+        "right": 41,
+        "bottom": 544
+      },
+      "businessOverlap": false,
+      "rackOverlap": false,
+      "padding": "8px 8px 10px",
+      "stage": {
+        "x": 45,
+        "y": 174,
+        "w": 664,
+        "h": 1438,
+        "right": 709,
+        "bottom": 1612
+      },
+      "panels": [
+        {
+          "title": "A01 机柜",
+          "x": 217,
+          "y": 182,
+          "w": 320,
+          "h": 460,
+          "right": 537,
+          "bottom": 642
+        },
+        {
+          "title": "A02 机柜",
+          "x": 217,
+          "y": 662,
+          "w": 320,
+          "h": 460,
+          "right": 537,
+          "bottom": 1122
+        },
+        {
+          "title": "A03 机柜",
+          "x": 217,
+          "y": 1142,
+          "w": 320,
+          "h": 460,
+          "right": 537,
+          "bottom": 1602
+        }
+      ],
+      "wires": [
+        {
+          "cls": "rack-wire-group fiber",
+          "path": "M 473.5 134 C 348.55 134, 300.95000000000005 893.5, 176 893.5"
+        },
+        {
+          "cls": "rack-wire-group fiber",
+          "path": "M 473.5 117 C 505.21 117, 505.21 245.5, 473.5 245.5"
+        },
+        {
+          "cls": "rack-wire-group copper",
+          "path": "M 473.5 262.5 C 526.63 262.5, 526.63 448, 473.5 448"
+        },
+        {
+          "cls": "rack-wire-group fiber",
+          "path": "M 473.5 228.5 L 465.5 228.5 Q 457.5 228.5 457.5 220.5 L 457.5 74 Q 457.5 66 449.5 66 L 198.5 66 Q 190.5 66 190.5 74 L 190.5 1173.5 Q 190.5 1181.5 182.5 1181.5 L 174.5 1181.5"
+        },
+        {
+          "cls": "rack-wire-group copper",
+          "path": "M 472 893.5 C 347.05 893.5, 299.45000000000005 1301.5, 174.5 1301.5"
+        }
+      ],
+      "sidebar": {
+        "x": 45,
+        "y": 1612,
+        "w": 664,
+        "h": 1248,
+        "right": 709,
+        "bottom": 2860
+      }
+    }
+  ],
+  "filters": {
+    "desktop": [
+      {
+        "active": "all",
+        "counts": [
+          "全部(5)",
+          "光纤(3)",
+          "网线(2)",
+          "同柜(2)"
+        ],
+        "bright": 5,
+        "dimmed": 0,
+        "sidebarCount": "5 条",
+        "sidebar": [
+          "光纤 10GTRK · VLAN 10,20,30A01 ↔ A02HCI-01 · SFP1 ↔ SW-001 · XG1/0/1Trunk 干道口 · 虚拟化服务器 HCI-01 → 汇聚交换机 SW-001编辑",
+          "光纤 10GLACP · VLAN 50同柜 A01HCI-01 · eth1 ↷ SAN-01 · eth0LACP 聚合口 · 虚拟化服务器 HCI-01 → 存储设备 SAN-01编辑",
+          "网线 1GMGMT · VLAN 99同柜 A01SAN-01 · mgmt0 ↷ SW-002 · GE1/0/8Mgmt 带外管理口 · 存储设备 SAN-01 → 接入交换机 SW-002编辑",
+          "光纤 10GSAN · VSAN 10 / VLAN 200A01 ↔ A03SAN-01 · SFP1 ↔ SW-SAN-01 · XG1/0/1SAN / HA 专用口 · 存储设备 SAN-01 → 存储交换机 SW-SAN-01编辑",
+          "网线 1GACC · VLAN 30A02 ↔ A03SW-001 · GE1/0/12 ↔ BAK-01 · eth0Access 接入口 · 汇聚交换机 SW-001 → 备份服务器 BAK-01编辑"
+        ]
+      },
+      {
+        "active": "fiber",
+        "counts": [
+          "全部(5)",
+          "光纤(3)",
+          "网线(2)",
+          "同柜(2)"
+        ],
+        "bright": 3,
+        "dimmed": 2,
+        "sidebarCount": "3/5 条",
+        "sidebar": [
+          "光纤 10GTRK · VLAN 10,20,30A01 ↔ A02HCI-01 · SFP1 ↔ SW-001 · XG1/0/1Trunk 干道口 · 虚拟化服务器 HCI-01 → 汇聚交换机 SW-001编辑",
+          "光纤 10GLACP · VLAN 50同柜 A01HCI-01 · eth1 ↷ SAN-01 · eth0LACP 聚合口 · 虚拟化服务器 HCI-01 → 存储设备 SAN-01编辑",
+          "光纤 10GSAN · VSAN 10 / VLAN 200A01 ↔ A03SAN-01 · SFP1 ↔ SW-SAN-01 · XG1/0/1SAN / HA 专用口 · 存储设备 SAN-01 → 存储交换机 SW-SAN-01编辑"
+        ]
+      },
+      {
+        "active": "copper",
+        "counts": [
+          "全部(5)",
+          "光纤(3)",
+          "网线(2)",
+          "同柜(2)"
+        ],
+        "bright": 2,
+        "dimmed": 3,
+        "sidebarCount": "2/5 条",
+        "sidebar": [
+          "网线 1GMGMT · VLAN 99同柜 A01SAN-01 · mgmt0 ↷ SW-002 · GE1/0/8Mgmt 带外管理口 · 存储设备 SAN-01 → 接入交换机 SW-002编辑",
+          "网线 1GACC · VLAN 30A02 ↔ A03SW-001 · GE1/0/12 ↔ BAK-01 · eth0Access 接入口 · 汇聚交换机 SW-001 → 备份服务器 BAK-01编辑"
+        ]
+      },
+      {
+        "active": "intra",
+        "counts": [
+          "全部(5)",
+          "光纤(3)",
+          "网线(2)",
+          "同柜(2)"
+        ],
+        "bright": 2,
+        "dimmed": 3,
+        "sidebarCount": "2/5 条",
+        "sidebar": [
+          "光纤 10GLACP · VLAN 50同柜 A01HCI-01 · eth1 ↷ SAN-01 · eth0LACP 聚合口 · 虚拟化服务器 HCI-01 → 存储设备 SAN-01编辑",
+          "网线 1GMGMT · VLAN 99同柜 A01SAN-01 · mgmt0 ↷ SW-002 · GE1/0/8Mgmt 带外管理口 · 存储设备 SAN-01 → 接入交换机 SW-002编辑"
+        ]
+      }
+    ],
+    "narrow": [
+      {
+        "width": 1024,
+        "active": "fiber",
+        "bright": 3,
+        "dimmed": 2,
+        "sidebar": "3/5 条"
+      },
+      {
+        "width": 1024,
+        "active": "copper",
+        "bright": 2,
+        "dimmed": 3,
+        "sidebar": "2/5 条"
+      },
+      {
+        "width": 1024,
+        "active": "intra",
+        "bright": 2,
+        "dimmed": 3,
+        "sidebar": "2/5 条"
+      },
+      {
+        "width": 1024,
+        "active": "all",
+        "bright": 5,
+        "dimmed": 0,
+        "sidebar": "5 条"
+      },
+      {
+        "width": 720,
+        "active": "fiber",
+        "bright": 3,
+        "dimmed": 2,
+        "sidebar": "3/5 条"
+      },
+      {
+        "width": 720,
+        "active": "copper",
+        "bright": 2,
+        "dimmed": 3,
+        "sidebar": "2/5 条"
+      },
+      {
+        "width": 720,
+        "active": "intra",
+        "bright": 2,
+        "dimmed": 3,
+        "sidebar": "2/5 条"
+      },
+      {
+        "width": 720,
+        "active": "all",
+        "bright": 5,
+        "dimmed": 0,
+        "sidebar": "5 条"
+      }
+    ]
+  },
+  "toggleCurrentFilter": "intra -> all; 5 wires and sidebar 5 条",
+  "search": "SAN -> 2 matches; results remain inside rack-stage",
+  "toolbar": "create and room menus open; Escape closes; only one open",
+  "scriptErrors": {
+    "entries": [],
+    "nextSeq": 0,
+    "dropped": 0
+  }
+}

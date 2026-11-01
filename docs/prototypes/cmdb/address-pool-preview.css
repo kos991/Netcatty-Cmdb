@@ -1,29 +1,104 @@
-/* IP 详情占据自己的布局列，不覆盖地址网格；仅供离线原型评审。 */
+/* IP detail is a native modal; the address grid keeps its full-width layout. */
 .pool-address-layout { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-width: 0; min-height: 0; overflow: clip; }
-.pool-address-layout.has-ip-detail { grid-template-columns: minmax(0, 1fr) 320px; }
 .pool-address-layout > .pool-scroll { min-width: 0; min-height: 0; overflow: auto; padding-top: 4px; overscroll-behavior: contain; }
-#ip-detail.record-inline { display: flex; flex-direction: column; position: static; width: auto; max-width: none; height: auto; min-width: 0; min-height: 0; border: 0; border-left: 1px solid var(--border); border-radius: 0; box-shadow: none; background: var(--surface); overflow: auto; }
+#ip-detail.record-dialog { width: min(460px, calc(100vw - 32px)); max-width: calc(100vw - 32px); height: min(370px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); margin: auto; border-radius: 10px; box-shadow: 0 18px 60px color-mix(in srgb, var(--fg) 28%, transparent); }
+#ip-detail.record-dialog::backdrop { background: color-mix(in srgb, var(--fg) 48%, transparent); }
 #ip-detail .dialog-header { gap: 10px; padding: 12px 14px; }
-#ip-detail-title { font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-#ip-detail .dialog-body { min-height: 0; flex: 1; overflow: auto; padding: 16px 14px; }
+#ip-detail .ip-detail-identity { min-width: 0; flex: 1; }
+#ip-detail .ip-detail-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#ip-detail-title { font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#ip-detail .ip-detail-subtitle { margin: 3px 0 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+#ip-detail .ip-detail-status { flex: none; border-radius: 999px; padding: 2px 7px; color: var(--fg); background: var(--muted-surface); font-size: 11px; line-height: 16px; }
+#ip-detail .ip-detail-status[data-status="used"] { color: #0b7a53; background: #d8f3e7; }
+#ip-detail .ip-detail-status[data-status="reserved"] { color: #9a6700; background: #fff0c2; }
+#ip-detail .ip-detail-status[data-status="abnormal"] { color: #b42318; background: #fee4e2; }
+#ip-detail .ip-detail-status[data-status="free"] { color: #2563eb; background: #dbeafe; }
+#ip-detail .dialog-body { min-height: 0; flex: 1; overflow: auto; padding: 14px; }
 #ip-detail .dialog-footer { flex-wrap: wrap; justify-content: flex-start; padding: 10px 14px; }
 #ip-detail .dialog-footer button { height: 34px; padding: 0 10px; font-size: 13px; }
 #ip-detail-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-#ip-detail .selection-note { margin-top: 0; padding-bottom: 12px; color: var(--accent); line-height: 1.6; font-size: 11px; }
-#ip-detail-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-#ip-detail-fields .field { padding: 0; border: 0; background: transparent; }
-#ip-detail-fields dt { margin-bottom: 6px; font-size: 12px; line-height: 18px; }
-#ip-detail-fields dd { font-size: 13px; line-height: 20px; }
-#ip-detail .record-section, #pool-editor .record-section, #pool-ip-editor .record-section { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-#ip-detail .section-title, #pool-editor .section-title, #pool-ip-editor .section-title { font-size: 13px; margin: 0 0 14px; }
-#ip-detail .record-header .icon, #pool-editor .record-header .icon, #pool-ip-editor .record-header .icon { width: 34px; height: 34px; }
+/* 工作台二级查询面板：真实筛选控件的回写容器，独立原型不显示。 */
+#pool-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+#pool-filters[hidden] { display: none; }
+#pool-filters label { display: grid; gap: 3px; font-size: 11px; color: var(--muted-ink, #5a6478); }
+#pool-filters select { min-width: 120px; }
+#ip-detail-fields, #ip-detail-usage { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+#ip-detail-fields .field, #ip-detail-usage .field { padding: 0; border: 0; background: transparent; }
+#ip-detail-fields dt, #ip-detail-usage dt { margin-bottom: 4px; font-size: 11px; line-height: 16px; }
+#ip-detail-fields dd, #ip-detail-usage dd { font-size: 13px; line-height: 19px; }
+#ip-detail .record-section { padding: 0; margin-bottom: 16px; border: 0; background: transparent; }
+#ip-detail .section-title { font-size: 12px; margin: 0 0 10px; }
+#ip-detail .ip-detail-disclaimer { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+:root[data-preview-theme="dark"] #ip-detail .ip-detail-status[data-status="used"] { color: #8ce8bf; background: #164b39; }
+:root[data-preview-theme="dark"] #ip-detail .ip-detail-status[data-status="reserved"] { color: #ffd66b; background: #503e12; }
+:root[data-preview-theme="dark"] #ip-detail .ip-detail-status[data-status="abnormal"] { color: #ffaaa5; background: #5b211e; }
+:root[data-preview-theme="dark"] #ip-detail .ip-detail-status[data-status="free"] { color: #9fc5ff; background: #173b69; }
 #pool-editor .field label, #pool-ip-editor .field label { font-size: 12px; }
 #pool-editor .field input, #pool-editor .field select, #pool-ip-editor .field input { height: 34px; font-size: 13px; }
 #pool-editor .record-footer button, #pool-ip-editor .record-footer button { height: 34px; font-size: 13px; }
-.ip-cell.ip-selected { position: relative; z-index: 1; outline: 2px solid var(--accent); outline-offset: 1px; background: var(--accent-soft); color: var(--accent); font-weight: 700; animation: ip-selection-glow 1.6s ease-in-out infinite; }
+.ip-cell.ip-selected { z-index: 1; outline: 2px solid var(--accent); outline-offset: 1px; font-weight: 700; }
+/* 概况栏的分段是自然宽度筛选按钮；方格填充只表达 IP 状态。 */
+.pool-summary .pool-identity { align-items: center; }
+.pool-summary { position: relative; }
+#pool-unpooled { position: relative; flex: none; font-size: 11px; }
+#pool-unpooled[hidden] { display: none; }
+#pool-unpooled > summary { display: inline-flex; align-items: center; height: 26px; padding: 0 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--muted-surface); color: var(--muted); cursor: pointer; list-style: none; white-space: nowrap; }
+#pool-unpooled > summary::-webkit-details-marker { display: none; }
+#pool-unpooled .pool-unpooled-list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 6; width: min(520px, calc(100vw - 40px)); max-height: 200px; overflow: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); box-shadow: 0 8px 22px #10182824; line-height: 1.7; }
+#pool-unpooled .pool-unpooled-list button { height: auto; padding: 0 2px; border: 0; font-size: 11px; color: var(--accent); }
+.pool-summary .ip-segment-overview:not([hidden]) { display: flex; flex: 1 1 auto; align-items: center; gap: 3px; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.ip-segment-run { --segment-accent: var(--accent); display: inline-flex; flex: none; align-items: center; gap: 5px; height: 26px; padding: 0 7px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--fg); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease; }
+.ip-segment-marker { width: 14px; height: 2px; border-radius: 1px; background: var(--segment-accent); flex: none; }
+.ip-segment-run[data-segment] { position: relative; padding-bottom: 4px; }
+.ip-segment-run > .ip-segment-marker { position: absolute; left: 7px; bottom: 1px; }
+.ip-segment-run:hover, .ip-segment-run:focus-visible { background: var(--muted-surface); }
+.ip-segment-run[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+.ip-segment-run:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ip-segment-run[data-segment="1"], #ip-grid .ip-cell[data-segment="1"] { --segment-accent: #8b76b8; }
+.ip-segment-run[data-segment="2"], #ip-grid .ip-cell[data-segment="2"] { --segment-accent: #468f83; }
+.ip-segment-run[data-segment="3"], #ip-grid .ip-cell[data-segment="3"] { --segment-accent: #b7804b; }
+.ip-segment-run[data-segment="4"], #ip-grid .ip-cell[data-segment="4"] { --segment-accent: #8d86ac; }
+.ip-segment-run[data-segment="5"], #ip-grid .ip-cell[data-segment="5"] { --segment-accent: #648ca3; }
+.pool-view { --ip-used: color-mix(in srgb, var(--accent) 82%, var(--fg)); --ip-reserved: var(--warning); --ip-abnormal: var(--error, #b94a4a); }
+#ip-grid .ip-cell { --segment-accent: var(--accent); position: relative; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 0 3px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); box-shadow: none; transition: box-shadow 150ms ease; }
+#ip-grid .ip-cell.used { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--ip-used); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+#ip-grid .ip-cell.reserved { background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--ip-reserved); border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); }
+#ip-grid .ip-cell.abnormal { background: color-mix(in srgb, var(--ip-abnormal) 10%, var(--surface)); color: var(--ip-abnormal); border-color: var(--ip-abnormal); }
+#ip-grid .ip-cell.special { background: var(--muted-surface); color: var(--muted); border-color: var(--border); }
+#ip-grid .ip-cell:hover { border-color: color-mix(in srgb, currentColor 70%, var(--border)); }
+#ip-grid .ip-cell > .ip-segment-marker { position: absolute; left: 3px; bottom: 2px; transform-origin: left; pointer-events: none; transform: scaleX(1); }
+#ip-grid .ip-host { flex: none; line-height: 16px; }
+#ip-grid .ip-cell.ip-sweep-pending > .ip-segment-marker { transform: scaleX(.08); opacity: .35; }
+#ip-grid .ip-cell.ip-feedback > .ip-segment-marker { animation: ip-selection-sweep 2000ms ease-in-out both; }
+@keyframes ip-selection-sweep { from { transform: scaleX(.08); opacity: .35; } to { transform: scaleX(1); opacity: 1; } }
+.ip-status-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+#ip-grid .ip-cell.used .ip-status-dot { animation: ip-used-dot-blink 1.6s ease-in-out infinite; }
+#ip-grid .ip-cell.ip-selected .ip-status-dot { animation: none; }
+@keyframes ip-used-dot-blink { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.ip-status-alert { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; font-size: 12px; font-weight: 700; line-height: 1; }
+#ip-grid .ip-status-mark { position: absolute; right: 3px; top: 3px; pointer-events: none; }
+#ip-grid svg.ip-status-mark { width: 10px; height: 10px; stroke-width: 2; }
+#ip-grid .status-match { box-shadow: inset 0 0 0 1px currentColor; }
+#ip-grid .ip-cell.segment-match { box-shadow: inset 0 0 0 1px var(--segment-accent); }
+#ip-grid .ip-cell.unassigned.segment-match { box-shadow: inset 0 0 0 1px var(--fg); }
+#ip-grid .ip-cell.segment-dimmed, #ip-table-body .segment-dimmed { opacity: .45; }
+#ip-table-body .segment-match { box-shadow: inset 0 0 0 1px var(--accent); }
+#ip-table-body [data-segment-key] { transition: box-shadow 150ms ease; }
+#ip-grid .status-dimmed, #ip-table-body .status-dimmed { opacity: .45; }
+#ip-table-body .status-match { box-shadow: inset 0 0 0 1px var(--accent); }
+.pool-pager .pool-stat { align-items: center; gap: 5px; height: 29px; padding: 0 2px; border: 0; border-radius: 2px; background: transparent; color: var(--fg); }
+.pool-pager .pool-stat.used { color: var(--ip-used); }
+.pool-pager .pool-stat.reserved { color: var(--ip-reserved); }
+.pool-pager .pool-stat.abnormal { color: var(--ip-abnormal); }
+.pool-pager .pool-stat > svg { width: 12px; height: 12px; }
+.pool-pager .pool-stat > .ip-status-dot, .pool-pager .pool-stat > .ip-status-alert, .pool-pager .pool-stat > strong { color: inherit; }
+.pool-pager .pool-stat:hover > span:not([aria-hidden]), .pool-pager .pool-stat[aria-pressed="true"] > span:not([aria-hidden]) { color: var(--fg); text-decoration: underline; text-underline-offset: 4px; }
+.pool-page-actions { display: flex; flex: none; align-items: center; gap: 8px; margin-left: auto; }
+@media (max-width: 1100px) { .pool-summary .pool-identity { flex-wrap: wrap; } .pool-summary .ip-segment-overview:not([hidden]) { flex-basis: 100%; } }
+@media (prefers-reduced-motion: reduce) { .ip-segment-run, #ip-grid .ip-cell, #ip-table-body [data-segment-key] { transition: none; } }
+@media (prefers-reduced-motion: reduce) { #ip-grid .ip-cell.used .ip-status-dot, #ip-grid .ip-cell.ip-feedback > .ip-segment-marker { animation: none; } #ip-grid .ip-cell.ip-sweep-pending > .ip-segment-marker { transform: scaleX(1); opacity: 1; } }
 .ip-table tr.ip-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
-.ip-table tr.ip-selected td { background: var(--accent-soft); }
-@keyframes ip-selection-glow { 0%, 100% { box-shadow: 0 0 0 2px var(--accent-soft); } 50% { box-shadow: 0 0 0 5px var(--accent-soft), inset 0 0 0 1px var(--accent); } }
+.ip-table tr.ip-selected td { background: transparent; }
 #pool-editor { width: min(980px, calc(100vw - 32px)); }
 #pool-editor .pool-maintenance-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 0; overflow: hidden; }
 .pool-maintenance-directory { display: flex; min-height: 0; flex-direction: column; gap: 8px; padding: 12px; border-right: 1px solid var(--border); background: var(--bg); }
@@ -41,9 +116,17 @@
 .pool-segments select { max-width: min(420px, 100%); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); }
 .pool-segments span { color: var(--muted); }
 .pool-segment-title { display: flex; justify-content: space-between; align-items: center; }
-.pool-segment-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; }
-.pool-segment-row label { display: flex; min-width: 0; flex-direction: column; gap: 4px; font-size: 12px; }
-.pool-segment-row input { min-width: 0; width: 100%; height: 34px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; padding: 6px; background: var(--surface); color: var(--fg); }
+.pool-segment-grid { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.pool-segment-head, .pool-segment-row { display: grid; grid-template-columns: minmax(100px, 1.1fr) minmax(56px, .5fr) minmax(110px, 1fr) minmax(110px, 1fr) 56px minmax(90px, 1fr) 48px; align-items: center; gap: 6px; }
+.pool-segment-head { padding: 8px 10px; background: var(--muted-surface); color: var(--muted); font-size: 11px; font-weight: 600; }
+.pool-segment-row { margin: 0; padding: 6px 8px; border: 0; border-top: 1px solid var(--border); border-radius: 0; }
+.pool-segment-row input { min-width: 0; width: 100%; height: 32px; box-sizing: border-box; border: 1px solid transparent; border-radius: 5px; padding: 4px 6px; background: transparent; color: var(--fg); font-size: 12px; }
+.pool-segment-row input:hover, .pool-segment-row input:focus { border-color: var(--border); background: var(--surface); outline: none; }
+.pool-segment-row input:focus { border-color: var(--accent); }
+.pool-segment-row .seg-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.pool-segment-row button { height: 28px; padding: 0 8px; font-size: 11px; color: var(--muted); background: transparent; }
+.pool-segment-row button:hover { background: var(--muted-surface); color: #b94a4a; }
+.pool-segment-empty { margin: 8px 0 0; }
 #pool-segment-error:not(:empty) { color: #b22; }
 @media (max-width: 720px) {
   #pool-editor .pool-maintenance-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(110px, 30%) minmax(0, 1fr); }
@@ -56,13 +139,36 @@
   body.ip-review-active .pool-summary { padding: 10px 12px; gap: 10px 14px; }
   body.ip-review-active .pool-controls { padding: 8px 12px; }
   .pool-view { min-height: 0; }
-  .pool-address-layout.has-ip-detail { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 1fr) minmax(160px, 200px); }
-  #ip-detail.record-inline { border-left: 0; border-top: 1px solid var(--border); }
   #ip-detail .dialog-body { padding: 10px 14px; }
   #ip-detail-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
-  #ip-detail .selection-note { margin-bottom: 10px; padding-bottom: 0; }
 }
 @media (max-width: 560px) {
   #ip-detail .ip-definition.record-fields { grid-template-columns: minmax(0, 1fr); }
 }
-@media (prefers-reduced-motion: reduce) { .ip-cell.ip-selected { animation: none; box-shadow: inset 0 0 0 1px var(--accent); } }
+/* 地址池下拉：紧凑列表，当前池可展开分段。 */
+.toolbar .pool-selector > .menu { width: min(340px, calc(100vw - 80px)); max-height: 70vh; overflow-y: auto; }
+#pool-options .pool-picker-card { margin: 1px 0; }
+#pool-options .pool-picker-heading { display: grid; grid-template-columns: minmax(0, 1fr) 14px; align-items: center; gap: 1px 6px; width: 100%; height: auto; padding: 6px 8px; border: 0; border-radius: 5px; background: transparent; text-align: left; }
+#pool-options .pool-picker-heading:hover { background: var(--muted-surface); }
+#pool-options .pool-picker-heading[aria-expanded="true"] { background: var(--accent-soft); }
+#pool-options .pool-picker-heading[aria-expanded="true"] strong { color: var(--accent); }
+#pool-options .pool-picker-heading strong { overflow: hidden; color: var(--fg); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pool-selector .menu #pool-options .pool-picker-heading small { grid-column: 1; padding: 0; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+#pool-options .pool-picker-arrow { grid-column: 2; grid-row: 1 / 3; color: var(--muted); font-size: 10px; transition: transform .15s; }
+#pool-options .pool-picker-heading[aria-expanded="false"] .pool-picker-arrow { transform: rotate(180deg); }
+#pool-options .pool-picker-segments { margin: 2px 0 4px 14px; padding: 0 0 0 8px; border-left: 1px solid var(--border); }
+#pool-options .pool-picker-segments[hidden] { display: none; }
+.pool-selector .menu #pool-options .pool-picker-segments button { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; height: 26px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; font-size: 11px; text-align: left; }
+#pool-options .pool-picker-segments button:hover { background: var(--muted-surface); }
+.pool-selector .menu #pool-options .pool-picker-segments button > span:first-child { overflow: hidden; color: var(--fg); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.pool-selector .menu #pool-options .pool-picker-range { flex: none; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+#pool-options .pool-picker-segments .dialog-note { margin: 4px 8px; font-size: 10px; }
+@media (max-width: 900px) {
+  .pool-address-layout > .pool-scroll { min-height: 0; overflow: auto; }
+  .pool-pager { flex-shrink: 0; gap: 4px 8px; padding: 8px 12px; }
+  .pool-pager .count { flex-basis: 100%; }
+}
+@media (max-width: 560px) {
+  .pool-page-actions { flex-basis: 100%; margin-left: 0; }
+  .pool-page-actions #pool-page-size { margin-left: 0; }
+}

@@ -1,5 +1,6 @@
 (() => {
   'use strict';
+  const shared = window.parent !== window ? window.parent.cmdbPrototype : null;
   const model = window.workOrderPreviewModel;
   const byId = (id) => document.getElementById(id);
   const element = (tag, className = '', text = '') => {
@@ -54,8 +55,21 @@
       const number = button(order.order_no, () => openDetail(order.id), 'work-number'); number.dataset.openOrder = order.id; number.title = order.order_no;
       const priority = element('span', 'work-priority', order.priority); priority.dataset.priority = order.priority.slice(0, 2);
       const subject = element('span', 'work-subject', order.subject); subject.title = order.subject;
-      const assetNames = order.assets.map((key) => model.assetByKey.get(key).row.name).join('、');
-      const asset = element('span', '', assetNames || '未关联'); asset.title = assetNames;
+      const assetNames = order.assets.map((key) => model.assetByKey.get(key)?.row.name || key).join('、');
+      let asset;
+      if (shared && order.assets.length) {
+        asset = element('span', 'work-asset-links');
+        order.assets.forEach((key, idx) => {
+          if (idx) asset.append(document.createTextNode('、'));
+          const label = model.assetByKey.get(key)?.row.name || key;
+          const btn = button(label, () => shared.openAsset(key), 'workbench-inline-link');
+          btn.title = '打开关联资产：' + label;
+          asset.append(btn);
+        });
+      } else {
+        asset = element('span', '', assetNames || '未关联');
+        asset.title = assetNames;
+      }
       const maintenance = element('div'); maintenance.append(element('span', '', order.biz_type), element('small', '', order.operation_type));
       const processingTime = element('div'); processingTime.append(element('time', '', formatTime(order.closed_at || order.resolved_at || order.started_at || order.plan_time)), element('small', '', order.closed_at ? '关闭时间' : order.resolved_at ? '解决时间' : order.started_at ? '开始处理' : '发生时间'));
       const actions = element('div', 'work-actions');
@@ -96,8 +110,11 @@
     for (const [label, value] of info) { const pair = element('div'); pair.append(element('dt', '', label), element('dd', '', value)); byId('detail-info').append(pair); }
     byId('detail-assets').replaceChildren();
     for (const key of order.assets) {
-      const asset = model.assetByKey.get(key), row = asset.row;
+      const asset = model.assetByKey.get(key);
+      if (!asset) { byId('detail-assets').append(element('p', 'muted', '关联资产不存在：' + key)); continue; }
+      const row = asset.row;
       const card = element('div', 'work-asset'); const link = element('a', 'work-link', row.name); link.href = asset.href; link.target = '_blank'; link.rel = 'noopener';
+      if (shared) link.addEventListener('click', (event) => { event.preventDefault(); shared.openAsset(key); });
       card.append(link, element('small', '', asset.label + ' · ' + row.code));
       const ip = row.mgmt_ip || row.service_ip || row.ip || '未配置';
       const network = row.net_type || row.network_type || row.network || '未配置';
@@ -109,7 +126,11 @@
     }
     if (!order.assets.length) byId('detail-assets').append(element('p', 'muted', '未关联资源'));
     byId('detail-attachments').replaceChildren();
-    for (const file of order.attachments) byId('detail-attachments').append(element('div', 'attachment-item', file.name + ' · ' + Math.ceil(file.size / 1024) + ' KiB · ' + (file.demo ? '虚构附件' : '仅文件名预览，未上传')));
+    for (const file of order.attachments) {
+      const item = element('div', 'attachment-item', file.name + ' · ' + Math.ceil(file.size / 1024) + ' KiB · ' + (file.demo ? '虚构附件' : file.url ? '本次会话文件' : '仅文件名预览，未上传'));
+      if (file.url) { const link = element('a', 'work-link', '打开 / 下载'); link.href = file.url; link.download = file.name; item.append(link); }
+      byId('detail-attachments').append(item);
+    }
     if (!order.attachments.length) byId('detail-attachments').append(element('p', 'muted', '暂无附件'));
     byId('detail-result').textContent = order.result ? (order.result_type || '处理结果') + '：' + order.result : '尚未填写处理结果';
     renderHistory(order);
@@ -123,6 +144,7 @@
   function openDetail(id) {
     state.currentId = id;
     const order = state.orders.find((item) => item.id === id);
+    if (!order) return;
     renderDetail(order); byId('detail-note-form').reset();
     byId('detail-records').open = false;
     if (!byId('work-detail').open) byId('work-detail').showModal();
@@ -131,7 +153,7 @@
   function renderAssetOptions() {
     const query = byId('create-asset-search').value.trim().toLowerCase(), type = byId('create-asset-type').value;
     byId('create-assets').replaceChildren();
-    for (const asset of model.assets.filter((item) => (!type || item.view === type) && (!query || (item.row.name + ' ' + item.row.code).toLowerCase().includes(query)))) {
+    for (const asset of model.assets.filter((item) => (item.row.status !== '已注销' || state.newAssets.has(item.key)) && (!type || item.view === type) && (!query || (item.row.name + ' ' + item.row.code).toLowerCase().includes(query)))) {
       const label = element('label', 'asset-option'); const checkbox = element('input'); checkbox.type = 'checkbox'; checkbox.value = asset.key; checkbox.checked = state.newAssets.has(asset.key);
       checkbox.addEventListener('change', () => { checkbox.checked ? state.newAssets.add(asset.key) : state.newAssets.delete(asset.key); });
       const text = element('span'); text.append(element('strong', '', asset.row.name), element('small', '', asset.label + ' · ' + asset.row.code)); label.append(checkbox, text); byId('create-assets').append(label);
@@ -179,18 +201,20 @@
     event.preventDefault(); const subject = byId('create-subject').value.trim();
     if (!subject) { byId('create-subject').setCustomValidity('请填写工单主题，不能只有空格。'); byId('create-subject').reportValidity(); return; }
     const time = model.clock();
-    const values = { subject, biz_type: byId('create-category').value, operation_type: byId('create-operation').value, priority: byId('create-priority').value, plan_time: byId('create-time').value, maintainer: byId('create-maintainer').value.trim(), owner: byId('create-owner').value.trim(), description: byId('create-description').value.trim(), assets: [...state.newAssets], attachments: state.files.map((file) => ({ name: file.name, size: file.size, demo: file.demo || false })) };
+    const values = { subject, biz_type: byId('create-category').value, operation_type: byId('create-operation').value, priority: byId('create-priority').value, plan_time: byId('create-time').value, maintainer: byId('create-maintainer').value.trim(), owner: byId('create-owner').value.trim(), description: byId('create-description').value.trim(), assets: [...state.newAssets], attachments: state.files.map((file) => shared ? { name: file.name, size: file.size, demo: file.demo || false, url: file.url, file: file.file } : { name: file.name, size: file.size, demo: file.demo || false }) };
+    if (shared && values.assets.some((key) => !shared.asset(key))) { toast('关联资产不存在，请重新选择。'); return; }
     let order;
     if (state.editingId !== null) {
       order = state.orders.find((item) => item.id === state.editingId);
       Object.assign(order, values);
-      order.events.push({ time, title: '编辑资料（演示）', text: '仅更新主题、人员与关联资源等资料，保留编号、实际状态及处理时间。', actor: '原型演示者' });
+      order.events.push({ time, title: shared ? '编辑工单资料' : '编辑资料（演示）', text: '更新主题、人员与关联资源等资料，保留编号、实际状态及处理时间。', actor: '原型演示者' });
     } else {
-      const id = Math.max(...state.orders.map((item) => item.id)) + 1;
-      order = { ...values, id, order_no: 'DEMO-WO-' + values.plan_time.slice(0, 10).replaceAll('-', '') + '-' + String(id).padStart(3, '0'), project_name: '示例项目', status: '新建', started_at: null, resolved_at: null, closed_at: null, result: '', result_type: '', events: [{ time, title: '提交工单（演示）', text: '只新增到当前页面内存，未写入数据库。', actor: '原型演示者' }] };
+      const id = Math.max(0, ...state.orders.map((item) => item.id)) + 1;
+      order = { ...values, id, order_no: (shared ? 'WB-WO-' : 'DEMO-WO-') + values.plan_time.slice(0, 10).replaceAll('-', '') + '-' + String(id).padStart(3, '0'), project_name: '示例项目', status: '新建', started_at: null, resolved_at: null, closed_at: null, result: '', result_type: '', events: [{ time, title: shared ? '提交工单' : '提交工单（演示）', text: shared ? '已写入本次工作台内存并记录事件。' : '只新增到当前页面内存，未写入数据库。', actor: '原型演示者' }] };
       state.orders.unshift(order);
     }
-    state.editingId = null; resetFilters(); byId('work-create').close(); openDetail(order.id); toast('演示工单资料已更新，仅当前页面有效。');
+    if (shared) shared.record({ title: state.editingId !== null ? '编辑工单' : '创建工单', text: order.order_no + '：' + order.subject, objectType: 'order', objectId: order.id });
+    state.editingId = null; shared ? renderTable() : resetFilters(); byId('work-create').close(); openDetail(order.id); toast(shared ? '工单已保存到本次工作台。' : '演示工单资料已更新，仅当前页面有效。');
   });
   byId('create-subject').addEventListener('input', () => byId('create-subject').setCustomValidity(''));
   byId('work-action-form').addEventListener('submit', (event) => {
@@ -199,21 +223,24 @@
     const notes = ids.map((id) => byId('action-result-' + id).value.trim());
     if (notes.some((note) => !note)) { toast('请为每张工单填写非空处理结果或取消原因。'); return; }
     if (target === '已关闭' && orders.some((order) => model.canonical(order.status) !== '已解决')) { toast('只有已解决工单可以结单。'); return; }
+    if (orders.some((order) => !order || ['已关闭', '已取消'].includes(model.canonical(order.status)) || (target !== '已取消' && model.stages[model.stages.indexOf(model.canonical(order.status)) + 1] !== target))) { toast('工单状态已变化，请关闭此窗口后重新操作。'); return; }
+    if (shared && target !== '已取消' && !model.results.includes(byId('action-result-type').value)) { toast('请选择处理结果类型。'); return; }
     orders.forEach((order, index) => model.transition(order, target, { note: notes[index], result_type: byId('action-result-type').value }));
     byId('work-action').close(); state.selected.clear(); renderTable();
     if (byId('work-detail').open) renderDetail(state.orders.find((order) => order.id === state.currentId));
-    toast('已演示' + target + ' · ' + ids.length + ' 张，仅当前页面有效。');
+    toast(shared ? '已更新 ' + target + ' · ' + ids.length + ' 张，设备与资产未变更。' : '已演示' + target + ' · ' + ids.length + ' 张，仅当前页面有效。');
   });
   byId('detail-action-next').addEventListener('click', () => {
     const order = state.orders.find((item) => item.id === state.currentId), index = model.stages.indexOf(model.canonical(order.status)), target = model.stages[index + 1];
-    if (target === '处理中') { model.transition(order, target); renderTable(); renderDetail(order); toast('开始处理时间已在本页演示记录，未写入真实工单。'); }
+    if (target === '处理中') { model.transition(order, target); renderTable(); renderDetail(order); toast(shared ? '已开始处理并写入工单时间线。' : '开始处理时间已在本页演示记录，未写入真实工单。'); }
     else openAction([order.id], target);
   });
   byId('detail-action-cancel').addEventListener('click', () => openAction([state.currentId], '已取消'));
   byId('detail-note-form').addEventListener('submit', (event) => {
     event.preventDefault(); const text = byId('detail-note').value.trim(); if (!text) { toast('请填写处理记录，不能只有空格。'); return; }
     const order = state.orders.find((item) => item.id === state.currentId);
-    order.events.push({ time: model.clock(), title: '补充处理记录', text, actor: order.maintainer || '原型演示者' }); renderHistory(order); byId('detail-note-form').reset(); toast('处理记录已在本页演示添加。');
+    order.events.push({ time: model.clock(), title: '补充处理记录', text, actor: order.maintainer || '原型演示者' }); renderHistory(order); byId('detail-note-form').reset(); toast(shared ? '处理记录已写入工单时间线。' : '处理记录已在本页演示添加。');
+    if (shared) shared.record({ title: '补充处理记录', text: order.order_no + '：' + text, objectType: 'order', objectId: order.id });
   });
   byId('work-bulk-close').addEventListener('click', () => openAction(selectedOrders().map((order) => order.id), '已关闭'));
   byId('work-select-all').addEventListener('change', (event) => {
@@ -233,9 +260,24 @@
   byId('create-asset-search').addEventListener('input', renderAssetOptions); byId('create-asset-type').addEventListener('change', renderAssetOptions);
   byId('create-files').addEventListener('change', (event) => {
     const files = [...event.target.files]; const tooLarge = files.filter((file) => file.size > 50 * 1024 * 1024);
-    state.files.push(...files.filter((file) => file.size <= 50 * 1024 * 1024)); event.target.value = ''; renderFiles();
+    state.files.push(...files.filter((file) => file.size <= 50 * 1024 * 1024).map((file) => shared ? { name: file.name, size: file.size, file, url: window.parent.URL.createObjectURL(file) } : file)); event.target.value = ''; renderFiles();
     if (tooLarge.length) toast('以下附件超过现有 50 MiB 限制，未加入演示：' + tooLarge.map((file) => file.name).join('、'));
   });
-  byId('work-reset-demo').addEventListener('click', () => { state.orders = model.seed(); state.currentId = null; resetFilters(); toast('已恢复虚构示例工单，未影响真实数据。'); });
+  byId('work-reset-demo').addEventListener('click', () => { if (shared) return; state.orders = model.seed(); state.currentId = null; resetFilters(); toast('已恢复虚构示例工单，未影响真实数据。'); });
+  if (shared) {
+    byId('work-reset-demo').hidden = true;
+    const refresh = () => {
+      model.syncAssets(); renderTable();
+      if (byId('work-detail').open) { const order = state.orders.find((item) => item.id === state.currentId); if (order) renderDetail(order); }
+      if (byId('work-create').open) renderAssetOptions();
+    };
+    window.workbenchAdapter = {
+      openObject(type, id) { if (type !== 'order') return false; const order = state.orders.find((item) => String(item.id) === String(id)); if (!order) return false; openDetail(order.id); return true; },
+      refresh, searchInput: byId('work-search'), filterButton: byId('work-filter-toggle'), filters: byId('work-filters'),
+      menus: model.categories.map((category) => ({ label: '新增' + category + '工单', run: () => openCreate(category) })),
+    };
+    const unsubscribe = shared.subscribe(refresh);
+    window.addEventListener('unload', unsubscribe);
+  }
   renderTable();
 })();

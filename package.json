@@ -1,8 +1,0 @@
-{
-  "name": "netcatty-cmdb-workspace",
-  "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=22"
-  }
-}

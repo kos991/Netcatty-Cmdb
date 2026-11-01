@@ -7,8 +7,7 @@ Netcatty-CMDB 将本项目的 Go + SQLite CMDB 服务作为内置服务集成到
 [Netcatty](https://github.com/binaricat/Netcatty) 桌面客户端。Netcatty 保留 SSH、SFTP、终端和主机管理能力，
 Cmdb 提供设备资产统一查询、终端资产、基础设施、业务系统、组织架构、IPAM/IP、统计与履历和配置中心，直接复用 Netcatty 原生组件。
 
-当前版本：`1.0.202610221542`（格式 `1.0.YYYYMMDDHHmm`，以 `VERSION` 为准）
-
+当前版本：`1.0.202610221542`（格式 `1.0.YYYYMMDDHHmm`，以 `VERSION` 为准）。正式架构为 **Netcatty + Go + SQLite** 集成版。后续规划的 **Rust + GPUI 原生桌面版本** 架构已记录在 [GPUI 架构文档](docs/GPUI-Architecture.md)，暂未启动实施。
 ## 集成结构
 
 ```text

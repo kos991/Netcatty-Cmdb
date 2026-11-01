@@ -13,22 +13,41 @@
     '笔记本': { vendor: 'Dell', model: 'Latitude 5440（示例）', cpu_info: 'Intel Core i5-1345U', memory_mb: 16384, disk_info: '1 TB SSD' },
   };
   const examples = [
-    { name: '示例云桌面 01', type: '云桌面', person: '示例人员甲', department: '民事部门（示例）', room: '1008 室', ip: '10.20.30.21', physical_ip: '192.168.10.21', network: '专网', os: '统信 UOS', status: '使用' },
-    { name: '示例云桌面 02', type: '云桌面', person: '示例人员乙', department: '民事部门（示例）', room: '1010 室', ip: '10.20.30.22', physical_ip: '192.168.10.22', network: '专网', os: '银河麒麟', status: '使用' },
+    { name: '示例云桌面 01', type: '云桌面', vendor: '深信服', model: 'aDesk STD-200（示例）', person: '示例人员甲', department: '民事部门（示例）', room: '1008 室', ip: '10.20.30.21', physical_ip: '192.168.10.21', network: '专网', os: '统信 UOS', status: '使用' },
+    { name: '示例云桌面 02', type: '云桌面', vendor: '华为', model: 'CT3200（示例）', person: '示例人员乙', department: '民事部门（示例）', room: '1010 室', ip: '10.20.30.22', physical_ip: '192.168.10.22', network: '专网', os: '银河麒麟', status: '使用' },
     { name: '示例台式机 03', type: '台式机', person: '示例人员丙', department: '行政部门（示例）', room: '201 室', ip: '192.168.10.31', network: '内网', os: 'Windows 11', status: '使用' },
     { name: '示例笔记本 04', type: '笔记本', person: '示例人员丁', department: '行政部门（示例）', room: '202 室', ip: '192.168.10.32', network: '内网', os: 'Windows 11', status: '使用' },
     { name: '示例网络打印机 05', type: '打印机', vendor: '奔图 PANTUM', model: 'P2500（示例）', person: '示例人员戊', department: '立案部门（示例）', room: '103 室', ip: '192.168.10.40', network: '内网', os: '不适用', status: '使用' },
     { name: '示例备用台式机 06', type: '台式机', person: '', department: '信息部门（示例）', room: '设备库', ip: '', network: '未配置', os: '统信 UOS', status: '闲置' },
-    { name: '示例故障云盒 07', type: '云盒', person: '示例人员己', department: '民事部门（示例）', room: '1021 室', ip: '10.20.30.27', physical_ip: '192.168.10.27', network: '专网', os: '统信 UOS', status: '维修中' },
-    { name: '示例长名称终端－综合事务室公共查询与远程会议终端设备', type: '云桌面', person: '示例人员庚', department: '综合部门（示例）', room: '综合事务室', ip: '10.20.30.28', physical_ip: '192.168.10.28', network: '专网', os: '统信 UOS', status: '使用', code: 'TERM-EXAMPLE-2026-ADMINISTRATIVE-SERVICE-ROOM-000008', sn: 'EXAMPLE-SN-LONG-TERMINAL-2026-000008-000000000000000000' },
+    { name: '示例故障云盒 07', type: '云盒', vendor: '锐捷', model: 'RG-CT1000（示例）', person: '示例人员己', department: '民事部门（示例）', room: '1021 室', ip: '10.20.30.27', physical_ip: '192.168.10.27', network: '专网', os: '统信 UOS', status: '维修中' },
+    { name: '示例长名称终端－综合事务室公共查询与远程会议终端设备', type: '云桌面', vendor: '深信服', model: 'aDesk STD-200（综合事务室公共查询与远程会议终端长型号示例）', person: '示例人员庚', department: '综合部门（示例）', room: '综合事务室', ip: '10.20.30.28', physical_ip: '192.168.10.28', network: '专网', os: '统信 UOS', status: '使用', code: 'TERM-EXAMPLE-2026-ADMINISTRATIVE-SERVICE-ROOM-000008', sn: 'EXAMPLE-SN-LONG-TERMINAL-2026-000008-000000000000000000' },
     { name: '示例独立打印机 09', type: '打印机', vendor: '联想', model: 'LJ2205（示例）', person: '', department: '立案部门（示例）', room: '104 室', ip: '', network: '未配置', os: '不适用', status: '闲置' },
     { name: '示例笔记本 10', type: '笔记本', person: '示例人员辛', department: '综合部门（示例）', room: '305 室', ip: '192.168.10.42', network: '内网', os: 'Windows 10', status: '使用' },
-    { name: '示例云桌面 11', type: '云桌面', person: '示例人员壬', department: '信息部门（示例）', room: '302 室', ip: '10.20.30.29', physical_ip: '192.168.10.29', network: '专网', os: '统信 UOS', status: '使用' },
+    { name: '示例云桌面 11', type: '云桌面', vendor: '华为', model: 'CT3200（示例）', person: '示例人员壬', department: '信息部门（示例）', room: '302 室', ip: '10.20.30.29', physical_ip: '192.168.10.29', network: '专网', os: '统信 UOS', status: '使用' },
     { name: '示例已注销台式机 12', type: '台式机', person: '原示例人员癸', department: '行政部门（示例）', room: '回收库', ip: '', network: '未配置', os: 'Windows 10', status: '已注销' },
+    { name: '示例云桌面盒子 13', type: '云桌面盒子', vendor: '锐捷', model: 'RG-CT1000（示例）', person: '示例人员十三', department: '民事部门（示例）', room: '401 室', ip: '10.20.30.53', physical_ip: '192.168.10.53', network: '专网', os: '统信 UOS', status: '使用' },
+    { name: '示例一体机 14', type: '一体机', vendor: '联想', model: 'ThinkCentre neo 50a 24（示例）', person: '示例人员十四', department: '行政部门（示例）', room: '402 室', ip: '192.168.10.54', network: '内网', os: 'Windows 11', status: '使用' },
+    { name: '示例笔记本 15', type: '笔记本', person: '示例人员十五', department: '综合部门（示例）', room: '403 室', ip: '192.168.10.55', network: '内网', os: 'Windows 11', status: '使用' },
+    { name: '示例网络打印机 16', type: '打印机', vendor: '兄弟', model: 'HL-2260D（示例）', person: '', department: '立案部门（示例）', room: '404 室', ip: '192.168.10.56', network: '内网', os: '不适用', status: '使用' },
+    { name: '示例云桌面 17', type: '云桌面', vendor: '深信服', model: 'aDesk STD-200（示例）', person: '示例人员十七', department: '民事部门（示例）', room: '405 室', ip: '10.20.30.57', physical_ip: '192.168.10.57', network: '专网', os: '统信 UOS', status: '使用' },
+    { name: '示例备用云盒 18', type: '云盒', vendor: '华为', model: 'CT3200（示例）', person: '', department: '信息部门（示例）', room: '设备库', ip: '', physical_ip: '', network: '未配置', os: '银河麒麟', status: '闲置' },
+    { name: '示例台式机 19', type: '台式机', person: '示例人员十九', department: '行政部门（示例）', room: '406 室', ip: '192.168.10.59', network: '内网', os: 'Windows 11', status: '使用' },
+    { name: '示例一体机 20', type: '一体机', vendor: 'Dell', model: 'OptiPlex 7410 All-in-One（示例）', person: '示例人员二十', department: '综合部门（示例）', room: '407 室', ip: '192.168.10.60', network: '内网', os: 'Windows 11', status: '使用' },
+    { name: '示例云桌面盒子 21', type: '云桌面盒子', vendor: '锐捷', model: 'RG-CT1000（示例）', person: '示例人员二十一', department: '民事部门（示例）', room: '501 室', ip: '10.20.30.61', physical_ip: '192.168.10.61', network: '专网', os: '统信 UOS', status: '使用' },
+    { name: '示例笔记本 22', type: '笔记本', person: '示例人员二十二', department: '综合部门（示例）', room: '502 室', ip: '192.168.10.62', network: '内网', os: 'Windows 10', status: '维修中' },
+    { name: '示例网络打印机 23', type: '打印机', vendor: '惠普', model: 'LaserJet Pro M404dn（示例）', person: '', department: '行政部门（示例）', room: '503 室', ip: '192.168.10.63', network: '内网', os: '不适用', status: '使用' },
+    { name: '示例台式机 24', type: '台式机', person: '示例人员二十四', department: '立案部门（示例）', room: '504 室', ip: '192.168.10.64', network: '内网', os: '统信 UOS', status: '使用' },
+    { name: '示例云桌面 25', type: '云桌面', vendor: '华为', model: 'CT3200（示例）', person: '示例人员二十五', department: '信息部门（示例）', room: '505 室', ip: '10.20.30.65', physical_ip: '192.168.10.65', network: '专网', os: '银河麒麟', status: '使用' },
+    { name: '示例备用一体机 26', type: '一体机', vendor: '联想', model: 'ThinkCentre neo 50a 24（示例）', person: '', department: '信息部门（示例）', room: '设备库', ip: '', network: '未配置', os: 'Windows 11', status: '闲置' },
+    { name: '示例笔记本 27', type: '笔记本', person: '示例人员二十七', department: '综合部门（示例）', room: '506 室', ip: '192.168.10.67', network: '内网', os: 'Windows 11', status: '使用' },
+    { name: '示例云盒 28', type: '云盒', vendor: '深信服', model: 'aDesk STD-200（示例）', person: '示例人员二十八', department: '民事部门（示例）', room: '507 室', ip: '10.20.30.68', physical_ip: '192.168.10.68', network: '专网', os: '统信 UOS', status: '使用' },
+    { name: '示例网络打印机 29', type: '打印机', vendor: '奔图 PANTUM', model: 'M7100DN（示例）', person: '', department: '立案部门（示例）', room: '508 室', ip: '192.168.10.69', network: '内网', os: '不适用', status: '使用' },
+    { name: '示例台式机 30', type: '台式机', person: '示例人员三十', department: '行政部门（示例）', room: '509 室', ip: '192.168.10.70', network: '内网', os: 'Windows 11', status: '使用' },
+    { name: '示例一体机 31', type: '一体机', vendor: 'Dell', model: 'OptiPlex 7410 All-in-One（示例）', person: '示例人员三十一', department: '综合部门（示例）', room: '510 室', ip: '192.168.10.71', network: '内网', os: 'Windows 11', status: '使用' },
   ];
   const rows = examples.map((record, index) => {
     const row = { id: 'terminal-example-' + String(index + 1).padStart(2, '0'), code: 'TERM-EXAMPLE-' + String(index + 1).padStart(3, '0'), sn: 'SN-EXAMPLE-TERM-' + String(index + 1).padStart(3, '0'), physical_ip: '', display_sn: '', os_version: '示例版本', remark: '仅为设计原型示例，不对应真实资产。', ...record };
-    if (computer(row)) Object.assign(row, hardwareExamples[row.type]);
+    if (computer(row)) Object.entries(hardwareExamples[row.type]).forEach(([key, value]) => { if (!row[key]) row[key] = value; });
     row.vendor_model = [row.vendor, row.model].filter(Boolean).join(' / ');
     if (cloud(row)) {
       row.box_sn = row.sn;
