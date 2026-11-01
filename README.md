@@ -18,6 +18,8 @@
 - `Ctrl+T` 打开标签菜单，`Ctrl+W` 关闭当前标签，`Ctrl+\` 切换分栏，`Esc` 关闭菜单。
 - 最小化、最大化／还原、关闭使用真实 Windows 标题栏。关闭最后一个窗口退出进程。
 
+本轮验收：提交 `c605aca` 的 [Windows CI #41320939700](https://github.com/kos991/Netcatty-Cmdb/actions/runs/41320939700) 已通过共享状态测试和原生桌面构建。下载产物后在 Windows 本机启动，观察到标题为 `Cmdb` 的原生窗口；实际打开业务系统标签并通过 `Ctrl+\` 显示双栏，`Ctrl+W` 操作后进程继续运行。exe SHA-256 与制品校验文件一致。本地证据位于 `build/native-ci/native-window.png`、`build/native-ci/native-split.png`，未运行本地编译。该验收不代表业务服务或完整原型迁移完成。
+
 ## 源码与构建
 
 ```text
