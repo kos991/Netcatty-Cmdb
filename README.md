@@ -18,7 +18,7 @@
 - `Ctrl+T` 打开标签菜单，`Ctrl+W` 关闭当前标签，`Ctrl+\` 切换分栏，`Esc` 关闭菜单。
 - 最小化、最大化／还原、关闭使用真实 Windows 标题栏。关闭最后一个窗口退出进程。
 
-本轮验收：提交 `c605aca` 的 [Windows CI #41320939700](https://github.com/kos991/Netcatty-Cmdb/actions/runs/41320939700) 已通过共享状态测试和原生桌面构建。下载产物后在 Windows 本机启动，观察到标题为 `Cmdb` 的原生窗口；实际打开业务系统标签并通过 `Ctrl+\` 显示双栏，`Ctrl+W` 操作后进程继续运行。exe SHA-256 与制品校验文件一致。本地证据位于 `build/native-ci/native-window.png`、`build/native-ci/native-split.png`，未运行本地编译。该验收不代表业务服务或完整原型迁移完成。
+本轮验收：提交 `cd6ffb4` 的 [Windows CI #42348915225](https://github.com/kos991/Netcatty-Cmdb/actions/runs/42348915225) 已通过共享状态测试、Lucide 离线 SVG 嵌入与原生桌面构建。下载产物后在 Windows 本机启动，观察到标题为 `Cmdb` 的原生暗色窗口，顶栏纯 Logo、Lucide 图标标签栏与加号均正常渲染，左侧为纯原生 Lucide 暗色导航；实测使用 `Ctrl+\` 切换左右分栏，两栏独立加载工作区，`Ctrl+W` 关闭标签后进程正常运行。exe SHA-256（`d8111e0cfc49991e9f071b9c08af7e103a60761c36e72538052297fc41362cee`）与制品校验文件一致。本地证据位于 `build/native-ci/native-window.png` 与 `build/native-ci/native-split.png`，未在本地执行 cargo build。该验收不代表业务服务迁移完成。
 
 ## 源码与构建
 
