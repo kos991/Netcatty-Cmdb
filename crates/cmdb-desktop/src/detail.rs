@@ -96,11 +96,11 @@ impl Desktop {
 
 fn render_section(heading: &str, two_cols: bool, fields: &[(&str, &str)]) -> Div {
     div().class("drawer-section")
-        .child(div().class("section-title").child(heading))
+        .child(div().class("section-title").child(heading.to_string()))
         .child(div().class(if two_cols { "prop-grid two-columns" } else { "prop-grid" })
             .children(fields.iter().copied().flat_map(|(label, value)| [
-                span().class("prop-label").child(label),
-                span().class("prop-value").child(value),
+                span().class("prop-label").child(label.to_string()),
+                span().class("prop-value").child(value.to_string()),
             ])))
 }
 

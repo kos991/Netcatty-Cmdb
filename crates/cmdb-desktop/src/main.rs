@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use blenderui::prelude::*;
 use cmdb_engine::{Page, Tab, Workspace};
 use assets::{sample_terminals, TerminalAsset};
-use icons::{self, Icon};
+use icons::Icon;
 use terminal_state::TerminalState;
 
 const CSS_STYLESHEET: &str = include_str!("style.css");
