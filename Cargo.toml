@@ -9,7 +9,7 @@ authors = ["Cmdb Team"]
 license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
-blenderui = "0.4.1"
+blenderui = { version = "0.4.1", features = ["gdi-text"] }
 [profile.release]
 opt-level = 2
 lto = "thin"
