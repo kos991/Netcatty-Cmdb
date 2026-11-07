@@ -1,15 +1,14 @@
-# Cmdb GPUI 原生桌面架构
+# Cmdb 原生桌面架构 (BUI / GPUI)
 
 当前版本：`1.0.202610221542`，来自 `VERSION`；本次为开发构建，不创建新发布。
 
 ## 当前实现
 
-Rust workspace 包含真正可执行的 `cmdb-desktop` 和实际被调用的 `cmdb-engine`。桌面通过 GPUI `Application` 创建 Windows 原生窗口，入口是 `crates/cmdb-desktop/src/main.rs`。共享库负责标签身份、选择、关闭后的选择恢复、双栏切换与两栏交换；桌面事件直接调用这些规则，再通知 GPUI 重绘。
+Rust workspace 包含真正可执行的 `cmdb-desktop` 和实际被调用的 `cmdb-engine`。依据用户最新决定，原生桌面采用 [BUI (Blender UI)](https://github.com/ppmpreetham/BUI)（`blenderui = "0.4.1"`），直接使用 Blender 解耦的 GPU 加速原生 C 渲染核（Windows Direct3D 11 / GDI）和内置的 `shadcn::DataTable` 虚拟数据表格。入口是 `crates/cmdb-desktop/src/main.rs`。
 
-界面为暗色、多标签和左右分栏。`+` 打开页面选择菜单，标签可重复新增、切换和关闭，单标签分栏会新建同类标签。关闭所有标签后显示重新打开提示。左侧导航定位已打开的页面，未打开时新增。窗口控制使用 Windows 标题栏；关闭最后窗口退出进程。没有全局搜索、通知栏或虚假保存按钮，Logo 不附带产品文字。
+共享库 `cmdb-engine` 继续负责标签身份、选择、关闭后的选择恢复、双栏切换与两栏交换规则，保持纯 Rust 独立无 UI 状态设计。桌面通过 BUI `Application::new().gpu(true)` 创建原生 Windows 窗口，响应鼠标、键盘及分栏操作。
 
-页面沿用已确认的终端资产、基础设施、业务系统、组织架构、设备机柜、地址池、工单与统计分类及字段语义。未接入业务时明确显示服务未实现，不伪造记录、统计、保存或网络状态。既有 HTML 原型保持设计参考身份，不嵌入桌面，也不用于原生运行验收。
-
+界面为 Blender 工业质感高密度暗色工作区、多标签和左右分栏。终端资产页面已接入原生 `DataTable`，支持千级虚拟化滚动、多列固定、排序列与条纹样式，彻底替代 HTML iframe 网页外壳。
 ## 四层职责与实施边界
 
 | 层 | 当前状态 | 边界 |
@@ -23,13 +22,13 @@ Rust workspace 包含真正可执行的 `cmdb-desktop` 和实际被调用的 `cm
 
 ## 可复现 Windows 依赖
 
-- GPUI 来自官方 Zed `v0.218.7`，固定提交 `41bab92dac34777ae4256e5041f7b7236fd16cdd`，不是浮动 main。
-- Rust 固定 `1.91.1`，与该提交的 [rust-toolchain.toml](https://github.com/zed-industries/zed/blob/41bab92dac34777ae4256e5041f7b7236fd16cdd/rust-toolchain.toml) 一致。
-- CI 使用 Windows Server 2022 runner、MSVC x64、Windows SDK；具体前置依赖见该提交的 [官方 Windows 文档](https://github.com/zed-industries/zed/blob/41bab92dac34777ae4256e5041f7b7236fd16cdd/docs/src/development/windows.md)。应用采用 GPUI 原生 Windows 渲染，不要求浏览器。
-- `.cargo/config.toml` 固定静态 CRT 和 `windows_slim_errors`。只启用所需 GPUI Windows manifest 功能。
-- CI 编译实际 `cmdb-desktop` binary，上传明确的 `cmdb-desktop.exe`、校验值和锁文件。依赖锁文件随最终交付固定。
-- 不承诺 macOS/Linux 发行，也不产出空服务 exe。版本保持 `VERSION`，不打新 tag。
-
+- BUI 采用官方发布版本 `blenderui = "0.4.1"`。
+- Rust 固定 `1.91.1`，MSVC x64。
+- `blenderui-sys` 通过 CMake 编译 BUI C kit 核心静态库（`bui_kit`、`bui_gpu`、`bui_core`），在 Windows 下走 Direct3D 11 GPU 渲染并链接 `user32` 与 `gdi32`。
+- CI 使用 Windows Server 2022 runner、MSVC x64、CMake 及 Windows SDK。
+- CI 编译实际 `cmdb-desktop` binary，上传明确的 `cmdb-desktop.exe`、校验值和锁文件。
+- 许可证：`GPL-3.0-or-later`（源自 BUI / Blender 核心）。
+- 版本保持 `VERSION`，不打新 tag。
 ## 设计依据
 
 [Tern 官方主题说明](https://docs.stencil.so/tern/guides/themes.md) 描述暗色背景、较深的 chrome、面板、细边框与强调色。当前使用这些层次组织原生标签与分栏，不宣称复制 Tern 精确主题，也不采用其插件架构。
