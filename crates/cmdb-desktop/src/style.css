@@ -37,8 +37,8 @@ button:focus-visible, input:focus, select:focus { outline: 1px solid #8cb4eb; ou
 .preview-notice { flex-shrink: 0; min-width: 0; padding: 3px 12px; font-size: 11px; color: #8f9bac; background: #1b2027; border-bottom: 1px solid #2b323c; }
 .table-container { flex: 1; min-width: 0; min-height: 0; overflow: auto; background: #181b20; }
 .cmdb-table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: 12px; line-height: 17px; }
-.cmdb-table th { height: 32px; padding: 6px 10px; background: #21262e; color: #99a6b7; font-size: 11px; font-weight: 500; white-space: nowrap; border-bottom: 1px solid #353d49; }
-.cmdb-table td { height: 46px; padding: 4px 10px; color: #d5dce6; border-bottom: 1px solid #272e37; vertical-align: middle; overflow: hidden; white-space: nowrap; }
+.cmdb-table th { height: 32px; padding: 6px 8px; background: #21262e; color: #99a6b7; font-size: 11px; font-weight: 500; white-space: nowrap; border-bottom: 1px solid #353d49; }
+.cmdb-table td { height: 44px; padding: 4px 8px; color: #d5dce6; border-bottom: 1px solid #272e37; vertical-align: middle; overflow: hidden; white-space: nowrap; }
 .cmdb-table tr:hover td { background: #242d38; }
 .cmdb-table tr.selected td { background: #26374d; }
 .cell-identity { display: flex; align-items: center; min-width: 0; gap: 6px; }
