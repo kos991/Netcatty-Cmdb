@@ -19,24 +19,24 @@ impl Desktop {
                     this.terminal_states.get_mut(&tab_id).unwrap().selected = Some(asset_id);
                     cx.notify();
                 }))
-                .child(td().child((range.start + index + 1).to_string()))
-                .child(td().child(
+                .child(td().class("col-idx").child((range.start + index + 1).to_string()))
+                .child(td().class("col-name").child(
                     div().class("cell-identity")
                         .child(span().class(format!("net-indicator net-{}", asset.net_type)))
                         .child(div().class("cell-text")
                             .child(span().class("cell-primary").child(asset.name))
                             .child(span().class("cell-sub").child(asset.box_sn)))))
-                .child(td().child(asset.device_type))
-                .child(td().child(div().class("cell-text").child(span().child(asset.brand)).child(span().class("cell-sub").child(asset.model))))
-                .child(td().child(div().class("cell-text").child(span().child(asset.user)).child(span().class("cell-sub").child(asset.dept))))
-                .child(td().child(asset.room))
-                .child(td().class("ip-address").child(asset.ip))
-                .child(td().child(asset.net_type))
-                .child(td().child(span().class(format!("badge badge-{}", asset.status)).child(asset.status)))
-                .child(td().child(div().class("drawer-btn")
+                .child(td().class("col-type").child(asset.device_type))
+                .child(td().class("col-brand").child(div().class("cell-text").child(span().child(asset.brand)).child(span().class("cell-sub").child(asset.model))))
+                .child(td().class("col-user").child(div().class("cell-text").child(span().child(asset.user)).child(span().class("cell-sub").child(asset.dept))))
+                .child(td().class("col-room").child(asset.room))
+                .child(td().class("col-ip").child(asset.ip))
+                .child(td().class("col-net").child(asset.net_type))
+                .child(td().class("col-status").child(span().class(format!("badge badge-{}", asset.status)).child(asset.status)))
+                .child(td().class("col-action").child(div().class("drawer-btn")
                     .id(format!("terminal-view-{tab_id}-{asset_id}"))
                     .attr("title", "查看此资产详情")
-                    .child("查看详情")
+                    .child("详情")
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.focused_tab = Some(tab_id);
                         this.terminal_states.get_mut(&tab_id).unwrap().selected = Some(asset_id);
@@ -131,17 +131,17 @@ impl Desktop {
             .child(div().class("table-container").id(format!("terminal-scroll-{tab_id}"))
                 .child(table().class("cmdb-table")
                     .child(thead().child(tr().children([
-                        ("序号", "5%"),
-                        ("设备名称 / SN", "18%"),
-                        ("设备类型", "10%"),
-                        ("品牌 / 型号", "15%"),
-                        ("使用人 / 部门", "14%"),
-                        ("房间号", "7%"),
-                        ("IP 地址", "11%"),
-                        ("网络类型", "7%"),
-                        ("设备状态", "7%"),
-                        ("操作", "6%"),
-                    ].into_iter().map(|(heading, width)| th().style(format!("width: {width};")).child(heading)))))
+                        ("col-idx", "序号"),
+                        ("col-name", "设备名称 / SN"),
+                        ("col-type", "设备类型"),
+                        ("col-brand", "品牌 / 型号"),
+                        ("col-user", "使用人 / 部门"),
+                        ("col-room", "房间号"),
+                        ("col-ip", "IP 地址"),
+                        ("col-net", "网络类型"),
+                        ("col-status", "设备状态"),
+                        ("col-action", "操作"),
+                    ].into_iter().map(|(class, heading)| th().class(class).child(heading)))))
                     .child(body)))
             .child(div().class("statusbar")
                 .child(div().class("status-left").id(format!("terminal-count-{tab_id}"))
