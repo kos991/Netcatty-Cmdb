@@ -186,7 +186,7 @@ impl Desktop {
         }).collect()
     }
 
-    fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_tabs(&self, cx: &mut Context<Self>) -> Div {
         let active = self.workspace.active();
         let tabs = self.workspace.tabs().iter().map(|tab| {
             let is_active = active == Some(*tab);
@@ -209,7 +209,7 @@ impl Desktop {
         div().class("tabs-container").children(tabs)
     }
 
-    fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_sidebar(&self, cx: &mut Context<Self>) -> Div {
         let active_page = self.workspace.active().map(|t| t.page);
         let nav_items = Page::ALL.into_iter().map(|page| {
             let is_active = active_page == Some(page);
@@ -241,7 +241,7 @@ impl Desktop {
             )
     }
 
-    fn render_terminal_page(&self, secondary: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_terminal_page(&self, secondary: bool, cx: &mut Context<Self>) -> Div {
         let list = self.filtered_terminals();
         let count = list.len();
         let selected_id = self.selected_asset_id;
@@ -249,8 +249,7 @@ impl Desktop {
         let rows = list.into_iter().enumerate().map(|(idx, asset)| {
             let is_sel = selected_id == Some(asset.id);
             let asset_id = asset.id;
-            let status_class = format!("badge badge-{}", asset.status);
-            let net_class = format!("net-indicator net-{}", asset.net_type);
+
 
             tr().class(if is_sel { "selected" } else { "" })
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -260,13 +259,10 @@ impl Desktop {
                 .child(td().style("color: #64748b; font-weight: 500;").child(format!("{}", idx + 1)))
                 .child(
                     td().child(
-                        div().child(
-                            span().class(&net_class),
-                        ).child(
-                            span().class("cell-primary").child(asset.name),
-                        ).child(
-                            div().class("cell-sub").child(asset.box_sn),
-                        ),
+                        div()
+                            .child(span().class(format!("net-indicator net-{}", asset.net_type)))
+                            .child(span().class("cell-primary").child(asset.name))
+                            .child(div().class("cell-sub").child(asset.box_sn)),
                     ),
                 )
                 .child(td().child(asset.device_type))
@@ -283,7 +279,7 @@ impl Desktop {
                 .child(td().child(asset.room))
                 .child(td().style("font-family: monospace; color: #38bdf8;").child(asset.ip))
                 .child(td().child(format!("{}网络", asset.net_type)))
-                .child(td().child(span().class(&status_class).child(asset.status)))
+                .child(td().child(span().class(format!("badge badge-{}", asset.status)).child(asset.status)))
                 .child(
                     td().child(
                         button().class("drawer-btn").child("查看详情").on_click(cx.listener(move |this, _, _, cx| {
@@ -368,7 +364,7 @@ impl Desktop {
             )
     }
 
-    fn render_detail_drawer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_detail_drawer(&self, cx: &mut Context<Self>) -> Div {
         let selected = self.selected_asset_id.and_then(|id| self.terminals.iter().find(|t| t.id == id));
         let Some(t) = selected else {
             return div();
@@ -458,7 +454,7 @@ impl Desktop {
             )
     }
 
-    fn render_pane(&self, tab: Tab, secondary: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_pane(&self, tab: Tab, secondary: bool, cx: &mut Context<Self>) -> Div {
         match tab.page {
             Page::Terminal => self.render_terminal_page(secondary, cx),
             _ => {
