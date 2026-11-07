@@ -1,5 +1,5 @@
 [target.x86_64-pc-windows-msvc]
-rustflags = ["--cfg", "windows_slim_errors", "-C", "target-feature=+crt-static"]
+rustflags = ["--cfg", "windows_slim_errors"]
 
 [net]
 git-fetch-with-cli = true
