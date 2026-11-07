@@ -185,7 +185,7 @@ impl Desktop {
         let active_page = self.workspace.active().map(|t| t.page);
         let items = Page::ALL.into_iter().enumerate().map(|(idx, page)| {
             let is_selected = active_page == Some(page);
-            div().id(("nav", idx)).flex().items_center().px_3().py_2().rounded_md()
+            div().id(format!("nav-{}", idx)).flex().items_center().px_3().py_2().rounded_md()
                 .cursor_pointer().gap_2()
                 .bg(rgb(if is_selected { BG_PANEL } else { BG_CHROME }))
                 .text_color(rgb(if is_selected { ACCENT_BLUE } else { TEXT_MUTED }))
@@ -297,7 +297,7 @@ impl Render for Desktop {
             .border_b_1().border_color(rgb(BORDER_COLOR));
         for (index, page) in Page::ALL.into_iter().enumerate() {
             menu = menu.child(
-                div().id(("menu-open", index)).px_3().py_1().rounded_md().cursor_pointer()
+                div().id(format!("menu-open-{}", index)).px_3().py_1().rounded_md().cursor_pointer()
                     .bg(rgb(BG_CHROME)).hover(|s| s.bg(rgb(BORDER_COLOR)))
                     .text_color(rgb(TEXT_PRIMARY)).text_sm()
                     .child(page.title())
@@ -354,7 +354,7 @@ impl Render for Desktop {
 
 fn main() {
     Application::new().gpu(true).run(|cx: &mut App| {
-        let bounds = Bounds::new(point(px(100.0), px(50.0)), size(px(1280.0), px(800.0)));
+        let bounds = Bounds { origin: point(px(100.0), px(50.0)), size: size(px(1280.0), px(800.0)) };
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
