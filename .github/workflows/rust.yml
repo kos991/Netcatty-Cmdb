@@ -42,16 +42,17 @@ jobs:
           if (!(Select-String -Path Cargo.toml -SimpleMatch "version = `"$version`"")) {
             throw 'Cargo version must match VERSION'
           }
-      - name: Test shared workspace rules
-        run: cargo test -p cmdb-engine
+      - name: Test native workspace rules
+        run: cargo test --workspace --locked
       - name: Build native desktop
-        run: cargo build --release -p cmdb-desktop --bin cmdb-desktop --target x86_64-pc-windows-msvc
+        run: cargo build --locked --release -p cmdb-desktop --bin cmdb-desktop --target x86_64-pc-windows-msvc
       - name: Collect executable and checksum
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifact | Out-Null
           Copy-Item C:\cmdb-target\x86_64-pc-windows-msvc\release\cmdb-desktop.exe artifact\cmdb-desktop.exe
           Copy-Item Cargo.lock artifact\Cargo.lock
+          '${{ github.sha }}' | Set-Content artifact\SOURCE_COMMIT.txt
           (Get-FileHash artifact\cmdb-desktop.exe -Algorithm SHA256).Hash.ToLower() + '  cmdb-desktop.exe' | Set-Content artifact\SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:

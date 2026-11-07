@@ -1,0 +1,82 @@
+/* BUI native layout; dimensions are logical pixels and follow Windows DPI. */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #181b20; color: #dce2ea; font-family: "Microsoft YaHei UI"; font-size: 12px; line-height: 18px; }
+.app-root { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #181b20; }
+.ui-icon { display: inline-flex; width: 16px; height: 16px; flex-shrink: 0; }
+.topbar { display: flex; align-items: center; height: 38px; min-height: 38px; flex-shrink: 0; padding: 0 8px; gap: 6px; background: #14171b; border-bottom: 1px solid #303640; }
+.logo-icon { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; }
+.tabs-container { display: flex; align-items: center; flex: 1; min-width: 0; height: 100%; gap: 2px; overflow-x: scroll; }
+.tab-item { display: flex; align-items: center; flex-shrink: 0; height: 30px; max-width: 210px; gap: 4px; padding: 0 4px; background: #191d23; border-radius: 4px; color: #9da8b7; }
+.tab-item.active { background: #252c36; color: #dce8fa; }
+.tab-select { display: flex; align-items: center; gap: 6px; min-width: 0; height: 28px; padding: 0 6px; }
+.tab-close, .tab-add-btn, .drawer-close, .icon-button { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; flex-shrink: 0; padding: 4px; border-radius: 4px; }
+.tab-close:hover, .drawer-close:hover { background: #70363d; }
+.tab-add-btn:hover, .icon-button:hover { background: #303946; }
+.tab-menu { position: absolute; top: 38px; right: 8px; width: 190px; max-height: 300px; overflow-y: scroll; z-index: 50; display: flex; flex-direction: column; padding: 5px; background: #252b34; border: 1px solid #414b59; border-radius: 5px; }
+.tab-menu-item { display: flex; align-items: center; flex-shrink: 0; gap: 8px; height: 30px; padding: 4px 8px; }
+.main-layout { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.sidebar { display: flex; flex-direction: column; width: 164px; min-width: 164px; flex-shrink: 0; min-height: 0; padding: 10px 8px; overflow-y: scroll; background: #14171b; border-right: 1px solid #303640; }
+.sidebar-title { color: #7f8c9d; font-size: 11px; padding: 0 8px 8px; }
+.nav-item { display: flex; align-items: center; flex-shrink: 0; gap: 8px; height: 32px; padding: 4px 8px; margin-bottom: 3px; border-radius: 4px; color: #a8b2c0; }
+.nav-item.active { background: #252e3b; color: #a9caff; }
+.nav-item:hover { background: #252c36; }
+.sidebar-bottom { margin-top: auto; padding-top: 10px; }
+.content-area, .pane-layout { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: #181b20; }
+.pane + .pane { border-left: 1px solid #414b59; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; flex-shrink: 0; gap: 6px; min-width: 0; padding: 8px 12px; background: #1b2027; border-bottom: 1px solid #303640; }
+.toolbar-left { display: flex; flex-wrap: wrap; align-items: center; flex: 1; min-width: 0; gap: 6px; }
+.toolbar-title { font-size: 13px; font-weight: 600; color: #e4e9ef; white-space: nowrap; }
+.toolbar-right { display: flex; flex-wrap: wrap; align-items: center; flex-shrink: 0; gap: 6px; }
+.search-input { width: 220px; max-width: 100%; min-width: 100px; height: 28px; padding: 3px 8px; font-size: 12px; }
+.type-filter, .page-size { height: 28px; min-width: 90px; max-width: 100%; font-size: 12px; }
+.archive-filter { display: flex; align-items: center; gap: 4px; font-size: 11px; white-space: nowrap; }
+.btn-primary, .btn-secondary { display: flex; align-items: center; justify-content: center; gap: 5px; height: 28px; flex-shrink: 0; padding: 3px 8px; font-size: 12px; }
+button:disabled { opacity: 0.5; cursor: default; }
+button:focus-visible, input:focus, select:focus { outline: 1px solid #8cb4eb; outline-offset: 1px; }
+.preview-notice { flex-shrink: 0; min-width: 0; padding: 3px 12px; font-size: 11px; color: #8f9bac; background: #1b2027; border-bottom: 1px solid #2b323c; }
+.table-container { flex: 1; min-width: 0; min-height: 0; overflow: scroll; background: #181b20; }
+.cmdb-table { width: 100%; min-width: 1080px; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: 12px; line-height: 17px; }
+.cmdb-table th { height: 32px; padding: 6px 10px; background: #21262e; color: #99a6b7; font-size: 11px; font-weight: 500; white-space: nowrap; border-bottom: 1px solid #353d49; }
+.cmdb-table td { height: 46px; padding: 4px 10px; color: #d5dce6; border-bottom: 1px solid #272e37; vertical-align: middle; overflow: hidden; white-space: nowrap; }
+.cmdb-table tr:hover td { background: #242d38; }
+.cmdb-table tr.selected td { background: #26374d; }
+.cell-identity { display: flex; align-items: center; min-width: 0; gap: 6px; }
+.cell-text { display: flex; flex-direction: column; min-width: 0; }
+.cell-primary { font-weight: 500; color: #e2e7ee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-sub { color: #8996a8; font-size: 11px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-indicator { display: inline-block; width: 2px; height: 28px; flex-shrink: 0; border-radius: 1px; background: #687587; }
+.net-专网 { background: #679fee; }
+.net-内网 { background: #4bb49b; }
+.net-外网 { background: #ccaa60; }
+.badge { display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; height: 20px; border-radius: 4px; font-size: 11px; line-height: 16px; white-space: nowrap; }
+.badge-使用中 { background: #203b33; color: #83cbb0; }
+.badge-闲置 { background: #2b3039; color: #b2bbc8; }
+.badge-维修中 { background: #403520; color: #dbc07c; }
+.badge-已注销 { background: #3e292f; color: #cc9ca8; }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-height: 100px; padding: 20px; gap: 8px; color: #9da9b9; }
+.statusbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; flex-shrink: 0; min-height: 36px; padding: 4px 10px; background: #1b2027; border-top: 1px solid #303640; font-size: 11px; color: #9ba7b8; }
+.status-left, .status-right { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.detail-drawer { display: flex; flex-direction: column; width: 420px; min-width: 0; max-width: 100%; min-height: 0; flex-shrink: 0; overflow: hidden; background: #1d222a; border-left: 1px solid #3d4858; }
+.detail-drawer.expanded { flex: 1; width: 100%; }
+.drawer-header { display: flex; align-items: center; flex-shrink: 0; min-width: 0; gap: 5px; padding: 8px 10px; border-bottom: 1px solid #303945; }
+.drawer-title-box { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
+.drawer-title { font-size: 13px; font-weight: 600; color: #e4e9ef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drawer-code { color: #8d9bad; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drawer-header-actions { display: flex; align-items: center; flex-shrink: 0; gap: 2px; }
+.drawer-actions { display: flex; flex-wrap: wrap; align-items: center; flex-shrink: 0; gap: 4px; padding: 6px 10px; border-bottom: 1px solid #303945; }
+.drawer-btn { display: flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 4px; height: 26px; padding: 3px 6px; font-size: 11px; }
+.drawer-body { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 12px; padding: 12px; overflow-y: scroll; }
+.drawer-section { display: flex; flex-direction: column; flex-shrink: 0; min-width: 0; gap: 6px; }
+.section-title { padding-bottom: 4px; border-bottom: 1px solid #303945; font-size: 11px; font-weight: 500; color: #a9bdd7; }
+.prop-grid { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 5px 8px; min-width: 0; font-size: 12px; line-height: 19px; }
+.prop-grid.two-columns { grid-template-columns: 64px minmax(0, 1fr) 64px minmax(0, 1fr); }
+.prop-label { color: #8997aa; }
+.prop-value { min-width: 0; color: #d6dee9; overflow-wrap: anywhere; word-break: break-all; }
+@media (max-width: 850px) {
+  .toolbar { padding: 6px 8px; }
+  .toolbar-left { flex-basis: 100%; }
+  .search-input { width: 180px; }
+  .detail-drawer { width: 420px; }
+  .prop-grid.two-columns { grid-template-columns: 76px minmax(0, 1fr); }
+}
