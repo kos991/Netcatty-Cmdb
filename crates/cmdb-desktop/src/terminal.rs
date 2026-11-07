@@ -131,9 +131,17 @@ impl Desktop {
             .child(div().class("table-container").id(format!("terminal-scroll-{tab_id}"))
                 .child(table().class("cmdb-table")
                     .child(thead().child(tr().children([
-                        "序号", "设备名称 / SN", "设备类型", "品牌 / 型号", "使用人 / 部门",
-                        "房间号", "IP 地址", "网络类型", "设备状态", "操作",
-                    ].into_iter().map(|heading| th().child(heading)))))
+                        ("序号", "44px"),
+                        ("设备名称 / SN", "170px"),
+                        ("设备类型", "80px"),
+                        ("品牌 / 型号", "130px"),
+                        ("使用人 / 部门", "120px"),
+                        ("房间号", "60px"),
+                        ("IP 地址", "100px"),
+                        ("网络类型", "68px"),
+                        ("设备状态", "70px"),
+                        ("操作", "70px"),
+                    ].into_iter().map(|(heading, width)| th().style(format!("width: {width};")).child(heading)))))
                     .child(body)))
             .child(div().class("statusbar")
                 .child(div().class("status-left").id(format!("terminal-count-{tab_id}"))

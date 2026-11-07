@@ -35,8 +35,8 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; min-width: 0; min
 button:disabled { opacity: 0.5; cursor: default; }
 button:focus-visible, input:focus, select:focus { outline: 1px solid #8cb4eb; outline-offset: 1px; }
 .preview-notice { flex-shrink: 0; min-width: 0; padding: 3px 12px; font-size: 11px; color: #8f9bac; background: #1b2027; border-bottom: 1px solid #2b323c; }
-.table-container { flex: 1; min-width: 0; min-height: 0; overflow: scroll; background: #181b20; }
-.cmdb-table { width: 100%; min-width: 1080px; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: 12px; line-height: 17px; }
+.table-container { flex: 1; min-width: 0; min-height: 0; overflow: auto; background: #181b20; }
+.cmdb-table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: 12px; line-height: 17px; }
 .cmdb-table th { height: 32px; padding: 6px 10px; background: #21262e; color: #99a6b7; font-size: 11px; font-weight: 500; white-space: nowrap; border-bottom: 1px solid #353d49; }
 .cmdb-table td { height: 46px; padding: 4px 10px; color: #d5dce6; border-bottom: 1px solid #272e37; vertical-align: middle; overflow: hidden; white-space: nowrap; }
 .cmdb-table tr:hover td { background: #242d38; }
@@ -57,7 +57,7 @@ button:focus-visible, input:focus, select:focus { outline: 1px solid #8cb4eb; ou
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-height: 100px; padding: 20px; gap: 8px; color: #9da9b9; }
 .statusbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; flex-shrink: 0; min-height: 36px; padding: 4px 10px; background: #1b2027; border-top: 1px solid #303640; font-size: 11px; color: #9ba7b8; }
 .status-left, .status-right { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.detail-drawer { display: flex; flex-direction: column; width: 420px; min-width: 0; max-width: 100%; min-height: 0; flex-shrink: 0; overflow: hidden; background: #1d222a; border-left: 1px solid #3d4858; }
+.detail-drawer { display: flex; flex-direction: column; width: 420px; min-width: 420px; max-width: 420px; min-height: 0; flex-shrink: 0; overflow: hidden; background: #1d222a; border-left: 1px solid #3d4858; }
 .detail-drawer.expanded { flex: 1; width: 100%; }
 .drawer-header { display: flex; align-items: center; flex-shrink: 0; min-width: 0; gap: 5px; padding: 8px 10px; border-bottom: 1px solid #303945; }
 .drawer-title-box { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 2px; }
