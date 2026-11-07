@@ -20,12 +20,12 @@
 <script src="cmdb-settings-preview.js"></script>
 <script src="cabinet-network-nav-preview.js" defer></script>
 <div class="app">
-  <div class="tabs" aria-label="工作区外观"><span class="tab">▧&nbsp; Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab">▱&nbsp; SFTP</span><span class="tab" aria-hidden="true">＋</span><div class="window-actions" aria-hidden="true"><svg><use href="#settings"/></svg><span>—</span><span>□</span><span>×</span></div></div>
+  <div class="tabs" aria-label="工作区外观"><span class="tab"><svg aria-hidden="true"><use href="#archive"/></svg>Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab"><svg aria-hidden="true"><use href="#folder"/></svg>SFTP</span><span class="tab" aria-hidden="true"><svg><use href="#plus"/></svg></span><div class="window-actions" aria-hidden="true"><svg><use href="#settings"/></svg><svg><use href="#minus"/></svg><svg><use href="#square"/></svg><svg><use href="#close"/></svg></div></div>
   <div class="shell">
     <nav class="rail" aria-label="工作区"><div class="logo">N</div><a href="device-assets-preview.html#terminal" aria-label="设备资产" title="设备资产"><svg><use href="#monitor"/></svg></a><a href="organization-preview.html" aria-label="组织架构" title="组织架构"><svg><use href="#people"/></svg></a><a href="rack-layout-preview.html#rack" aria-label="机柜与网络" title="机柜与网络"><svg><use href="#router"/></svg></a><a class="selected" href="work-order-preview.html" aria-current="page" aria-label="工单与统计" title="工单与统计"><svg><use href="#work-order"/></svg></a></nav>
     <main class="surface work-surface">
       <header class="toolbar work-toolbar" aria-label="工单工具栏">
-        <details id="work-new-menu" class="new-menu"><summary class="primary" aria-label="新增工单" title="新增工单"><svg><use href="#plus"/></svg>新增工单 <span class="chevron">⌄</span></summary><div class="menu"><button type="button" data-new-category="故障处理">故障处理</button><button type="button" data-new-category="日常维护">日常维护</button><button type="button" data-new-category="变更操作">变更操作</button><button type="button" data-new-category="资产调配">资产调配</button><small>创建本地演示工单，不写入业务系统</small></div></details>
+        <details id="work-new-menu" class="new-menu"><summary class="primary" aria-label="新增工单" title="新增工单"><svg><use href="#plus"/></svg>新增工单 <svg class="chevron" aria-hidden="true"><use href="#down"/></svg></summary><div class="menu"><button type="button" data-new-category="故障处理">故障处理</button><button type="button" data-new-category="日常维护">日常维护</button><button type="button" data-new-category="变更操作">变更操作</button><button type="button" data-new-category="资产调配">资产调配</button><small>创建本地演示工单，不写入业务系统</small></div></details>
         <label class="search work-search"><svg><use href="#search"/></svg><input id="work-search" type="search" aria-label="搜索工单号、维护主题或关联资产" placeholder="搜索工单号、维护主题、关联资产" autocomplete="off"></label>
         <div class="toolbar-actions">
         <button id="work-filter-toggle" class="icon toolbar-icon" type="button" aria-expanded="false" aria-controls="work-filters" title="查询工单" aria-label="查询工单"><svg><use href="#filter"/></svg></button>
@@ -73,7 +73,7 @@
     <section class="detail-block"><h3>基本信息</h3><dl id="detail-info" class="work-definition"></dl><h4>维护描述</h4><p id="detail-description" class="work-description"></p></section>
     <section class="detail-block"><h3>关联资源</h3><div id="detail-assets" class="detail-assets"></div><h4><svg><use href="#attachment"/></svg>附件</h4><div id="detail-attachments" class="detail-attachments"></div></section>
     <details id="detail-records" class="detail-block detail-records">
-      <summary><svg aria-hidden="true"><use href="#history"/></svg><span id="detail-history-title">处理记录</span><span id="detail-history-count" class="record-count">0 条</span><span class="record-chevron" aria-hidden="true">⌄</span></summary>
+      <summary><svg aria-hidden="true"><use href="#history"/></svg><span id="detail-history-title">处理记录</span><span id="detail-history-count" class="record-count">0 条</span><svg class="record-chevron" aria-hidden="true"><use href="#down"/></svg></summary>
       <div class="detail-records-body">
         <h4>处理结果</h4><div id="detail-result" class="detail-result"></div>
         <h4>处理时间线</h4><ol id="detail-history" class="work-history"></ol>

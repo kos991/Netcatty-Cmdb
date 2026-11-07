@@ -2,7 +2,7 @@
 html, body { height: 100%; overflow: hidden; }
 .tabs, .rail, .prototype-label { display: none !important; }
 .app { height: 100dvh; min-height: 0 !important; padding-top: 0; background: var(--bg); }
-.shell { min-height: 0; padding-left: var(--navigation-width, 52px); }
+.shell { min-height: 0; padding-left: var(--navigation-width, 0px); }
 .surface { margin: 0; min-height: 0; border: 0 !important; border-radius: 0 !important; container: business-surface / inline-size; }
 .asset-table .asset-network-cell { position: relative; padding-left: 18px; }
 .asset-table tbody .asset-network-cell .asset-network-rail { left: 8px; top: 6px; bottom: 6px; }
@@ -14,7 +14,7 @@ html, body { height: 100%; overflow: hidden; }
 #asset-selection[hidden] { display: none; }
 #asset-selection > button { flex: none; }
 #asset-selection > #asset-selected-count { margin-left: 4px; }
-.app > .toolbar { position: relative; z-index: 40; flex: none; min-height: 48px; gap: 8px; margin-left: 52px; padding: 8px 184px 8px var(--title-space, 112px); background: var(--surface); flex-wrap: wrap; }
+.app > .toolbar { position: relative; z-index: 40; flex: none; min-height: 48px; gap: 8px; margin-left: 0; padding: 8px 12px; background: var(--surface); flex-wrap: wrap; }
 .app > .toolbar > .search { flex: 0 1 300px; min-width: 180px; max-width: 300px; height: 32px; margin: 0; }
 .app > .toolbar .search input { min-width: 0; width: 100%; }
 .app > .toolbar .cabinet-network-navigation { display: none; }
@@ -123,9 +123,9 @@ body:has(#asset-sheet[data-dock="bottom"][open].expanded) .surface { visibility:
 }
 @media (max-width: 760px) {
   .app > :is(.toolbar, #rack-toolbar) > :is(.pool-selector, .room) { width: 168px; min-width: 168px; }
-  .app > .toolbar { padding: 8px 140px 8px var(--title-space, 112px); gap: 6px; }
+  .app > .toolbar { padding: 8px 12px; gap: 6px; }
   .pool-page-actions { margin-left: auto; }
-  .app > .toolbar:has(> .search) { padding: 48px 12px 8px; }
+  .app > .toolbar:has(> .search) { padding: 8px 12px; }
   .app > .toolbar > .search { flex-basis: 300px; min-width: min(180px, 100%); max-width: min(300px, 100%); }
 }
 

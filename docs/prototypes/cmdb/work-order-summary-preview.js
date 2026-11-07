@@ -13,7 +13,7 @@
   ];
   const routes = ['accept', 'resolve', 'confirm'];
   const stageButton = (stage) => `<button type="button" class="work-stage-button work-stage-button--${stage.key}" data-status="${stage.status}" aria-pressed="false" title="点击筛选${stage.status}工单，再次点击取消筛选${stage.key === 'cancelled' ? '；取消为关闭前的可选终止状态，不属于正常成功路线' : ''}"><span class="work-stage-name">${stage.status}</span><span class="work-stage-count" data-count>0</span></button>`;
-  const connector = (key) => `<span class="work-stage-connector" aria-hidden="true"><svg viewBox="0 0 32 16" width="32" height="16"><path class="work-stage-line" d="M1 8 H27" data-motion-path="${key}"/><path class="work-stage-arrow" d="m23 4 4 4-4 4"/></svg><span class="work-stage-glint" data-motion-target="${key}"></span></span>`;
+  const connector = (key) => `<span class="work-stage-connector" aria-hidden="true"><svg viewBox="0 0 32 16" width="32" height="16"><use href="#arrow-right" x="4" y="-4" width="24" height="24"/><path d="M9 8H23" visibility="hidden" data-motion-path="${key}"/></svg><span class="work-stage-glint" data-motion-target="${key}"></span></span>`;
 
   summary.classList.add('work-stage-summary');
   summary.setAttribute('aria-label', '工单阶段概览');

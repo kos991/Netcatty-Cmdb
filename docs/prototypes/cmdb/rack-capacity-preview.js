@@ -333,7 +333,7 @@
     const cabinet = cabinetById(draft.cabinetId);
     summary.textContent = `范围 ${draft.start || '?'}–${draft.start + draft.height - 1 || '?'}U / 共 ${cabinet?.total || '?'}U`;
     const issue = placementError(draft);
-    indicator.textContent = issue ? '● 位置冲突' : '● 位置可用';
+    indicator.innerHTML = `<svg aria-hidden="true"><use href="#${issue ? 'triangle-alert' : 'check'}"/></svg> ${issue ? '位置冲突' : '位置可用'}`;
     indicator.classList.toggle('rack-invalid', Boolean(issue));
   }
   function renderPhotos() {
@@ -608,7 +608,7 @@
   function buildWorkbenchPanel(cabinet) {
     const section = document.createElement('section');
     section.className = 'rack-panel rack-workbench-panel';
-    section.innerHTML = '<div class="panel-heading"><h1></h1><span class="rack-anchor-badge"></span><button class="rack-units-edit" type="button" aria-label="编辑机柜总 U 数" title="编辑机柜总 U 数"><span class="rack-total-units">42U</span><svg><use href="#edit"/></svg></button><button type="button" class="quiet rack-workbench-remove" aria-label="移出当前排柜" title="移出当前排柜">×</button></div><p class="caption rack-capacity-summary"></p><div class="usage"><span></span></div><div class="rack-scroll"><div class="rack-frame"><div class="rack-grid"></div></div></div>';
+    section.innerHTML = '<div class="panel-heading"><h1></h1><span class="rack-anchor-badge"></span><button class="rack-units-edit" type="button" aria-label="编辑机柜总 U 数" title="编辑机柜总 U 数"><span class="rack-total-units">42U</span><svg><use href="#edit"/></svg></button><button type="button" class="quiet rack-workbench-remove" aria-label="移出当前排柜" title="移出当前排柜"><svg aria-hidden="true"><use href="#close"/></svg></button></div><p class="caption rack-capacity-summary"></p><div class="usage"><span></span></div><div class="rack-scroll"><div class="rack-frame"><div class="rack-grid"></div></div></div>';
     section.querySelector('.rack-grid').dataset.cabId = cabinet.id;
     section.querySelector('.rack-units-edit').addEventListener('click', () => { activateSide(workbenchSlotOf(cabinet.id)); openManager('cabinet-edit'); });
     section.querySelector('.rack-workbench-remove').addEventListener('click', () => dropWorkbenchCabinet(cabinet.id));
@@ -689,7 +689,11 @@
       : '未选择机柜';
     const choice = details.querySelector('#rack-choice');
     if (choice) choice.textContent = label;
-    else details.querySelector('summary').textContent = `${label} ⌄`;
+    else {
+      const summary = details.querySelector('summary');
+      summary.textContent = label;
+      summary.insertAdjacentHTML('beforeend', '<svg aria-hidden="true"><use href="#down"/></svg>');
+    }
     const menu = details.querySelector('.menu');
     menu.replaceChildren();
     for (const room of rooms) {
@@ -784,7 +788,7 @@
     dialog.id = 'rack-workbench-editor';
     dialog.className = 'rack-prototype-dialog record-shell record-dialog rack-editor-dialog';
     dialog.setAttribute('aria-labelledby', 'rack-workbench-editor-title');
-    dialog.innerHTML = '<header class="dialog-header record-header"><h2 id="rack-workbench-editor-title">设备属性与端口</h2><button type="button" class="icon quiet" aria-label="关闭设备编辑">×</button></header>';
+    dialog.innerHTML = '<header class="dialog-header record-header"><h2 id="rack-workbench-editor-title">设备属性与端口</h2><button type="button" class="icon quiet" aria-label="关闭设备编辑"><svg aria-hidden="true"><use href="#close"/></svg></button></header>';
     const closeEditor = () => { if (canDiscard()) { dirty = false; draft = deviceById(selectedId) ? cloneDevice(deviceById(selectedId)) : null; dialog.close(); } };
     dialog.querySelector('.dialog-header button').addEventListener('click', closeEditor);
     dialog.addEventListener('cancel', (event) => { event.preventDefault(); closeEditor(); });
@@ -938,7 +942,11 @@
     const choiceNode = details.querySelector('#rack-choice');
     const choiceText = `${roomById(left.roomId)?.name || '机房'} · ${cabinetById(left.cabinetId)?.name || '暂无机柜'} (${cabinetById(left.cabinetId)?.total || 42}U)`;
     if (choiceNode) choiceNode.textContent = choiceText;
-    else details.querySelector('summary').textContent = `${choiceText} ⌄`;
+    else {
+      const summary = details.querySelector('summary');
+      summary.textContent = choiceText;
+      summary.insertAdjacentHTML('beforeend', '<svg aria-hidden="true"><use href="#down"/></svg>');
+    }
     const menu = details.querySelector('.menu');
     menu.replaceChildren();
     for (const room of rooms) {
@@ -946,15 +954,11 @@
       const items = cabinets.filter((item) => item.roomId === room.id);
       for (const cabinet of items) {
         const option = button(`${cabinet.name} · ${cabinet.total}U · ${placedIn(cabinet.id).length} 台`, () => {
-          peerModes.middle = 'auto';
-          peerModes.right = 'auto';
           if (navigateSide('left', room.id, cabinet.id)) details.open = false;
         }, 'rack-picker-option');
         option.setAttribute('aria-current', String(cabinet.id === left.cabinetId)); menu.append(option);
       }
       if (!items.length) menu.append(button('暂无机柜 · 选择此机房', () => {
-        peerModes.middle = 'auto';
-        peerModes.right = 'auto';
         if (navigateSide('left', room.id, null)) details.open = false;
       }, 'rack-picker-option'));
     }
@@ -968,18 +972,20 @@
       if (!peer) continue;
       const slotCab = cabinetById(views[slot].cabinetId);
       const isAuto = peerModes[slot] === 'auto';
-      peer.querySelector('summary').textContent = isAuto
-        ? `自动（相邻）▾`
-        : `${roomById(views[slot].roomId)?.name || '机房'}/${slotCab?.name || '无'} ▾`;
+      const peerSummary = peer.querySelector('summary');
+      peerSummary.textContent = isAuto
+        ? '自动（相邻）'
+        : `${roomById(views[slot].roomId)?.name || '机房'}/${slotCab?.name || '无'}`;
+      peerSummary.insertAdjacentHTML('beforeend', '<svg aria-hidden="true"><use href="#down"/></svg>');
       const peerMenu = peer.querySelector('.menu');
       peerMenu.replaceChildren();
       const autoOpt = button('自动（相邻机柜）', () => {
         if (!canDiscard()) return;
         peerModes[slot] = 'auto';
         recomputeAutoPeers();
+        activateSide(slot);
+        navigate(views[slot].roomId, views[slot].cabinetId, null, false);
         peer.open = false;
-        renderRack();
-        fillEditor();
       }, 'rack-picker-option');
       autoOpt.setAttribute('aria-current', String(isAuto));
       peerMenu.append(autoOpt);
@@ -990,14 +996,12 @@
         for (const cabinet of items) {
           const sameAsLeft = cabinet.id === views.left.cabinetId;
           const opt = button(`${cabinet.name} · ${cabinet.total}U · ${placedIn(cabinet.id).length} 台${sameAsLeft ? '（同柜对照）' : ''}`, () => {
-            peerModes[slot] = 'manual';
             if (navigateSide(slot, room.id, cabinet.id)) peer.open = false;
           }, 'rack-picker-option');
           opt.setAttribute('aria-current', String(!isAuto && cabinet.id === views[slot].cabinetId));
           peerMenu.append(opt);
         }
         if (!items.length) peerMenu.append(button('暂无机柜', () => {
-          peerModes[slot] = 'manual';
           if (navigateSide(slot, room.id, null)) peer.open = false;
         }, 'rack-picker-option'));
       }
@@ -1011,6 +1015,12 @@
   }
   function navigateSide(side, roomId, cabinetId) {
     if (!canDiscard()) return false;
+    if (side === 'left') {
+      peerModes.middle = 'auto';
+      peerModes.right = 'auto';
+    } else {
+      peerModes[side] = 'manual';
+    }
     activateSide(side);
     return navigate(roomId, cabinetId, null, false);
   }
@@ -1019,7 +1029,7 @@
     if (!fold) return;
     const unplaced = devices.filter((device) => !device.cabinetId);
     const conflicts = devices.filter((device) => device.cabinetId && placementError(device));
-    fold.querySelector('summary').innerHTML = `<span class="fold-arrow">▸</span>未上架 ${unplaced.length} <span style="margin:0 6px;color:var(--border)">/</span><span style="color:var(--warning)">冲突 ${conflicts.length}</span><span style="margin-left:auto;font-size:11px;color:var(--muted)">查看设备</span>`;
+    fold.querySelector('summary').innerHTML = `<svg class="fold-arrow" aria-hidden="true"><use href="#right"/></svg>未上架 ${unplaced.length} <span style="margin:0 6px;color:var(--border)">/</span><span style="color:var(--warning)">冲突 ${conflicts.length}</span><span style="margin-left:auto;font-size:11px;color:var(--muted)">查看设备</span>`;
     const body = fold.querySelector('.fold-body');
     body.replaceChildren();
     if (shared) {
@@ -1046,6 +1056,22 @@
     heading.textContent = `匹配 ${matches.length} 台：`;
     searchResults.append(heading);
     for (const device of matches) searchResults.append(button(`${device.name} · ${cabinetById(device.cabinetId)?.name || '未上架'}`, () => shared ? shared.openObject('infrastructure', device.id) : selectDevice(device.id)));
+  }
+
+  function bindPortAction(badge, action) {
+    badge.setAttribute('role', 'button');
+    badge.setAttribute('aria-label', badge.title);
+    badge.tabIndex = 0;
+    badge.addEventListener('click', (event) => {
+      event.stopPropagation();
+      action();
+    });
+    badge.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      event.stopPropagation();
+      badge.click();
+    });
   }
 
   function portSideForMiddleDevice(device, link) {
@@ -1201,12 +1227,10 @@
           badge.dataset.portName = portName;
           badge.dataset.portMode = modeObj.id;
           badge.dataset.portSide = badgeSide;
-          badge.textContent = `${portName}·${modeObj.code}`;
+          badge.textContent = device.height === 1 ? portName : `${portName}·${modeObj.code}`;
           badge.title = `${portName} · ${modeObj.fullLabel} (${modeObj.code}) · ${vlanStr} · [${linkMediumLabel(link)}] ↔ ${peerDevice?.name || ''} · ${peerPort}`;
-          badge.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            selectConnection(link.id);
-            selectDevice(device.id, side);
+          bindPortAction(badge, () => {
+            if (selectDevice(device.id, side)) selectConnection(link.id);
           });
           if (badgeSide === 'left') portsLeftStrip.append(badge);
           else portsRightStrip.append(badge);
@@ -1221,10 +1245,9 @@
         badge.dataset.portName = idlePort;
         badge.dataset.portMode = modeObj.id;
         badge.dataset.portSide = badgeSide;
-        badge.textContent = `${idlePort}·${modeObj.code}`;
+        badge.textContent = device.height === 1 ? idlePort : `${idlePort}·${modeObj.code}`;
         badge.title = `${idlePort} · ${modeObj.fullLabel} (${modeObj.code}) · ${spec.vlan || modeObj.defaultVlan} · 空闲端口（点击快速配线）`;
-        badge.addEventListener('click', (ev) => {
-          ev.stopPropagation();
+        bindPortAction(badge, () => {
           openConnection(null, { deviceId: device.id, port: idlePort, portMode: modeObj.id, vlan: spec.vlan || modeObj.defaultVlan });
         });
         if (badgeSide === 'left') portsLeftStrip.append(badge);
@@ -1313,7 +1336,7 @@
     dialog.id = id;
     dialog.className = 'rack-prototype-dialog record-shell record-dialog';
     dialog.setAttribute('aria-labelledby', `${id}-title`);
-    dialog.innerHTML = `<header class="dialog-header record-header"><h2 id="${id}-title"></h2><button type="button" class="icon quiet" aria-label="关闭">×</button></header>${body}${footerMarkup}`;
+    dialog.innerHTML = `<header class="dialog-header record-header"><h2 id="${id}-title"></h2><button type="button" class="icon quiet" aria-label="关闭"><svg aria-hidden="true"><use href="#close"/></svg></button></header>${body}${footerMarkup}`;
     dialog.querySelector('h2').textContent = title;
     dialog.querySelector('.dialog-body')?.classList.add('record-body');
     dialog.querySelector('.dialog-footer')?.classList.add('record-footer');
@@ -1465,7 +1488,7 @@
   manager.innerHTML = `
     <header class="dialog-header record-header">
       <h2 id="rack-manager-title">维护机房与机柜</h2>
-      <button type="button" class="icon quiet rack-manager-close" aria-label="关闭维护机房与机柜">×</button>
+      <button type="button" class="icon quiet rack-manager-close" aria-label="关闭维护机房与机柜"><svg aria-hidden="true"><use href="#close"/></svg></button>
     </header>
     <div class="rack-manager-body">
       <aside class="rack-directory" aria-label="机房与机柜目录">
@@ -2226,6 +2249,10 @@
 
     const slotIndexMap = Object.fromEntries(sideOrder.map((side, index) => [side, index]));
     const activeSlots = sideOrder.filter((slot) => panelsBySide[slot] && panelsBySide[slot].offsetParent !== null);
+    const stacked = !shared && activeSlots.length > 1
+      && panelsBySide[activeSlots[1]].getBoundingClientRect().top >= panelsBySide[activeSlots[0]].getBoundingClientRect().bottom - 1;
+    const stackedRight = stacked ? Math.max(...activeSlots.map((slot) => panelsBySide[slot].querySelector('.rack-frame').getBoundingClientRect().right - bounds.left)) : 0;
+    let stackedRouteCount = 0;
     const intraOrderByChannel = Object.fromEntries(sideOrder.map((side) => [side, 0]));
     let overheadTrayCount = 0;
     let overheadTrayBounds = null;
@@ -2237,7 +2264,7 @@
       if (!devA?.cabinetId || !devB?.cabinetId) continue;
 
       let start = null, end = null;
-      let routeType = 'channel'; // 'channel' | 'overhead' | 'intra'
+      let routeType = 'channel'; // 'channel' | 'overhead' | 'intra' | 'stack'
       let slotA = null, slotB = null;
 
       if (!intra) {
@@ -2246,7 +2273,11 @@
         if (slotA && slotB) {
           const idxA = slotIndexMap[slotA];
           const idxB = slotIndexMap[slotB];
-          if (!shared && Math.abs(idxA - idxB) === 2 && activeSlots.includes('middle')) {
+          if (stacked) {
+            routeType = 'stack';
+            start = anchor(panelsBySide[slotA], link, 'server', 'right');
+            end = anchor(panelsBySide[slotB], link, 'switch', 'right');
+          } else if (!shared && Math.abs(idxA - idxB) === 2 && activeSlots.includes('middle')) {
             routeType = 'overhead';
             start = anchor(panelsBySide[slotA], link, 'server', idxA === 0 ? 'right' : 'left');
             end = anchor(panelsBySide[slotB], link, 'switch', idxB === 0 ? 'right' : 'left');
@@ -2263,9 +2294,9 @@
           slotB = matchingSlots[1];
           const idxA = slotIndexMap[slotA];
           const idxB = slotIndexMap[slotB];
-          routeType = Math.abs(idxA - idxB) === 2 && activeSlots.includes('middle') ? 'overhead' : 'channel';
-          start = anchor(panelsBySide[slotA], link, 'server', idxA < idxB ? 'right' : 'left');
-          end = anchor(panelsBySide[slotB], link, 'switch', idxB < idxA ? 'right' : 'left');
+          routeType = stacked ? 'stack' : Math.abs(idxA - idxB) === 2 && activeSlots.includes('middle') ? 'overhead' : 'channel';
+          start = anchor(panelsBySide[slotA], link, 'server', stacked || idxA < idxB ? 'right' : 'left');
+          end = anchor(panelsBySide[slotB], link, 'switch', stacked || idxB < idxA ? 'right' : 'left');
         } else if (matchingSlots.length === 1) {
           slotA = matchingSlots[0];
           const edgeSide = slotA === 'right' ? 'left' : 'right';
@@ -2281,7 +2312,11 @@
       let geometry = '';
       let labelPoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
 
-      if (routeType === 'overhead') {
+      if (routeType === 'stack') {
+        const laneX = Math.min(wireWidth - 8, stackedRight + 16 + (stackedRouteCount++ % 3) * 12);
+        geometry = `M ${start.x} ${start.y} H ${laneX} V ${end.y} H ${end.x}`;
+        labelPoint = { x: stackedRight + (wireWidth - stackedRight) / 2, y: (start.y + end.y) / 2 };
+      } else if (routeType === 'overhead') {
         const trayIdx = overheadTrayCount++;
         const dir = end.x >= start.x ? 1 : -1;
         const x1 = start.x + dir * (16 + trayIdx * 7);
@@ -2329,7 +2364,7 @@
       const modeObj = linkPortMode(link);
       const vlanStr = linkVlanLabel(link);
       const dimmed = !linkMatchesFilter(link) || Boolean(selectedConnectionId && link.id !== selectedConnectionId);
-      const stateKey = `${geometry}|${medium}|${link.speed || ''}|${modeObj.id}|${vlanStr}|${dimmed}|${start.clamped || ''}|${end.clamped || ''}`;
+      const stateKey = `${geometry}|${labelPoint.x}|${labelPoint.y}|${medium}|${link.speed || ''}|${modeObj.id}|${vlanStr}|${dimmed}|${start.clamped || ''}|${end.clamped || ''}`;
       const previous = wireAnimations.get(link.id);
 
       if (previous?.geometry === stateKey) {
@@ -2382,11 +2417,14 @@
         dot.setAttribute('r', '3.4');
         group.append(dot);
         if (point.clamped) {
-          const arrow = document.createElementNS(svgNS, 'text');
+          const arrow = document.createElementNS(svgNS, 'use');
           arrow.setAttribute('class', `rack-wire-offscreen ${medium}`);
-          arrow.setAttribute('x', String(point.x + (point.side === 'right' ? 9 : -9)));
-          arrow.setAttribute('y', String(point.y));
-          arrow.textContent = point.clamped === 'up' ? '▲' : '▼';
+          arrow.setAttribute('x', String(point.x + (point.side === 'right' ? 9 : -9) - 6));
+          arrow.setAttribute('y', String(point.y - 6));
+          arrow.setAttribute('width', '12');
+          arrow.setAttribute('height', '12');
+          arrow.setAttribute('aria-hidden', 'true');
+          arrow.setAttribute('href', point.clamped === 'up' ? '#up' : '#down');
           group.append(arrow);
         }
       }
@@ -2396,13 +2434,13 @@
       badgeGroup.dataset.connectionId = link.id;
       badgeGroup.dataset.portMode = modeObj.id;
       const shortVlan = vlanStr.replace(/^VSAN\s*\d+\s*\/\s*/i, '');
-      const badgeTextStr = intra
+      const badgeTextStr = routeType === 'stack' ? modeObj.code : intra
         ? `同柜 · ${modeObj.code} (${shortVlan})`
         : routeType === 'overhead'
           ? `顶部槽 · ${modeObj.code} (${shortVlan})`
           : `${linkMediumLabel(link)} · ${modeObj.code}`;
       const charUnits = [...badgeTextStr].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 255 ? 1.55 : 0.92), 0);
-      const pillW = Math.max(58, Math.round(charUnits * 6.2 + 14));
+      const pillW = Math.max(routeType === 'stack' ? 36 : 58, Math.round(charUnits * 6.2 + 14));
       const pillH = 16;
       const rect = document.createElementNS(svgNS, 'rect');
       rect.setAttribute('class', 'rack-wire-pill');
@@ -2477,6 +2515,33 @@
     else wireLayer.dataset.motion = 'reduced';
   }
 
+  function positionDropdownMenu(detail) {
+    const menu = detail.querySelector(':scope > .menu');
+    const summary = detail.querySelector(':scope > summary');
+    if (!menu || !summary || !detail.closest('#rack-toolbar, #rack-content')) return;
+    if (!menu.dataset.floatingWidth) menu.dataset.floatingWidth = String(menu.getBoundingClientRect().width);
+    menu.classList.add('rack-floating-menu');
+    const anchor = summary.getBoundingClientRect();
+    const margin = 8;
+    const gap = 4;
+    const width = Math.min(Number(menu.dataset.floatingWidth), window.innerWidth - margin * 2);
+    menu.style.width = `${width}px`;
+    const below = Math.max(0, window.innerHeight - anchor.bottom - gap - margin);
+    const above = Math.max(0, anchor.top - gap - margin);
+    const desiredHeight = menu.scrollHeight + 2;
+    const openAbove = desiredHeight > below && above > below;
+    const height = Math.min(desiredHeight, openAbove ? above : below);
+    menu.style.maxHeight = `${height}px`;
+    menu.style.setProperty('left', `${Math.max(margin, Math.min(anchor.left, window.innerWidth - width - margin))}px`, 'important');
+    menu.style.setProperty('right', 'auto', 'important');
+    menu.style.setProperty('top', `${openAbove ? anchor.top - gap - height : anchor.bottom + gap}px`, 'important');
+  }
+  function positionOpenDropdownMenus() {
+    document.querySelectorAll('#rack-toolbar details[open], #rack-content .rack-peer-picker[open]').forEach(positionDropdownMenu);
+  }
+  window.addEventListener('resize', positionOpenDropdownMenus);
+  window.addEventListener('scroll', positionOpenDropdownMenus, { capture: true, passive: true });
+
   // Ensure only one dropdown menu is open at a time; close on outside click or Escape
   function closeAllDropdownMenus(except = null) {
     document.querySelectorAll('details[open]').forEach((detail) => {
@@ -2488,7 +2553,10 @@
   document.querySelectorAll('details').forEach((detail) => {
     if (detail.classList.contains('fold')) return;
     detail.addEventListener('toggle', () => {
-      if (detail.open) closeAllDropdownMenus(detail);
+      if (detail.open) {
+        closeAllDropdownMenus(detail);
+        positionDropdownMenu(detail);
+      }
     });
   });
   document.addEventListener('pointerdown', (event) => {

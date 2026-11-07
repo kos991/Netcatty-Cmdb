@@ -135,8 +135,8 @@ button.asset-primary:hover { color: var(--accent); }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-part label, :is(.asset-sheet, .asset-create-dialog) .asset-hardware-raw-label { color: var(--muted); font-size: 11px; line-height: 1.4; margin: 0; }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced { min-width: 0; }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced > summary { min-height: 20px; height: auto; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; justify-content: flex-start; }
-:is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced > summary::before { content: '›'; display: inline-block; margin-right: 5px; font-size: 14px; }
-:is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced[open] > summary::before { transform: rotate(90deg); }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced > summary > svg { width: 14px; height: 14px; margin-right: 5px; flex-shrink: 0; }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced[open] > summary > svg { transform: rotate(90deg); }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-advanced-body { display: grid; gap: 6px; padding-top: 6px; }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-control :is(input, select, textarea) { display: block; width: 100%; }
 /* 常用预设与 420px 窄栏：按字段容器宽度排版，与原生 cmdb-ui.css 规则一致。 */
@@ -148,6 +148,7 @@ button.asset-primary:hover { color: var(--accent); }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset > button { width: auto; height: 22px; min-width: 0; padding: 0 4px 0 8px; border: 0; background: transparent; color: inherit; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset > button + button { flex: none; padding: 0 7px 0 2px; color: var(--muted); }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset-save { width: auto; height: 22px; padding: 0 8px; border: 1px dashed var(--border); border-radius: 999px; background: transparent; color: var(--muted); font-size: 11px; }
+:is(.asset-sheet, .asset-create-dialog) .asset-hardware-presets button > svg { width: 12px; height: 12px; flex-shrink: 0; }
 :is(.asset-sheet, .asset-create-dialog) .asset-hardware-preset-save:disabled { opacity: .5; cursor: not-allowed; }
 @container (max-width: 300px) {
   :is(.asset-sheet, .asset-create-dialog) [data-hardware-field="cpu_info"] .asset-hardware-parts { grid-template-columns: minmax(0, 1fr); }

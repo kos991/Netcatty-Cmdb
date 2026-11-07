@@ -206,7 +206,7 @@
         const entries = addresses(pool);
         const used = entries.filter((entry) => entry.status === 'used').length;
         metadata.textContent = `${pool.cidr} · ${(pool.segments || []).length} 个分段 · 使用率 ${entries.length ? Math.round(used / entries.length * 100) : 0}%`;
-        const arrow = document.createElement('span'); arrow.className = 'pool-picker-arrow'; arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = '▴';
+        const arrow = document.createElement('span'); arrow.className = 'pool-picker-arrow'; arrow.setAttribute('aria-hidden', 'true'); arrow.innerHTML = '<svg aria-hidden="true"><use href="#up"/></svg>';
         button.append(title, metadata, arrow);
         const children = document.createElement('div'); children.className = 'pool-picker-segments';
         children.id = `pool-picker-segments-${index}`;
@@ -349,19 +349,18 @@
       host.textContent = entry.host;
       tile.append(host);
       tile.title += entry.ip + ' · ' + statusText[entry.status] + ' · 占用设备：' + (entry.owner || '无') + (special ? ' · 不可分配' : '');
-      if (entry.status === 'reserved') {
+      if (entry.status === 'reserved' || entry.status === 'abnormal') {
         const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        icon.setAttribute('class', 'ip-status-mark');
+        icon.setAttribute('class', 'ip-status-mark' + (entry.status === 'abnormal' ? ' ip-status-alert' : ''));
         icon.setAttribute('aria-hidden', 'true');
         const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-        use.setAttribute('href', '#lock');
+        use.setAttribute('href', entry.status === 'reserved' ? '#lock' : '#triangle-alert');
         icon.append(use);
         tile.append(icon);
-      } else if (entry.status === 'used' || entry.status === 'abnormal') {
+      } else if (entry.status === 'used') {
         const mark = document.createElement('span');
-        mark.className = 'ip-status-mark ' + (entry.status === 'used' ? 'ip-status-dot' : 'ip-status-alert');
+        mark.className = 'ip-status-mark ip-status-dot';
         mark.setAttribute('aria-hidden', 'true');
-        if (entry.status === 'abnormal') mark.textContent = '!';
         tile.append(mark);
       }
       tile.setAttribute('aria-label', tile.title);

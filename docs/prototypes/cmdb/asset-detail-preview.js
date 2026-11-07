@@ -96,7 +96,7 @@
     const sheet = byId('asset-sheet');
     sheet.classList.add('record-shell');
     sheet.dataset.recordMode = editing ? 'edit' : 'detail';
-    const dock = window.frameElement?.id === 'business-view' && view === 'terminal' ? 'bottom' : 'right';
+    const dock = (window.frameElement?.dataset.standalone || window.frameElement?.id === 'business-view') && view === 'terminal' ? 'bottom' : 'right';
     if (sheet.dataset.dock !== dock) sheet.classList.remove('expanded');
     sheet.dataset.dock = dock;
     sheet.dataset.assetId = row.id || '';
@@ -158,6 +158,7 @@
       bar.className = 'sheet-header-actions';
       return bar;
     })();
+    const extra = byId('asset-header-extra');
     actionsBar.replaceChildren();
     actionsBar.append(expand);
     const split = document.createElement('button');
@@ -182,7 +183,6 @@
     };
     split.append(svg('columns-2'));
     actionsBar.append(split);
-    const extra = byId('asset-header-extra');
     extra.replaceChildren();
     extra.hidden = editing;
     // 历史资料由第三栏的履历页签提供，第二栏只放当前对象适用的业务操作。

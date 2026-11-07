@@ -1,5 +1,8 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+mod icons;
+
+use icons::{icon, page_icon, EmbeddedAssets};
 use cmdb_engine::{Page, Tab, Workspace};
 use gpui::{
     div, prelude::*, px, rgb, size, App, Application, Bounds, Context,
@@ -13,6 +16,16 @@ const BORDER: u32 = 0x303640;
 const TEXT: u32 = 0xdde2e9;
 const MUTED: u32 = 0xa2abb8;
 const ACCENT: u32 = 0x89b4fa;
+
+struct IconTooltip(&'static str);
+
+impl Render for IconTooltip {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().px_3().py_2().rounded_md().bg(rgb(PANEL))
+            .border_1().border_color(rgb(BORDER)).text_sm().text_color(rgb(TEXT))
+            .child(self.0)
+    }
+}
 
 struct Desktop {
     workspace: Workspace,
@@ -34,8 +47,9 @@ impl Desktop {
             .border_r_1().border_color(rgb(BORDER))
             .bg(rgb(if active { PANEL } else { CHROME }))
             .child(
-                div().id(("tab", tab.id)).flex_1().py_3().cursor_pointer()
+                div().id(("tab", tab.id)).flex().items_center().gap_2().flex_1().py_3().cursor_pointer()
                     .text_color(rgb(if active { ACCENT } else { MUTED }))
+                    .child(page_icon(tab.page, if active { ACCENT } else { MUTED }))
                     .child(tab.page.title())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.workspace.activate(tab.id);
@@ -43,9 +57,11 @@ impl Desktop {
                     })),
             )
             .child(
-                div().id(("close-tab", tab.id)).px_1().cursor_pointer()
-                    .text_color(rgb(MUTED)).hover(|style| style.text_color(rgb(TEXT)))
-                    .child("×")
+                div().id(("close-tab", tab.id)).flex().items_center().justify_center()
+                    .w(px(28.0)).h(px(28.0)).cursor_pointer()
+                    .text_color(rgb(MUTED)).hover(|style| style.bg(rgb(BORDER)).text_color(rgb(TEXT)))
+                    .tooltip(|_, cx| cx.new(|_| IconTooltip("关闭标签（Ctrl+W）")).into())
+                    .child(icon("lucide/x.svg", MUTED))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.workspace.close(tab.id);
                         cx.notify();
@@ -92,22 +108,25 @@ impl Render for Desktop {
             .border_b_1().border_color(rgb(BORDER));
         for (index, page) in Page::ALL.into_iter().enumerate() {
             menu = menu.child(
-                div().id(("new-page", index)).px_3().py_2().rounded_md()
+                div().id(("new-page", index)).flex().items_center().gap_2().px_3().py_2().rounded_md()
                     .cursor_pointer().bg(rgb(BACKGROUND))
-                    .hover(|style| style.bg(rgb(BORDER))).child(page.title())
+                    .hover(|style| style.bg(rgb(BORDER)))
+                    .child(page_icon(page, TEXT)).child(page.title())
                     .on_click(cx.listener(move |this, _, _, cx| this.open(page, cx))),
             );
         }
-        let mut navigation = div().flex().flex_col().w(px(164.0)).flex_shrink_0()
-            .h_full().px_2().py_4().gap_1().bg(rgb(CHROME))
+        let mut navigation = div().id("sidebar").flex().flex_col().w(px(164.0)).flex_shrink_0()
+            .h_full().min_h_0().overflow_y_scroll().px_2().py_4().gap_1().bg(rgb(CHROME))
             .child(div().px_3().pb_3().text_xs().text_color(rgb(MUTED)).child("工作区"));
         for (index, page) in Page::ALL.into_iter().enumerate() {
             let selected = self.workspace.active().is_some_and(|tab| tab.page == page);
             navigation = navigation.child(
-                div().id(("navigation", index)).px_3().py_2().rounded_md().cursor_pointer()
+                div().id(("navigation", index)).flex().items_center().gap_2().px_3().py_2().rounded_md().cursor_pointer()
                     .bg(rgb(if selected { PANEL } else { CHROME }))
                     .text_color(rgb(if selected { ACCENT } else { MUTED }))
-                    .hover(|style| style.bg(rgb(BORDER))).child(page.title())
+                    .hover(|style| style.bg(rgb(BORDER)))
+                    .child(page_icon(page, if selected { ACCENT } else { MUTED }))
+                    .child(page.title())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let existing = this.workspace.tabs().iter().find(|tab| tab.page == page).copied();
                         if let Some(tab) = existing {
@@ -120,6 +139,25 @@ impl Render for Desktop {
                     })),
             );
         }
+        navigation = navigation
+            .child(div().flex_1())
+            .child(div().id("split").flex().items_center().gap_2().px_3().py_2()
+                .rounded_md().cursor_pointer().text_color(rgb(MUTED))
+                .hover(|style| style.bg(rgb(BORDER)))
+                .tooltip(|_, cx| cx.new(|_| IconTooltip("切换左右分栏（Ctrl+\\）")).into())
+                .child(icon(
+                    if self.workspace.secondary().is_some() {
+                        "lucide/panel-left-close.svg"
+                    } else {
+                        "lucide/columns-2.svg"
+                    },
+                    MUTED,
+                ))
+                .child(if self.workspace.secondary().is_some() { "合并分栏" } else { "左右分栏" })
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.workspace.toggle_split();
+                    cx.notify();
+                })));
         let mut content = div().flex().flex_1().min_w_0().h_full();
         if let Some(tab) = self.workspace.active() {
             content = content.child(self.pane(tab, false));
@@ -154,20 +192,17 @@ impl Render for Desktop {
             .child(
                 div().flex().items_center().h(px(44.0)).flex_shrink_0().bg(rgb(CHROME))
                     .border_b_1().border_color(rgb(BORDER))
-                    .child(div().w(px(48.0)).flex_shrink_0().text_center().text_lg()
-                        .text_color(rgb(ACCENT)).child("◈"))
+                    .child(div().id("product-logo").w(px(48.0)).flex_shrink_0()
+                        .flex().items_center().justify_center()
+                        .tooltip(|_, cx| cx.new(|_| IconTooltip("资产全景标志")).into())
+                        .child(icon("product-logo.svg", TEXT).size(px(22.0))))
                     .child(tabs)
-                    .child(div().id("add-tab").px_4().py_2().cursor_pointer().text_lg()
-                        .hover(|style| style.bg(rgb(BORDER))).child("+")
+                    .child(div().id("add-tab").flex().items_center().justify_center()
+                        .w(px(44.0)).h_full().flex_shrink_0().cursor_pointer()
+                        .tooltip(|_, cx| cx.new(|_| IconTooltip("新增标签（Ctrl+T）")).into())
+                        .hover(|style| style.bg(rgb(BORDER))).child(icon("lucide/plus.svg", TEXT))
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.menu_open = !this.menu_open;
-                            cx.notify();
-                        })))
-                    .child(div().id("split").px_4().py_2().cursor_pointer()
-                        .hover(|style| style.bg(rgb(BORDER)))
-                        .child(if self.workspace.secondary().is_some() { "合并分栏" } else { "左右分栏" })
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.workspace.toggle_split();
                             cx.notify();
                         }))),
             )
@@ -181,7 +216,7 @@ impl Render for Desktop {
 }
 
 fn main() {
-    Application::new().run(|cx: &mut App| {
+    Application::new().with_assets(EmbeddedAssets).run(|cx: &mut App| {
         cx.on_window_closed(|cx| {
             if cx.windows().is_empty() { cx.quit(); }
         }).detach();

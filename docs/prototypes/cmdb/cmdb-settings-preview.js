@@ -41,6 +41,7 @@
       row('cmdb-row-sync', '同步 Cmdb 数据', standalone ? '资产、组织及联系电话、IP、工单和履历统一同步；原型不连接同步服务' : '资产、组织及联系电话、IP、工单和履历统一随 Netcatty 云同步', toggle('cmdb-sync-enabled', '同步 Cmdb 数据'), '云同步 资产 组织 联系电话 人员 IP 工单 履历'));
     const maintenanceSection = section('cmdb-settings-maintenance', '数据维护',
       row('cmdb-row-legacy', '旧台账迁入', '将旧终端和基础设施资料迁入当前项目，已有记录跳过', button('查看迁入预览', 'data-settings-preview="legacy"'), '旧台账 数据维护 历史 迁入'));
+    const appearanceSection = section('cmdb-settings-appearance', '外观', row('cmdb-row-theme', '主题', '仅保存此浏览器的原型外观偏好', '<select id="shell-theme" aria-label="主题"><option value="dark">深色</option><option value="light">浅色</option></select>', '主题 深色 浅色 外观'));
     const groups = [['app-window', '应用'], ['database', 'Cmdb'], ['palette', '外观'], ['square-terminal', '终端'], ['keyboard', '快捷键'], ['file-type', 'SFTP 文件关联'], ['sparkles', 'AI'], ['cloud', '云同步'], ['hard-drive', '系统']];
     const panels = [
       { id: 'assets', label: '资产目录', icon: 'boxes', content: assetSection + networkSection },
@@ -48,6 +49,7 @@
       { id: 'templates', label: '导入模板', icon: 'download', content: templateSection },
       { id: 'project', label: '项目存储', icon: 'folder', content: projectSection + attachmentSection },
       { id: 'sync', label: '同步维护', icon: 'cloud', content: cloudSection + maintenanceSection },
+      ...(standalone ? [{ id: 'appearance', label: '外观', icon: 'palette', content: appearanceSection }] : []),
     ];
     const host = standaloneRoot || document.createElement('div');
     host.innerHTML = `

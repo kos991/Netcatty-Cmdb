@@ -19,13 +19,13 @@
 <script src="cmdb-settings-operations-preview.js"></script>
 <script src="cmdb-settings-preview.js"></script>
 <div class="app">
-<div class="tabs"><span class="tab">▧&nbsp; Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab">▱&nbsp; SFTP</span><span class="tab">＋</span><div class="window-actions"><svg><use href="#settings"/></svg><span>—</span><span>□</span><span>×</span></div></div>
+<div class="tabs"><span class="tab"><svg aria-hidden="true"><use href="#archive"/></svg> Vaults</span><span class="tab active"><svg><use href="#server"/></svg>Cmdb</span><span class="tab"><svg aria-hidden="true"><use href="#folder"/></svg> SFTP</span><span class="tab" aria-label="新建标签页"><svg aria-hidden="true"><use href="#plus"/></svg></span><div class="window-actions"><svg><use href="#settings"/></svg><span aria-label="最小化"><svg aria-hidden="true"><use href="#minus"/></svg></span><span aria-label="最大化"><svg aria-hidden="true"><use href="#square"/></svg></span><span aria-label="关闭"><svg aria-hidden="true"><use href="#close"/></svg></span></div></div>
 <div class="shell">
 <nav class="rail" aria-label="工作区"><div class="logo">N</div><button aria-label="设备资产" title="设备资产" onclick="location.href='device-assets-preview.html#terminal'"><svg><use href="#monitor"/></svg></button><button aria-label="组织架构" title="组织架构" onclick="location.href='organization-preview.html'"><svg><use href="#people"/></svg></button><button class="selected" aria-label="机柜与网络" title="机柜与网络"><svg><use href="#router"/></svg></button><button aria-label="工单与统计" title="工单与统计" onclick="location.href='work-order-preview.html'"><svg><use href="#chart"/></svg></button></nav>
 <main class="surface">
 <header id="pool-toolbar" class="toolbar" aria-label="地址池工具栏">
-  <details class="new-menu"><summary class="primary" aria-label="新增地址池" title="新增地址池"><svg><use href="#plus"/></svg>新增地址池 <span class="chevron">⌄</span></summary><div class="menu"><button data-pool-editor="new">新增地址池</button><button data-pool-editor="browse">维护其他地址池</button><button disabled>从资产 IP 生成</button><small>新增为空白表单；维护可在左侧切换地址池</small></div></details>
-  <details class="pool-selector"><summary aria-label="选择地址池"><span id="pool-choice"></span><span class="chevron">⌄</span></summary><div class="menu"><input id="pool-find" aria-label="搜索地址池" placeholder="搜索地址池名称、CIDR"><div id="pool-options"></div><button type="button" id="pool-selector-edit" class="pool-selector-edit">编辑当前地址池</button></div></details>
+  <details class="new-menu"><summary class="primary" aria-label="新增地址池" title="新增地址池"><svg><use href="#plus"/></svg>新增地址池 <svg class="chevron" aria-hidden="true"><use href="#down"/></svg></summary><div class="menu"><button data-pool-editor="new">新增地址池</button><button data-pool-editor="browse">维护其他地址池</button><button disabled>从资产 IP 生成</button><small>新增为空白表单；维护可在左侧切换地址池</small></div></details>
+  <details class="pool-selector"><summary aria-label="选择地址池"><span id="pool-choice"></span><svg class="chevron" aria-hidden="true"><use href="#down"/></svg></summary><div class="menu"><input id="pool-find" aria-label="搜索地址池" placeholder="搜索地址池名称、CIDR"><div id="pool-options"></div><button type="button" id="pool-selector-edit" class="pool-selector-edit">编辑当前地址池</button></div></details>
   <label class="search"><svg><use href="#search"/></svg><input id="pool-search" aria-label="查询 IP 或资产" placeholder="查询 IP、资产名称"></label>
   <div id="pool-filters" class="pool-filters" hidden><label>状态<select id="pool-filter-status"><option value="">全部状态</option><option value="free">空闲</option><option value="reserved">已预留</option><option value="used">已占用</option></select></label><label>分段<select id="pool-filter-segment"><option value="all">全部分段</option></select></label></div>
   <div class="toolbar-actions">
@@ -49,7 +49,7 @@
     <button type="button" class="pool-stat used" data-pool-status="used" aria-pressed="false" title="筛选已占用，再次点击取消"><span class="ip-status-dot" aria-hidden="true"></span><span>已占用</span><strong id="pool-used"></strong></button>
     <button type="button" class="pool-stat reserved" data-pool-status="reserved" aria-pressed="false" title="筛选已预留，再次点击取消"><svg aria-hidden="true"><use href="#lock"/></svg><span>已预留</span><strong id="pool-reserved"></strong></button>
     <button type="button" class="pool-stat free" data-pool-status="free" aria-pressed="false" title="筛选空闲，再次点击取消"><svg aria-hidden="true"><use href="#check"/></svg><span>空闲</span><strong id="pool-free"></strong></button>
-    <button type="button" class="pool-stat abnormal" data-pool-status="abnormal" aria-pressed="false" title="筛选异常，再次点击取消"><span class="ip-status-alert" aria-hidden="true">!</span><span>异常</span><strong id="pool-abnormal"></strong></button>
+    <button type="button" class="pool-stat abnormal" data-pool-status="abnormal" aria-pressed="false" title="筛选异常，再次点击取消"><svg class="ip-status-alert" aria-hidden="true"><use href="#triangle-alert"/></svg><span>异常</span><strong id="pool-abnormal"></strong></button>
     <div class="pool-page-actions"><select id="pool-page-size" aria-label="每页地址数"><option value="96">96 条 / 页</option><option value="128">128 条 / 页</option><option value="256" selected>256 条 / 页</option></select><button id="pool-prev">上一页</button><button id="pool-next">下一页</button></div>
   </footer>
 </section>
@@ -59,7 +59,7 @@
   <footer class="dialog-footer record-footer"><button id="ip-relocate" type="button" class="primary">定位地址</button><span id="ip-detail-actions"></span></footer>
 </dialog>
 <dialog id="pool-editor" class="pool-maintenance record-shell record-dialog" aria-labelledby="pool-editor-title">
-  <header class="dialog-header record-header"><h2 id="pool-editor-title"></h2><button class="icon quiet" data-close="pool-editor" aria-label="关闭地址池维护">×</button></header>
+  <header class="dialog-header record-header"><h2 id="pool-editor-title"></h2><button class="icon quiet" data-close="pool-editor" aria-label="关闭地址池维护"><svg aria-hidden="true"><use href="#close"/></svg></button></header>
   <div class="pool-maintenance-body">
     <aside class="pool-maintenance-directory">
       <label class="pool-editor-search"><svg aria-hidden="true"><use href="#search"/></svg><input id="pool-editor-find" type="search" aria-label="搜索地址池" placeholder="搜索地址池名称、CIDR"></label>
@@ -74,12 +74,12 @@
       <div class="field"><label for="pool-vlan">VLAN</label><input id="pool-vlan"></div>
       <div class="field"><label for="pool-vni">VXLAN VNI</label><input id="pool-vni"></div>
       <div class="field full"><label for="pool-purpose">用途</label><input id="pool-purpose"></div>
-    </div></section><section class="record-section"><div class="pool-segment-title"><h3 class="section-title">地址分段</h3><div class="pool-segment-actions"><button type="button" id="pool-segment-remark" class="quiet">⚡按备注生成</button><button type="button" id="pool-segment-add" class="primary">＋ 新增分段</button></div></div><p class="dialog-note">按部门和楼层划分 CIDR 内的 IP 范围，数量自动计算。</p><div id="pool-segment-editor"></div></section><p id="pool-segment-error" class="dialog-note" role="alert"></p></div>
+    </div></section><section class="record-section"><div class="pool-segment-title"><h3 class="section-title">地址分段</h3><div class="pool-segment-actions"><button type="button" id="pool-segment-remark" class="quiet"><svg aria-hidden="true"><use href="#zap"/></svg>按备注生成</button><button type="button" id="pool-segment-add" class="primary"><svg aria-hidden="true"><use href="#plus"/></svg> 新增分段</button></div></div><p class="dialog-note">按部门和楼层划分 CIDR 内的 IP 范围，数量自动计算。</p><div id="pool-segment-editor"></div></section><p id="pool-segment-error" class="dialog-note" role="alert"></p></div>
   </div>
   <footer class="dialog-footer record-footer"><button data-close="pool-editor">关闭</button><button id="pool-editor-save" class="primary" type="button">保存预览</button></footer>
 </dialog>
 <dialog id="pool-ip-editor" class="record-shell record-dialog" aria-labelledby="pool-ip-editor-title">
-  <header class="dialog-header record-header"><h2 id="pool-ip-editor-title">补录 IP</h2><button class="icon quiet" data-close="pool-ip-editor" aria-label="关闭补录 IP">×</button></header>
+  <header class="dialog-header record-header"><h2 id="pool-ip-editor-title">补录 IP</h2><button class="icon quiet" data-close="pool-ip-editor" aria-label="关闭补录 IP"><svg aria-hidden="true"><use href="#close"/></svg></button></header>
   <div class="dialog-body record-body"><section class="record-section"><h3 class="section-title">地址资料</h3><div class="fields record-fields"><div class="field full"><label for="new-ip-address">IP 地址</label><input id="new-ip-address" placeholder="填写当前地址池内的地址"></div><div class="field full"><label for="new-ip-note">备注</label><input id="new-ip-note"></div></div></section><p class="dialog-note">仅展示补录表单，不新增真实地址。</p></div>
   <footer class="dialog-footer record-footer"><button data-close="pool-ip-editor">关闭</button><button class="primary" disabled>确认补录</button></footer>
 </dialog>

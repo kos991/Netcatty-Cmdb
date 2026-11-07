@@ -154,7 +154,8 @@
 #pool-options .pool-picker-heading[aria-expanded="true"] strong { color: var(--accent); }
 #pool-options .pool-picker-heading strong { overflow: hidden; color: var(--fg); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .pool-selector .menu #pool-options .pool-picker-heading small { grid-column: 1; padding: 0; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-#pool-options .pool-picker-arrow { grid-column: 2; grid-row: 1 / 3; color: var(--muted); font-size: 10px; transition: transform .15s; }
+#pool-options .pool-picker-arrow { grid-column: 2; grid-row: 1 / 3; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 10px; transition: transform .15s; }
+#pool-options .pool-picker-arrow > svg { width: 12px; height: 12px; }
 #pool-options .pool-picker-heading[aria-expanded="false"] .pool-picker-arrow { transform: rotate(180deg); }
 #pool-options .pool-picker-segments { margin: 2px 0 4px 14px; padding: 0 0 0 8px; border-left: 1px solid var(--border); }
 #pool-options .pool-picker-segments[hidden] { display: none; }

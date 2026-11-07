@@ -9,7 +9,7 @@
   }
   const byId = (id) => document.getElementById(id);
   const state = { view: 'terminal', page: 1, filters: {}, visibleFilters: new Set(), selected: new Set() };
-  const standalone = ['business-view', 'workbench-view'].includes(window.frameElement?.id);
+  const standalone = Boolean(window.frameElement?.dataset.standalone) || ['business-view', 'workbench-view'].includes(window.frameElement?.id);
   const text = (value) => value === null || value === undefined || value === '' ? '未配置' : String(value);
   const element = (tag, className, value) => {
     const node = document.createElement(tag);
@@ -492,10 +492,16 @@
     dialog.show();
     const rect = anchor?.getBoundingClientRect();
     if (rect) {
-      dialog.style.top = Math.min(rect.bottom + 4, window.innerHeight - dialog.offsetHeight - 8) + 'px';
-      dialog.style.left = Math.max(8, rect.right - dialog.offsetWidth) + 'px';
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const flip = dialog.scrollHeight > below && above > below;
+      dialog.style.maxHeight = Math.max(32, flip ? above : below) + 'px';
+      dialog.style.overflowY = 'auto';
+      dialog.style.overscrollBehavior = 'contain';
+      dialog.style.top = Math.max(8, flip ? rect.top - dialog.offsetHeight - 4 : rect.bottom + 4) + 'px';
+      dialog.style.left = Math.max(8, Math.min(rect.right - dialog.offsetWidth, window.innerWidth - dialog.offsetWidth - 8)) + 'px';
     }
-    root.querySelector('button')?.focus();
+    root.querySelector('button')?.focus({ preventScroll: true });
   }
 
   if (standalone) {

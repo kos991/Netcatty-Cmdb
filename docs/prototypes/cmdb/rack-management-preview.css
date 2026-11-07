@@ -11,6 +11,16 @@
 #rack-toolbar .rack-picker-option:hover { background: var(--muted-surface); }
 #rack-toolbar .rack-picker-option[aria-current="true"] { background: var(--accent-soft); color: var(--accent); }
 .rack-picker-actions { border-top: 1px solid var(--border); margin-top: 5px; padding-top: 5px; }
+#rack-toolbar .menu.rack-floating-menu,
+#rack-content .rack-peer-picker .menu.rack-floating-menu {
+  position: fixed;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  z-index: 60;
+}
 
 /* Plan A: Main stage (left) + Permanent linked sidebar (right 360px) */
 #rack-content {
@@ -206,6 +216,8 @@
   white-space: nowrap;
   flex: none;
 }
+#rack-content .rack-anchor-badge > svg, .rack-peer-picker > summary > svg, .position-hint strong > svg, .fold > summary .fold-arrow { width: 12px; height: 12px; flex: none; }
+.position-hint strong { display: inline-flex; align-items: center; gap: 4px; }
 #rack-content .rack-units-edit { margin-left: auto; flex: none; height: 24px; padding: 0 6px; font-size: 11px; }
 #rack-content .rack-capacity-summary { margin: 4px 0 0; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Reserve 22px overhead cable tray corridor between usage bar and cabinet frames */
@@ -226,7 +238,7 @@
 #rack-content .rack-search-results[hidden] { display: none; }
 #rack-content .rack-search-results button { height: 26px; font-size: 11px; padding: 0 8px; }
 
-/* U-rulers: Left rack has ruler on outer left; Middle rack has compact ruler on left for empty slots while devices span full width; Right rack has ruler on outer right */
+/* U-rulers occupy their own column in every cabinet; devices never cover the scale. */
 #rack-content .rack-panel-left .rack-grid {
   grid-template-columns: 30px minmax(0, 1fr);
 }
@@ -426,6 +438,10 @@
 #rack-content .ports-left .port-badge {
   flex-direction: row;
 }
+#rack-content .port-badge:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: -2px;
+}
 #rack-content .port-badge:hover {
   border-color: #38bdf8;
   color: #fff;
@@ -467,12 +483,14 @@
 }
 
 /* A single U remains 24px; supplementary details live in the title/sidebar. */
-#rack-content .device[data-units="1"] { padding-block: 2px; gap: 5px; }
+#rack-content .device[data-units="1"] { box-sizing: border-box; height: 24px; max-height: 24px; padding-block: 2px; gap: 5px; }
 #rack-content .device[data-units="1"] .meta { display: none; }
+#rack-content .device[data-units="1"] .device-info { gap: 0; }
+#rack-content .device[data-units="1"] .rack-card-links { display: none; }
 #rack-content .device[data-units="1"] .device-title-row { gap: 3px; }
 #rack-content .device[data-units="1"] .device-type-tag { padding-inline: 2px; }
- #rack-content .device[data-units="1"] .device-ports-strip { flex-direction: row; min-width: 0; max-width: 28%; flex-shrink: 1; gap: 3px; }
- #rack-content .device[data-units="1"] .port-badge { min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; height: 16px; line-height: 14px; transform: none; }
+#rack-content .device[data-units="1"] .device-ports-strip { flex-direction: row; min-width: 0; max-width: 28%; flex-shrink: 1; gap: 3px; }
+#rack-content .device[data-units="1"] .port-badge { box-sizing: border-box; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; height: 16px; line-height: 14px; transform: none; }
 #rack-content .device[data-units="1"] .port-badge::before { display: none; }
 #rack-content .device.connection-endpoint { outline: 2px solid #7dd3fc; outline-offset: -2px; }
 
@@ -652,16 +670,15 @@
   dominant-baseline: central;
   user-select: none;
 }
-#rack-wire-layer text.rack-wire-offscreen {
-  font-size: 9px;
-  font-weight: 700;
-  stroke: none;
-  dominant-baseline: central;
-  text-anchor: middle;
+#rack-wire-layer .rack-wire-offscreen {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   user-select: none;
 }
-#rack-wire-layer text.rack-wire-offscreen.fiber { fill: #0ea5e9; }
-#rack-wire-layer text.rack-wire-offscreen.copper { fill: #f59e0b; }
+#rack-wire-layer .rack-wire-offscreen.fiber { stroke: #0ea5e9; }
+#rack-wire-layer .rack-wire-offscreen.copper { stroke: #f59e0b; }
 
 /* Permanent Right Linked Sidebar (368px) */
 #rack-content > .editor-panel {

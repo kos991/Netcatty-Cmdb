@@ -37,6 +37,14 @@
     if (text !== undefined) result.textContent = text;
     return result;
   };
+  const svg = (name) => {
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const use = document.createElementNS(icon.namespaceURI, 'use');
+    use.setAttribute('href', '#' + name);
+    icon.setAttribute('aria-hidden', 'true');
+    icon.append(use);
+    return icon;
+  };
   const numeric = (text) => /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text) && Number.isFinite(Number(text));
 
   function parse(key, source) {
@@ -94,6 +102,7 @@
     const components = node('div', 'asset-hardware-parts');
     const advanced = node('details', 'asset-hardware-advanced');
     const summary = node('summary', '', key === 'memory_mb' ? '原始 MB 值' : '说明与完整配置');
+    summary.prepend(svg('chevron'));
     const advancedBody = node('div', 'asset-hardware-advanced-body');
     advanced.open = !draft.recognized;
     advanced.append(summary, advancedBody);
@@ -165,7 +174,8 @@
           else status.textContent = '完整原文保持不变。已按预设填写分项，点击“用分项替换完整文本”才会替换。';
           renderPresets();
         });
-        const remove = node('button', '', '×');
+        const remove = node('button');
+        remove.append(svg('close'));
         remove.type = 'button';
         remove.setAttribute('aria-label', '删除常用预设：' + label);
         remove.title = '删除此常用预设';
@@ -174,7 +184,8 @@
         presetBar.append(chip);
       }
       if (!list.length) presetBar.append(node('span', 'asset-hardware-presets-title', '暂无常用预设'));
-      const save = node('button', 'asset-hardware-preset-save', '+ 存为常用');
+      const save = node('button', 'asset-hardware-preset-save', '存为常用');
+      save.prepend(svg('plus'));
       save.type = 'button';
       save.disabled = !current || list.some((item) => presetLabel(key, item) === current);
       save.title = current ? '把“' + current + '”存为常用预设' : '填写完整分项后可存为常用预设';
