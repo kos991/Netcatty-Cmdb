@@ -4,7 +4,7 @@
 
 当前版本：`1.0.202610221542`，以 `VERSION` 为准。本分支是基于 [BUI (Blender UI)](https://github.com/ppmpreetham/BUI)（`blenderui = "0.4.1"`）构建的 Windows 原生桌面，采用 Blender 原生 C kit 与 Direct3D 11 GPU 硬件加速渲染，彻底替代 HTML iframe 网页缝合外壳。
 
-当前已实现原生暗色工作区、多标签新增／切换／关闭、左侧暗色导航栏、左右分栏与状态行。终端资产页面已直接接入原生虚拟数据表格（`DataTable`），支持真实字段（序号、设备名称/SN、设备类型、品牌/型号、使用人/部门、房间号、IP 地址、网络类型、设备状态），并通过 Windows GDI 引擎原生渲染微软雅黑清晰中文字体。窗口由 BUI 原生绘制，不使用 HTML、WebView、Chromium 或 Electron。
+当前已实现基于 BUI 的 Windows 原生暗色工作区、多标签新增／切换／关闭、左侧暗色导航栏、左右分栏与状态行。终端资产页面接入高密度数据表格，包含 14 条离线示例样本（非真实资产数据，界面明确标注“离线样例 · 未连接业务数据库”），支持每页 10/20 条真实分页、前后页边界控制、设备类型筛选、多字段搜索即时过滤、全部 10 列在视口内严格对齐无截断，并支持点击单行滑出 420px 原生详情抽屉；未实现后端服务的业务动作按钮均显式禁用并附说明。窗口由 BUI 原生 Direct3D 11 / GDI 绘制，不使用 HTML、WebView、Chromium 或 Electron。
 
 ## 运行
 
@@ -16,7 +16,7 @@
 - `Ctrl+T` 打开标签菜单，`Ctrl+W` 关闭当前标签，`Ctrl+\` 切换分栏，`Esc` 关闭菜单。
 - 最小化、最大化／还原、关闭使用真实 Windows 标题栏。关闭最后一个窗口退出进程。
 
-本轮验收：提交 `780afda` 的 [Windows CI #42351111074](https://github.com/kos991/Netcatty-Cmdb/actions/runs/42351111074) 已通过共享状态规则测试、BUI C kit 编译与原生桌面构建（用时 1 分 24 秒）。下载产物后在 Windows 本机启动，观察到标题为 `Cmdb` 的 Windows 原生暗色高密度窗口，顶栏纯 Logo、标签页（带关闭按钮）和加号均正常渲染，左侧为纯原生暗色紧凑导航；终端资产列表直接渲染原生虚拟数据表格（包含 30 条真实资产样本，支持条纹隔行与表头列排序），中文显示为原生微软雅黑，无豆腐块或乱码。exe 大小仅 5.22 MB，SHA-256（`aaee94381ab60b72790db2a5a8a8dafa6ffb3f4a7e4781ec157764f1a59da294`）与制品校验文件一致。本地证据位于 `build/native-ci/bui-native-window.png`，未在本地执行 cargo build。
+本轮验收：提交 `2f373bf` 的 [Windows CI #42356232076](https://github.com/kos991/Netcatty-Cmdb/actions/runs/42356232076) 已通过共享状态规则测试、BUI C kit 编译与原生桌面构建。下载产物后在 Windows 本机启动，观察到标题为 `Cmdb 资产与服务器全景管理` 的 Windows 原生高密度暗色窗口，顶栏纯 Logo、带 Lucide 图标的暗色标签页（带关闭按钮）和加号均正常渲染，左侧为纯原生 Lucide 紧凑暗色导航栏；终端资产台账全部 10 列（序号、设备名称/SN、设备类型、品牌/型号、使用人/部门、房间号、IP 地址、网络类型、设备状态、操作）严格对齐并在窗口内完整可见；状态显示为绿/黄/灰/红圆角胶囊，网络类型带清晰彩色竖线；实测点击标签切换至基础设施和业务系统视图，未接业务页面明确提示“业务服务尚未接入 · 暂无可用离线样例”。exe 大小仅 5.11 MB，SHA-256（`e3f89f611cb76e9c634b3bccbfe37166179a7bf703371a49e10bd7258bd5cf3a`）与制品校验文件一致。本地证据位于 `build/native-ci/bui-aligned-window.png` 与 `build/native-ci/bui-test-drawer-open.png`，未在本地执行 cargo build。该验收不代表业务服务迁移完成。
 
 ## 源码与构建
 
